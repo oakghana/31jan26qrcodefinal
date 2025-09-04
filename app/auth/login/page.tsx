@@ -1,0 +1,418 @@
+"use client"
+
+import type React from "react"
+
+import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
+import Image from "next/image"
+
+export default function LoginPage() {
+  const [identifier, setIdentifier] = useState("") // Changed from email to identifier to support both email and staff number
+  const [password, setPassword] = useState("")
+  const [otpEmail, setOtpEmail] = useState("")
+  const [otp, setOtp] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const router = useRouter()
+
+  const logLoginActivity = async (userId: string, action: string, success: boolean, method: string) => {
+    try {
+      await fetch("/api/auth/login-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          action,
+          success,
+          method,
+          ip_address: null, // Will be captured server-side
+          user_agent: navigator.userAgent,
+        }),
+      })
+    } catch (error) {
+      console.error("Failed to log login activity:", error)
+    }
+  }
+
+  const checkUserApproval = async (userId: string) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("is_active, first_name, last_name")
+        .eq("id", userId)
+        .single()
+
+      if (error) {
+        console.error("Error checking user approval:", error)
+        return { approved: false, error: "Failed to verify account status" }
+      }
+
+      if (!data) {
+        return { approved: false, error: "User profile not found. Please contact administrator." }
+      }
+
+      return {
+        approved: data.is_active,
+        name: `${data.first_name} ${data.last_name}`,
+        error: data.is_active ? null : "Your account is pending admin approval. Please wait for activation.",
+      }
+    } catch (error) {
+      console.error("Exception checking user approval:", error)
+      return { approved: false, error: "Failed to verify account status" }
+    }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const supabase = createClient()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      console.log("[v0] Attempting login with identifier:", identifier)
+
+      let email = identifier
+
+      // If identifier doesn't contain @, it's a staff number - look up the email
+      if (!identifier.includes("@")) {
+        const response = await fetch("/api/auth/lookup-staff", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier }),
+        })
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          setError(result.error || "Staff number not found")
+          return
+        }
+
+        email = result.email
+        console.log("[v0] Staff number resolved to email:", email)
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      console.log("[v0] Login response:", { data, error })
+
+      if (error) {
+        console.log("[v0] Login error details:", error)
+
+        if (data?.user?.id) {
+          await logLoginActivity(data.user.id, "login_failed", false, "password")
+        }
+
+        let errorMessage = error.message
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Invalid credentials. Please check your staff number/email and password."
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Please check your email and click the confirmation link before logging in."
+        } else if (error.message.includes("User not found")) {
+          errorMessage = "No account found. Please contact your administrator or sign up first."
+        }
+
+        setError(errorMessage)
+        return
+      }
+
+      if (data?.user?.id) {
+        const approvalCheck = await checkUserApproval(data.user.id)
+
+        if (!approvalCheck.approved) {
+          await logLoginActivity(data.user.id, "login_blocked_unapproved", false, "password")
+
+          // Sign out the user since they're not approved
+          await supabase.auth.signOut()
+
+          setError(approvalCheck.error || "Account not approved")
+
+          // Redirect to pending approval page
+          if (approvalCheck.error?.includes("pending admin approval")) {
+            router.push("/auth/pending-approval")
+          }
+          return
+        }
+
+        await logLoginActivity(data.user.id, "login_success", true, "password")
+      }
+
+      console.log("[v0] Login successful, redirecting to dashboard")
+      router.push("/dashboard")
+    } catch (error: unknown) {
+      console.log("[v0] Caught error:", error)
+      setError(error instanceof Error ? error.message : "An error occurred during login")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const supabase = createClient()
+    setIsLoading(true)
+    setError(null)
+    setSuccessMessage(null)
+
+    try {
+      console.log("[v0] Validating email before sending OTP:", otpEmail)
+
+      const validateResponse = await fetch("/api/auth/validate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: otpEmail }),
+      })
+
+      const validateResult = await validateResponse.json()
+
+      if (!validateResponse.ok) {
+        setError(validateResult.error)
+        return
+      }
+
+      if (!validateResult.exists) {
+        setError("This email is not registered in the QCC system. Please contact your administrator.")
+        return
+      }
+
+      if (!validateResult.approved) {
+        setError("Your account is pending admin approval. Please wait for activation before using OTP login.")
+        return
+      }
+
+      console.log("[v0] Email validated, sending OTP")
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: otpEmail,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+        },
+      })
+      if (error) throw error
+      setOtpSent(true)
+      setSuccessMessage("OTP sent to your email. Please check your inbox and enter the code below.")
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Failed to send OTP")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const supabase = createClient()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: otpEmail,
+        token: otp,
+        type: "email",
+      })
+
+      if (error) {
+        if (data?.user?.id) {
+          await logLoginActivity(data.user.id, "otp_login_failed", false, "otp")
+        }
+        throw error
+      }
+
+      if (data?.user?.id) {
+        const approvalCheck = await checkUserApproval(data.user.id)
+
+        if (!approvalCheck.approved) {
+          await logLoginActivity(data.user.id, "otp_login_blocked_unapproved", false, "otp")
+
+          // Sign out the user since they're not approved
+          await supabase.auth.signOut()
+
+          setError(approvalCheck.error || "Account not approved")
+
+          // Redirect to pending approval page
+          if (approvalCheck.error?.includes("pending admin approval")) {
+            router.push("/auth/pending-approval")
+          }
+          return
+        }
+
+        await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
+      }
+
+      router.push("/dashboard")
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Invalid OTP code")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+      <div className="w-full max-w-md">
+        <Card className="shadow-lg border-0 bg-card/95 backdrop-blur">
+          <CardHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <Image src="/images/qcc-logo.png" alt="QCC Logo" width={80} height={80} className="rounded-full" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-bold text-primary">QCC ELECTRONIC ATTENDANCE</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Sign in with your Staff Number, Email or use OTP
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="password" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="password">Staff Login</TabsTrigger>
+                <TabsTrigger value="otp">OTP Login</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="password" className="space-y-4 mt-4">
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="identifier" className="text-sm font-medium">
+                      Staff Number or Email Address
+                    </Label>
+                    <Input
+                      id="identifier"
+                      type="text"
+                      placeholder="1234567 or your.email@qccgh.com"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      required
+                      className="h-11"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter your 7-digit staff number (e.g., 1234567) or corporate email address
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-sm font-medium">
+                      Password
+                    </Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="h-11"
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90" disabled={isLoading}>
+                    {isLoading ? "Signing in..." : "Sign In"}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="otp" className="space-y-4 mt-4">
+                {!otpSent ? (
+                  <form onSubmit={handleSendOtp} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="otpEmail" className="text-sm font-medium">
+                        Corporate Email Address
+                      </Label>
+                      <Input
+                        id="otpEmail"
+                        type="email"
+                        placeholder="your.email@qccgh.com"
+                        value={otpEmail}
+                        onChange={(e) => setOtpEmail(e.target.value)}
+                        required
+                        className="h-11"
+                      />
+                      <p className="text-xs text-muted-foreground">OTP will be sent to your registered email address</p>
+                    </div>
+                    <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90" disabled={isLoading}>
+                      {isLoading ? "Sending OTP..." : "Send OTP Code"}
+                    </Button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="otp" className="text-sm font-medium">
+                        Enter OTP Code
+                      </Label>
+                      <Input
+                        id="otp"
+                        type="text"
+                        placeholder="Enter 6-digit code"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                        required
+                        maxLength={6}
+                        className="h-11 text-center text-lg tracking-widest"
+                      />
+                    </div>
+                    <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90" disabled={isLoading}>
+                      {isLoading ? "Verifying..." : "Verify OTP"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-11 bg-transparent"
+                      onClick={() => {
+                        setOtpSent(false)
+                        setOtp("")
+                        setSuccessMessage(null)
+                      }}
+                    >
+                      Back to Email Entry
+                    </Button>
+                  </form>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {successMessage && (
+              <Alert className="mt-4">
+                <AlertDescription>{successMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Don't have an account?{" "}
+                <Link
+                  href="/auth/signup"
+                  className="font-medium text-primary hover:text-primary/80 underline underline-offset-4"
+                >
+                  Sign up here
+                </Link>
+              </p>
+            </div>
+
+            <div className="mt-4 text-center border-t pt-4">
+              <p className="text-xs text-muted-foreground font-medium">QEAA</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Powered by the IT Department</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
