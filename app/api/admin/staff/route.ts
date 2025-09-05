@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { crypto } from "crypto"
 
 export async function GET(request: NextRequest) {
   try {
@@ -108,29 +109,45 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password, first_name, last_name, employee_id, department_id, position, role } = body
 
-    // Create auth user first
-    const { data: authData, error: createError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
+    // Generate a UUID for the new user
+    const userId = crypto.randomUUID()
+
+    // Insert user profile directly
+    const { data: newProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .insert({
+        id: userId,
+        email,
         first_name,
         last_name,
         employee_id,
-        department_id,
+        department_id: department_id || null,
         position,
         role: role || "staff",
-      },
-    })
+        is_active: false, // Inactive until they sign up
+        is_approved: true, // Pre-approved by admin
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
 
-    if (createError) {
-      return NextResponse.json({ error: createError.message }, { status: 400 })
+    if (profileError) {
+      console.error("Profile creation error:", profileError)
+      return NextResponse.json({ error: "Failed to create user profile" }, { status: 400 })
     }
+
+    // Log the action
+    await supabase.from("audit_logs").insert({
+      user_id: user.id,
+      action: "create_staff",
+      details: `Created staff profile for ${email}`,
+      ip_address: request.headers.get("x-forwarded-for") || "unknown",
+    })
 
     return NextResponse.json({
       success: true,
-      data: authData.user,
-      message: "Staff member created successfully",
+      data: newProfile,
+      message: "Staff member created successfully. They need to sign up with their email to activate their account.",
     })
   } catch (error) {
     console.error("Create staff error:", error)

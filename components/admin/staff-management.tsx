@@ -182,6 +182,38 @@ export function StaffManagement() {
     }
   }
 
+  const handleEditStaff = async () => {
+    if (!editingStaff) return
+
+    try {
+      setError(null)
+      const response = await fetch(`/api/admin/staff/${editingStaff.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          first_name: editingStaff.first_name,
+          last_name: editingStaff.last_name,
+          email: editingStaff.email,
+          employee_id: editingStaff.employee_id,
+          position: editingStaff.position,
+          role: editingStaff.role,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setSuccess("Staff member updated successfully")
+        setEditingStaff(null)
+        fetchStaff()
+      } else {
+        setError(result.error)
+      }
+    } catch (error) {
+      setError("Failed to update staff member")
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -309,6 +341,24 @@ export function StaffManagement() {
                     />
                   </div>
                   <div>
+                    <Label htmlFor="department">Department</Label>
+                    <Select
+                      value={newStaff.department_id}
+                      onValueChange={(value) => setNewStaff({ ...newStaff, department_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
                     <Label htmlFor="role">Role</Label>
                     <Select value={newStaff.role} onValueChange={(value) => setNewStaff({ ...newStaff, role: value })}>
                       <SelectTrigger>
@@ -331,6 +381,103 @@ export function StaffManagement() {
               </DialogContent>
             </Dialog>
           </div>
+
+          {/* Edit Dialog */}
+          {editingStaff && (
+            <Dialog open={!!editingStaff} onOpenChange={() => setEditingStaff(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Edit Staff Member</DialogTitle>
+                  <DialogDescription>Update staff member information</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="editFirstName">First Name</Label>
+                      <Input
+                        id="editFirstName"
+                        value={editingStaff.first_name}
+                        onChange={(e) => setEditingStaff({ ...editingStaff, first_name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="editLastName">Last Name</Label>
+                      <Input
+                        id="editLastName"
+                        value={editingStaff.last_name}
+                        onChange={(e) => setEditingStaff({ ...editingStaff, last_name: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="editEmail">Email</Label>
+                    <Input
+                      id="editEmail"
+                      type="email"
+                      value={editingStaff.email}
+                      onChange={(e) => setEditingStaff({ ...editingStaff, email: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editEmployeeId">Employee ID</Label>
+                    <Input
+                      id="editEmployeeId"
+                      value={editingStaff.employee_id}
+                      onChange={(e) => setEditingStaff({ ...editingStaff, employee_id: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editPosition">Position</Label>
+                    <Input
+                      id="editPosition"
+                      value={editingStaff.position}
+                      onChange={(e) => setEditingStaff({ ...editingStaff, position: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editDepartment">Department</Label>
+                    <Select
+                      value={editingStaff.department_id}
+                      onValueChange={(value) => setEditingStaff({ ...editingStaff, department_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="editRole">Role</Label>
+                    <Select
+                      value={editingStaff.role}
+                      onValueChange={(value) => setEditingStaff({ ...editingStaff, role: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="department_head">Department Head</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditingStaff(null)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleEditStaff}>Update Staff</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
 
           {/* Staff Table */}
           <div className="border rounded-lg">

@@ -13,6 +13,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -35,7 +36,9 @@ export function LocationManagement() {
   const [locations, setLocations] = useState<GeofenceLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [isAddingLocation, setIsAddingLocation] = useState(false)
+  const [editingLocation, setEditingLocation] = useState<GeofenceLocation | null>(null)
   const [selectedLocation, setSelectedLocation] = useState<GeofenceLocation | null>(null)
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null)
 
@@ -67,6 +70,7 @@ export function LocationManagement() {
   const handleAddLocation = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
 
     try {
       const response = await fetch("/api/admin/locations", {
@@ -82,11 +86,44 @@ export function LocationManagement() {
 
       if (!response.ok) throw new Error("Failed to add location")
 
+      setSuccess("Location added successfully")
       await fetchLocations()
       setIsAddingLocation(false)
       setNewLocation({ name: "", address: "", latitude: "", longitude: "", radius_meters: "100" })
     } catch (err) {
       setError("Failed to add location")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEditLocation = async () => {
+    if (!editingLocation) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/admin/locations/${editingLocation.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editingLocation.name,
+          address: editingLocation.address,
+          latitude: editingLocation.latitude,
+          longitude: editingLocation.longitude,
+          radius_meters: editingLocation.radius_meters,
+          is_active: editingLocation.is_active,
+        }),
+      })
+
+      if (!response.ok) throw new Error("Failed to update location")
+
+      setSuccess("Location updated successfully")
+      await fetchLocations()
+      setEditingLocation(null)
+    } catch (err) {
+      setError("Failed to update location")
     } finally {
       setLoading(false)
     }
@@ -114,11 +151,23 @@ export function LocationManagement() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setNewLocation((prev) => ({
-            ...prev,
-            latitude: position.coords.latitude.toString(),
-            longitude: position.coords.longitude.toString(),
-          }))
+          if (editingLocation) {
+            setEditingLocation((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                  }
+                : null,
+            )
+          } else {
+            setNewLocation((prev) => ({
+              ...prev,
+              latitude: position.coords.latitude.toString(),
+              longitude: position.coords.longitude.toString(),
+            }))
+          }
         },
         () => {
           setError("Failed to get current location")
@@ -231,6 +280,100 @@ export function LocationManagement() {
         </Alert>
       )}
 
+      {success && (
+        <Alert>
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+
+      {editingLocation && (
+        <Dialog open={!!editingLocation} onOpenChange={() => setEditingLocation(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Location</DialogTitle>
+              <DialogDescription>Update location information and settings</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="editName">Location Name</Label>
+                <Input
+                  id="editName"
+                  value={editingLocation.name}
+                  onChange={(e) => setEditingLocation({ ...editingLocation, name: e.target.value })}
+                  placeholder="e.g., Main Campus"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="editAddress">Address</Label>
+                <Input
+                  id="editAddress"
+                  value={editingLocation.address}
+                  onChange={(e) => setEditingLocation({ ...editingLocation, address: e.target.value })}
+                  placeholder="Full address"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="editLatitude">Latitude</Label>
+                  <Input
+                    id="editLatitude"
+                    type="number"
+                    step="any"
+                    value={editingLocation.latitude}
+                    onChange={(e) =>
+                      setEditingLocation({ ...editingLocation, latitude: Number.parseFloat(e.target.value) })
+                    }
+                    placeholder="25.2854"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editLongitude">Longitude</Label>
+                  <Input
+                    id="editLongitude"
+                    type="number"
+                    step="any"
+                    value={editingLocation.longitude}
+                    onChange={(e) =>
+                      setEditingLocation({ ...editingLocation, longitude: Number.parseFloat(e.target.value) })
+                    }
+                    placeholder="51.5310"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="editRadius">Radius (meters)</Label>
+                <Input
+                  id="editRadius"
+                  type="number"
+                  value={editingLocation.radius_meters}
+                  onChange={(e) =>
+                    setEditingLocation({ ...editingLocation, radius_meters: Number.parseInt(e.target.value) })
+                  }
+                  placeholder="100"
+                  required
+                />
+              </div>
+              <Button type="button" variant="outline" onClick={getCurrentLocation} className="w-full bg-transparent">
+                <MapPin className="h-4 w-4 mr-2" />
+                Use Current Location
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingLocation(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditLocation} disabled={loading}>
+                Update Location
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {locations.map((location) => (
           <Card key={location.id}>
@@ -254,7 +397,7 @@ export function LocationManagement() {
                   <QrCode className="h-4 w-4 mr-1" />
                   QR Code
                 </Button>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)}>
                   <Edit className="h-4 w-4" />
                 </Button>
               </div>
