@@ -28,6 +28,7 @@ import {
   X,
   Upload,
   Shield,
+  UserCheck,
 } from "lucide-react"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -91,6 +92,12 @@ const navigationItems = [
     title: "Staff Management",
     href: "/dashboard/staff",
     icon: Users,
+    roles: ["admin"],
+  },
+  {
+    title: "Staff Activation",
+    href: "/dashboard/staff-activation",
+    icon: UserCheck,
     roles: ["admin"],
   },
   {

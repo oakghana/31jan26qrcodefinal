@@ -37,6 +37,8 @@ export function useNotifications() {
   return context
 }
 
+export const useNotification = useNotifications
+
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
 

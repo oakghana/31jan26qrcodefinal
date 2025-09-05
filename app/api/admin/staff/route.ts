@@ -136,24 +136,28 @@ export async function POST(request: NextRequest) {
   try {
     console.log("[v0] Staff API - Starting POST request")
 
-    let createClient
+    let supabase, adminSupabase
     try {
       const supabaseModule = await import("@/lib/supabase/server")
-      createClient = supabaseModule.createClient
-    } catch (importError) {
-      console.error("[v0] Staff API POST - Import error:", importError)
-      return createJsonResponse(
-        {
-          success: false,
-          error: "Server configuration error",
-        },
-        500,
-      )
-    }
+      supabase = await supabaseModule.createClient()
 
-    let supabase
-    try {
-      supabase = await createClient()
+      // Create admin client with service role key
+      const { createClient } = await import("@supabase/supabase-js")
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+      if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error("Missing Supabase admin credentials")
+      }
+
+      adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+
+      console.log("[v0] Staff API - Admin client created successfully")
     } catch (clientError) {
       console.error("[v0] Staff API POST - Client creation error:", clientError)
       return createJsonResponse(
@@ -172,21 +176,36 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return createJsonResponse({ success: false, error: "Authentication required" }, { status: 401 })
+      return createJsonResponse({ success: false, error: "Authentication required" }, 401)
     }
 
     // Check admin permissions
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
     if (!profile || profile.role !== "admin") {
-      return createJsonResponse({ success: false, error: "Admin access required" }, { status: 403 })
+      return createJsonResponse({ success: false, error: "Admin access required" }, 403)
     }
 
     const body = await request.json()
     const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password } =
       body
 
-    const { data: authUser, error: authCreateError } = await supabase.auth.admin.createUser({
+    const { data: existingAuthUser } = await adminSupabase.auth.admin.listUsers()
+    const userExists = existingAuthUser.users.find((u) => u.email === email)
+
+    if (userExists) {
+      console.log("[v0] Staff API - User with email already exists:", email)
+      return createJsonResponse(
+        {
+          success: false,
+          error: "User with this email already exists",
+          details: "Please use a different email address",
+        },
+        400,
+      )
+    }
+
+    const { data: authUser, error: authCreateError } = await adminSupabase.auth.admin.createUser({
       email,
       password: password || "TempPassword123!", // Default password if not provided
       email_confirm: true, // Auto-confirm email for admin-created users
@@ -198,36 +217,93 @@ export async function POST(request: NextRequest) {
     })
 
     if (authCreateError) {
-      console.error("[v0] Staff API - Auth user creation error:", authCreateError)
-      return createJsonResponse({ success: false, error: "Failed to create user account" }, { status: 400 })
+      console.error("[v0] Staff API - Auth user creation error:", authCreateError.message)
+      return createJsonResponse(
+        {
+          success: false,
+          error: "Failed to create user account",
+          details: authCreateError.message,
+        },
+        400,
+      )
     }
 
-    const { data: newProfile, error: insertError } = await supabase
+    console.log("[v0] Staff API - Auth user created successfully:", authUser.user.id)
+
+    const { data: existingProfile } = await adminSupabase
       .from("user_profiles")
-      .insert({
-        id: authUser.user.id, // Use the auth user ID
-        email,
-        first_name,
-        last_name,
-        employee_id,
-        department_id: department_id || null,
-        assigned_location_id: assigned_location_id || null,
-        position: position || null,
-        role: role || "staff",
-        is_active: true,
-      })
-      .select(`
-        *,
-        departments:department_id(id, name, code),
-        geofence_locations:assigned_location_id(id, name, address)
-      `)
+      .select("id")
+      .eq("id", authUser.user.id)
       .single()
 
+    let newProfile, insertError
+
+    if (existingProfile) {
+      console.log("[v0] Staff API - Updating existing profile:", authUser.user.id)
+      // Update existing profile
+      const { data, error } = await adminSupabase
+        .from("user_profiles")
+        .update({
+          email,
+          first_name,
+          last_name,
+          employee_id,
+          department_id: department_id || null,
+          assigned_location_id: assigned_location_id || null,
+          position: position || null,
+          role: role || "staff",
+          is_active: true,
+        })
+        .eq("id", authUser.user.id)
+        .select(`
+          *,
+          departments:department_id(id, name, code),
+          geofence_locations:assigned_location_id(id, name, address)
+        `)
+        .single()
+
+      newProfile = data
+      insertError = error
+    } else {
+      console.log("[v0] Staff API - Creating new profile:", authUser.user.id)
+      // Insert new profile
+      const { data, error } = await adminSupabase
+        .from("user_profiles")
+        .insert({
+          id: authUser.user.id, // Use the auth user ID
+          email,
+          first_name,
+          last_name,
+          employee_id,
+          department_id: department_id || null,
+          assigned_location_id: assigned_location_id || null,
+          position: position || null,
+          role: role || "staff",
+          is_active: true,
+        })
+        .select(`
+          *,
+          departments:department_id(id, name, code),
+          geofence_locations:assigned_location_id(id, name, address)
+        `)
+        .single()
+
+      newProfile = data
+      insertError = error
+    }
+
     if (insertError) {
-      console.error("[v0] Staff API - Profile insert error:", insertError)
+      console.error("[v0] Staff API - Profile insert/update error:", insertError)
       // Clean up auth user if profile creation fails
-      await supabase.auth.admin.deleteUser(authUser.user.id)
-      return createJsonResponse({ success: false, error: "Failed to create staff profile" }, { status: 400 })
+      await adminSupabase.auth.admin.deleteUser(authUser.user.id)
+      return createJsonResponse(
+        {
+          success: false,
+          error: "Failed to create staff profile",
+          details: insertError.message,
+        },
+        400,
+      )
     }
 
     console.log("[v0] Staff API - Staff member created successfully")

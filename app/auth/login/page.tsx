@@ -643,10 +643,10 @@ export default function LoginPage() {
               <p className="text-sm text-muted-foreground">
                 Don't have an account?{" "}
                 <Link
-                  href="/auth/signup"
+                  href="/auth/staff-request"
                   className="font-medium text-primary hover:text-primary/80 underline underline-offset-4"
                 >
-                  Sign up here
+                  Request Staff Access
                 </Link>
               </p>
             </div>
