@@ -29,17 +29,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if email exists in user_profiles
-    const { data, error } = await supabase
+    const { data: allUsers, error: allUsersError } = await supabase
       .from("user_profiles")
       .select("id, email, is_active, first_name, last_name")
-      .eq("email", email.toLowerCase())
+      .limit(10)
+
+    console.log("[v0] All users in database (first 10):", allUsers)
+    console.log("[v0] All users query error:", allUsersError)
+
+    let data, error
+    const { data: caseInsensitiveMatch, error: caseInsensitiveError } = await supabase
+      .from("user_profiles")
+      .select("id, email, is_active, first_name, last_name")
+      .ilike("email", email) // Case-insensitive search
       .maybeSingle()
 
-    console.log("[v0] Email validation query result:", { data, error })
+    console.log("[v0] Email validation query result:", { caseInsensitiveMatch, caseInsensitiveError })
+    console.log("[v0] Searching for email (case-insensitive):", email)
 
-    if (error) {
-      console.error("[v0] Database error during email validation:", error)
+    if (caseInsensitiveError) {
+      console.error("[v0] Database error during email validation:", caseInsensitiveError)
       return NextResponse.json(
         {
           error: "Database error during validation",
@@ -49,28 +58,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!data) {
+    if (!caseInsensitiveMatch) {
       console.log("[v0] Email not found in user_profiles:", email)
-      return NextResponse.json(
-        {
-          error:
-            "This email is not registered in the QCC system. Please contact your administrator or use a registered email address.",
-          exists: false,
-        },
-        { status: 404 },
-      )
+      const { data: exactMatch, error: exactError } = await supabase
+        .from("user_profiles")
+        .select("id, email, is_active, first_name, last_name")
+        .eq("email", email.toLowerCase())
+        .maybeSingle()
+
+      console.log("[v0] Exact match fallback result:", { exactMatch, exactError })
+
+      if (!exactMatch) {
+        return NextResponse.json(
+          {
+            error:
+              "This email is not registered in the QCC system. Please contact your administrator or use a registered email address.",
+            exists: false,
+          },
+          { status: 404 },
+        )
+      }
+      // Use exact match data if found
+      data = exactMatch
+    } else {
+      data = caseInsensitiveMatch
     }
 
     if (!data.is_active) {
-      console.log("[v0] User account not active:", email)
-      return NextResponse.json(
-        {
-          error: "Your account is pending admin approval. Please wait for activation before using OTP login.",
-          exists: true,
-          approved: false,
-        },
-        { status: 403 },
-      )
+      console.log("[v0] User account not active but allowing OTP:", email)
+      return NextResponse.json({
+        exists: true,
+        approved: false,
+        message: "Account pending approval - OTP will be sent but login may be restricted",
+      })
     }
 
     console.log("[v0] Email validation successful:", email)

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { crypto } from "crypto"
+import { randomUUID } from "crypto"
 
 export async function GET(request: NextRequest) {
   try {
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     const { email, password, first_name, last_name, employee_id, department_id, position, role } = body
 
     // Generate a UUID for the new user
-    const userId = crypto.randomUUID()
+    const userId = randomUUID()
 
     // Insert user profile directly
     const { data: newProfile, error: profileError } = await supabase
