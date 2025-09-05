@@ -646,7 +646,7 @@ export default function LoginPage() {
                   href="/auth/staff-request"
                   className="font-medium text-primary hover:text-primary/80 underline underline-offset-4"
                 >
-                  Request Staff Access
+                  
                 </Link>
               </p>
             </div>
