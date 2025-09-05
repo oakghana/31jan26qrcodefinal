@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Settings, MapPin, Shield, Save, Database, Bell } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { PasswordManagement } from "@/components/admin/password-management"
 
 interface UserProfile {
   id: string
@@ -209,6 +210,15 @@ export function SettingsClient({ profile }: SettingsClientProps) {
         <Alert>
           <AlertDescription>{success}</AlertDescription>
         </Alert>
+      )}
+
+      {/* Password Management Component */}
+      {profile && (
+        <PasswordManagement
+          userId={profile.id}
+          userEmail={`${profile.first_name} ${profile.last_name}`}
+          isAdmin={profile.role === "admin"}
+        />
       )}
 
       {/* General Settings */}

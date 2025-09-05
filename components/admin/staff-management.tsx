@@ -197,6 +197,7 @@ export function StaffManagement() {
           employee_id: editingStaff.employee_id,
           position: editingStaff.position,
           role: editingStaff.role,
+          department_id: editingStaff.department_id,
         }),
       })
 
