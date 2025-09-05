@@ -28,10 +28,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
-    let query = supabase.from("schedules").select("*")
+    let query = supabase.from("schedules").select(`
+        *,
+        assigned_user:user_profiles!schedules_user_id_fkey(first_name, last_name, email),
+        department:departments(name)
+      `)
 
     if (date) {
-      query = query.eq("date", date)
+      query = query.lte("start_date", date).gte("end_date", date)
     }
 
     // Department heads can only see their department's schedules
@@ -39,7 +43,9 @@ export async function GET(request: NextRequest) {
       query = query.eq("department_id", profile.department_id)
     }
 
-    const { data: schedules, error } = await query.order("start_time", { ascending: true })
+    const { data: schedules, error } = await query
+      .order("start_date", { ascending: true })
+      .order("start_time", { ascending: true })
 
     if (error) {
       console.error("Database error:", error)
@@ -82,20 +88,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
-    const { title, description, start_time, end_time, date, type } = body
+    const {
+      title,
+      description,
+      start_date,
+      end_date,
+      start_time,
+      end_time,
+      user_id,
+      location_id,
+      schedule_type,
+      is_recurring,
+    } = body
 
-    if (!title || !start_time || !end_time || !date) {
+    if (!title || !start_date || !start_time || !end_time) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
     const scheduleData = {
       title,
       description: description || "",
+      start_date,
+      end_date: end_date || start_date, // Default to same day if no end date
       start_time,
       end_time,
-      date,
-      type: type || "work",
-      status: "scheduled",
+      user_id: user_id || null, // Optional user assignment
+      location_id: location_id || null, // Optional location
+      schedule_type: schedule_type || "work",
+      is_recurring: is_recurring || false,
+      status: "active",
       created_by: user.id,
       department_id: profile.department_id,
     }
