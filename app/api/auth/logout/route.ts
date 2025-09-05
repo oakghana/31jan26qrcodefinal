@@ -24,9 +24,34 @@ export async function POST(request: NextRequest) {
       user_agent: request.headers.get("user-agent"),
     })
 
-    return NextResponse.json({ success: true })
+    const { error: signOutError } = await supabase.auth.signOut()
+
+    if (signOutError) {
+      console.error("Sign out error:", signOutError)
+      return NextResponse.json({ error: "Failed to sign out" }, { status: 500 })
+    }
+
+    const response = NextResponse.json({ success: true })
+
+    // Clear auth cookies
+    response.cookies.set("sb-access-token", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    })
+    response.cookies.set("sb-refresh-token", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    })
+
+    return response
   } catch (error) {
-    console.error("Logout logging error:", error)
+    console.error("Logout error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

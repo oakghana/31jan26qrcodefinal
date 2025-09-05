@@ -2,21 +2,32 @@ import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { ValidationError, createValidationError } from "@/lib/validation" // Declare ValidationError and createValidationError
 
-function validateEmail(email: string): void {
+function validateEmail(email: string, isRequired = true): void {
+  if (!email || email.trim() === "") {
+    if (isRequired) {
+      throw createValidationError(`Email is required`, "email", email, "MISSING_EMAIL")
+    }
+    return // Skip validation if email is empty and not required
+  }
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(email)) {
-    throw createValidationError(`Invalid email format: ${email}`, "email", email, "INVALID_EMAIL")
+    // Don't throw error, just log warning - allow invalid emails to be imported
+    console.warn(`Warning: Invalid email format: ${email} - can be corrected after import`)
   }
 }
 
-function validateEmployeeId(employeeId: string): void {
+function validateEmployeeId(employeeId: string, isRequired = true): void {
+  if (!employeeId || employeeId.trim() === "") {
+    if (isRequired) {
+      throw createValidationError(`Employee ID is required`, "employee_id", employeeId, "MISSING_EMPLOYEE_ID")
+    }
+    return
+  }
+
   if (!/^\d{7}$/.test(employeeId)) {
-    throw createValidationError(
-      `Employee ID must be exactly 7 digits, got: ${employeeId}`,
-      "employee_id",
-      employeeId,
-      "INVALID_EMPLOYEE_ID",
-    )
+    // Don't throw error, just log warning - allow invalid employee IDs to be imported
+    console.warn(`Warning: Employee ID should be 7 digits, got: ${employeeId} - can be corrected after import`)
   }
 }
 
@@ -158,7 +169,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function processStaffRow(supabase: any, data: any) {
-  const requiredFields = ["employee_id", "email", "first_name", "last_name"]
+  const requiredFields = ["first_name", "last_name"]
   const missingFields = requiredFields.filter((field) => !data[field] || data[field].trim() === "")
 
   if (missingFields.length > 0) {
@@ -170,18 +181,13 @@ async function processStaffRow(supabase: any, data: any) {
     )
   }
 
-  // Validate employee ID format
-  validateEmployeeId(data.employee_id)
+  validateEmployeeId(data.employee_id, false) // Not required
+  validateEmail(data.email, false) // Not required
 
-  // Validate email format
-  validateEmail(data.email)
-
-  // Validate phone number if provided
   if (data.phone && !/^[0-9+\-\s()]{10,15}$/.test(data.phone)) {
-    throw createValidationError(`Invalid phone number format: ${data.phone}`, "phone", data.phone, "INVALID_PHONE")
+    console.warn(`Warning: Invalid phone number format: ${data.phone} - can be corrected after import`)
   }
 
-  // Get department ID from code
   let departmentId = null
   if (data.department_code) {
     const { data: dept, error: deptError } = await supabase
@@ -190,37 +196,46 @@ async function processStaffRow(supabase: any, data: any) {
       .eq("code", data.department_code)
       .single()
     if (deptError || !dept) {
-      throw createValidationError(
-        `Department not found with code: ${data.department_code}`,
-        "department_code",
-        data.department_code,
-        "DEPARTMENT_NOT_FOUND",
-      )
+      console.warn(`Warning: Department not found with code: ${data.department_code} - user created without department`)
+      departmentId = null // Allow creation without department
+    } else {
+      departmentId = dept.id
     }
-    departmentId = dept.id
   }
 
-  // Validate role if provided
   const validRoles = ["staff", "admin", "department_head"]
-  if (data.role && !validRoles.includes(data.role)) {
-    throw createValidationError(
-      `Invalid role: ${data.role}. Must be one of: ${validRoles.join(", ")}`,
-      "role",
-      data.role,
-      "INVALID_ROLE",
-    )
+  let userRole = "staff" // Default role
+  if (data.role && validRoles.includes(data.role)) {
+    userRole = data.role
+  } else if (data.role) {
+    console.warn(`Warning: Invalid role: ${data.role} - defaulting to 'staff'`)
   }
 
-  // Create user profile
+  let employeeId = data.employee_id
+  if (!employeeId || !/^\d{7}$/.test(employeeId)) {
+    // Generate a temporary employee ID
+    employeeId = `TEMP${Date.now().toString().slice(-6)}`
+    console.warn(`Warning: Generated temporary employee ID: ${employeeId} - please update after import`)
+  }
+
+  let email = data.email
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Generate a temporary email
+    email = `${data.first_name?.toLowerCase() || "user"}.${data.last_name?.toLowerCase() || "temp"}@temp.qccgh.com`
+    console.warn(`Warning: Generated temporary email: ${email} - please update after import`)
+  }
+
+  // Create user profile with lenient data
   const { error } = await supabase.from("user_profiles").insert({
-    employee_id: data.employee_id,
+    employee_id: employeeId,
     first_name: data.first_name,
     last_name: data.last_name,
-    email: data.email,
+    email: email,
     phone: data.phone || null,
     department_id: departmentId,
     position: data.position || "Staff",
-    role: data.role || "staff",
+    role: userRole,
+    is_active: true, // Default to active
   })
 
   if (error) throw error

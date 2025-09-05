@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Settings, MapPin, Shield, Save, Database, Bell } from "lucide-react"
+import { Settings, MapPin, Shield, Save, Database, Bell, LogOut } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PasswordManagement } from "@/components/admin/password-management"
+import { useRouter } from "next/navigation"
 
 interface UserProfile {
   id: string
@@ -26,8 +27,10 @@ interface SettingsClientProps {
 export function SettingsClient({ profile }: SettingsClientProps) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const router = useRouter()
 
   const [geoSettings, setGeoSettings] = useState({
     defaultRadius: "20",
@@ -188,6 +191,47 @@ export function SettingsClient({ profile }: SettingsClientProps) {
     }
   }
 
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    setError(null)
+
+    try {
+      // Call logout API to log the action and clear server-side session
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to logout from server")
+      }
+
+      // Also sign out from client-side Supabase
+      const supabase = createClient()
+      const { error: clientSignOutError } = await supabase.auth.signOut()
+
+      if (clientSignOutError) {
+        console.error("Client sign out error:", clientSignOutError)
+      }
+
+      // Clear local storage
+      localStorage.removeItem("qcc-app-settings")
+      localStorage.removeItem("qcc-notification-settings")
+      localStorage.removeItem("qcc-geo-settings")
+      localStorage.removeItem("qcc-system-settings")
+
+      // Redirect to login page
+      router.push("/auth/login")
+    } catch (error) {
+      console.error("Logout error:", error)
+      setError(`Failed to logout: ${error instanceof Error ? error.message : "Unknown error"}`)
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading settings...</div>
   }
@@ -195,9 +239,21 @@ export function SettingsClient({ profile }: SettingsClientProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-primary">Settings</h1>
-        <p className="text-muted-foreground mt-2">Manage your application preferences and system settings</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-primary">Settings</h1>
+          <p className="text-muted-foreground mt-2">Manage your application preferences and system settings</p>
+        </div>
+        {/* Logout Button */}
+        <Button
+          variant="outline"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex items-center gap-2 bg-transparent"
+        >
+          <LogOut className="h-4 w-4" />
+          {loggingOut ? "Signing out..." : "Sign Out"}
+        </Button>
       </div>
 
       {error && (
@@ -567,7 +623,12 @@ export function SettingsClient({ profile }: SettingsClientProps) {
       )}
 
       {/* Save Button */}
-      <div className="flex justify-end">
+      <div className="flex justify-between items-center">
+        <Button variant="destructive" onClick={handleLogout} disabled={loggingOut} className="flex items-center gap-2">
+          <LogOut className="h-4 w-4" />
+          {loggingOut ? "Signing out..." : "Sign Out"}
+        </Button>
+
         <Button onClick={saveSettings} disabled={saving}>
           <Save className="mr-2 h-4 w-4" />
           {saving ? "Saving..." : "Save Settings"}

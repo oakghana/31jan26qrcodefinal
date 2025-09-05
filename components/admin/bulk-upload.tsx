@@ -220,9 +220,18 @@ export function BulkUpload() {
                             <Badge variant="default">{results.success} Successful</Badge>
                             {results.failed > 0 && <Badge variant="destructive">{results.failed} Failed</Badge>}
                           </div>
+                          {results.success > 0 && (
+                            <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                              <p className="text-sm text-blue-800">
+                                <strong>Note:</strong> Records with validation warnings have been imported successfully.
+                                You can edit these records in the Staff Management section to correct any issues like
+                                invalid emails, phone numbers, or missing department assignments.
+                              </p>
+                            </div>
+                          )}
                           {results.errors.length > 0 && (
                             <div className="mt-2">
-                              <p className="font-medium">Detailed Errors:</p>
+                              <p className="font-medium">Errors (Critical Issues Only):</p>
                               <div className="text-sm space-y-2 max-h-60 overflow-y-auto">
                                 {results.errors.slice(0, 10).map((error, index) => (
                                   <div key={index} className="p-2 bg-red-50 border border-red-200 rounded">

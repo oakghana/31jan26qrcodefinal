@@ -4,7 +4,18 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     console.log("[v0] Staff update API called for ID:", params.id)
+
     const supabase = await createClient()
+    const adminSupabase = createClient({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      options: {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      },
+    })
 
     // Get authenticated user and check admin role
     const {
@@ -75,18 +86,34 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       updated_at: new Date().toISOString(),
     }
 
-    // Update email in auth.users if provided and different
     if (email) {
-      const { error: emailUpdateError } = await supabase.auth.admin.updateUserById(params.id, {
-        email: email,
-      })
+      try {
+        const { error: emailUpdateError } = await adminSupabase.auth.admin.updateUserById(params.id, {
+          email: email,
+        })
 
-      if (emailUpdateError) {
-        console.error("[v0] Email update error:", emailUpdateError)
-        return NextResponse.json({ error: "Failed to update email address" }, { status: 500 })
+        if (emailUpdateError) {
+          console.error("[v0] Email update error:", emailUpdateError)
+          return NextResponse.json(
+            {
+              error: `Failed to update email address: ${emailUpdateError.message}`,
+              details: emailUpdateError,
+            },
+            { status: 500 },
+          )
+        }
+
+        updateData.email = email
+        console.log("[v0] Email updated successfully")
+      } catch (emailError) {
+        console.error("[v0] Email update exception:", emailError)
+        return NextResponse.json(
+          {
+            error: "Failed to update email address - admin permissions required",
+          },
+          { status: 500 },
+        )
       }
-
-      updateData.email = email
     }
 
     // Update user profile

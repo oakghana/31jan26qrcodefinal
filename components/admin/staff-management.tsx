@@ -37,7 +37,7 @@ interface StaffMember {
     name: string
     code: string
   }
-  assigned_location?: {
+  geofence_locations?: {
     id: string
     name: string
     address: string
@@ -107,6 +107,7 @@ export function StaffManagement() {
 
       if (result.success) {
         setStaff(result.data)
+        setError(null) // Clear error on successful fetch
       } else {
         console.error("[v0] Failed to fetch staff:", result.error)
         setError(result.error)
@@ -156,6 +157,17 @@ export function StaffManagement() {
   const handleAddStaff = async () => {
     try {
       setError(null)
+
+      if (!newStaff.email || !newStaff.first_name || !newStaff.last_name || !newStaff.employee_id) {
+        addNotification("Please fill in all required fields", "error")
+        return
+      }
+
+      if (!newStaff.assigned_location_id) {
+        addNotification("Please assign a location to this staff member", "error")
+        return
+      }
+
       console.log("[v0] Adding new staff:", newStaff)
       const response = await fetch("/api/admin/staff", {
         method: "POST",
@@ -314,7 +326,7 @@ export function StaffManagement() {
   }
 
   const addNotification = (message: string, type: "success" | "error") => {
-    const id = crypto.randomUUID()
+    const id = Date.now().toString() // Use timestamp instead of crypto.randomUUID for better compatibility
     setNotifications((prev) => [...prev, { id, message, type }])
     setTimeout(() => {
       setNotifications((prev) => prev.filter((n) => n.id !== id))
@@ -344,7 +356,12 @@ export function StaffManagement() {
           <CardDescription>Manage QCC staff members, roles, and location assignments</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Removed error and success alerts as they are now handled by notifications */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Filters and Actions */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="flex gap-2 flex-1">
@@ -717,11 +734,11 @@ export function StaffManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {member.assigned_location ? (
+                        {member.geofence_locations ? (
                           <div className="flex items-center gap-1 text-sm">
                             <MapPin className="h-3 w-3 text-muted-foreground" />
-                            <span className="truncate max-w-32" title={member.assigned_location.address}>
-                              {member.assigned_location.name}
+                            <span className="truncate max-w-32" title={member.geofence_locations.address}>
+                              {member.geofence_locations.name}
                             </span>
                           </div>
                         ) : (

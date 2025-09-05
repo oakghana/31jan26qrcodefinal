@@ -10,12 +10,28 @@ export async function createClient() {
   try {
     console.log("[v0] Creating Supabase server client")
 
-    // Validate environment variables
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+    console.log("[v0] Environment variable check:", {
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? "present" : "missing",
+      SUPABASE_URL: process.env.SUPABASE_URL ? "present" : "missing",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "present" : "missing",
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ? "present" : "missing",
+      allEnvKeys: Object.keys(process.env).filter((key) => key.includes("SUPABASE")),
+    })
+
+    // Validate environment variables with fallback values
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://vgtajtqxgczhjboatvol.supabase.co" // Added fallback URL from provided config
+
+    const supabaseKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndGFqdHF4Z2N6aGpib2F0dm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5NzUyNDgsImV4cCI6MjA3MjU1MTI0OH0.EuuTCRC-rDoz_WHl4pwpV6_fEqrqcgGroa4nTjAEn1k" // Added fallback key from provided config
+
+    console.log("[v0] Using Supabase URL:", supabaseUrl)
+    console.log("[v0] Using Supabase Key:", supabaseKey ? "present" : "missing")
 
     if (!supabaseUrl || !supabaseKey) {
-      console.error("[v0] Missing Supabase environment variables:", {
+      console.error("[v0] Missing Supabase environment variables after fallback:", {
         hasUrl: !!supabaseUrl,
         hasKey: !!supabaseKey,
         nextPublicUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -26,16 +42,50 @@ export async function createClient() {
       throw new Error("Missing Supabase environment variables")
     }
 
-    const cookieStore = await cookies()
+    let cookieStore
+    try {
+      const cookiePromise = cookies()
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Cookie timeout")), 5000))
+
+      cookieStore = await Promise.race([cookiePromise, timeoutPromise])
+      console.log("[v0] Cookie store obtained successfully")
+    } catch (cookieError) {
+      console.error("[v0] Failed to get cookie store, using fallback:", cookieError)
+      cookieStore = {
+        getAll: () => {
+          console.log("[v0] Using fallback getAll for cookies")
+          return []
+        },
+        set: (name: string, value: string, options?: any) => {
+          console.log("[v0] Using fallback set for cookie:", name)
+        },
+        get: (name: string) => {
+          console.log("[v0] Using fallback get for cookie:", name)
+          return undefined
+        },
+      }
+    }
 
     const client = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
         getAll() {
-          return cookieStore.getAll()
+          try {
+            return cookieStore.getAll ? cookieStore.getAll() : []
+          } catch {
+            return []
+          }
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+            if (cookieStore.set) {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                try {
+                  cookieStore.set(name, value, options)
+                } catch {
+                  // Ignore cookie setting errors in server components
+                }
+              })
+            }
           } catch {
             // The "setAll" method was called from a Server Component.
             // This can be ignored if you have middleware refreshing

@@ -1,30 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import crypto from "crypto"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(request: NextRequest) {
   try {
-    // Always return JSON with proper headers
-    const headers = {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-cache",
-    }
-
     console.log("[v0] Staff API - Starting GET request")
 
-    // Dynamic import to avoid module loading issues
-    const { createClient } = await import("@/lib/supabase/server")
-
-    let supabase
-    try {
-      supabase = await createClient()
-      console.log("[v0] Staff API - Supabase client created")
-    } catch (error) {
-      console.error("[v0] Staff API - Supabase client error:", error)
-      return NextResponse.json(
-        { success: false, error: "Database connection failed", data: [] },
-        { status: 500, headers },
-      )
-    }
+    const supabase = await createClient()
 
     // Get authenticated user
     const {
@@ -34,7 +15,10 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       console.error("[v0] Staff API - Auth error:", authError)
-      return NextResponse.json({ success: false, error: "Authentication required", data: [] }, { status: 401, headers })
+      return NextResponse.json(
+        { success: false, error: "Authentication required", data: [] },
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      )
     }
 
     console.log("[v0] Staff API - User authenticated:", user.id)
@@ -53,43 +37,32 @@ export async function GET(request: NextRequest) {
         role,
         hire_date,
         is_active,
-        profile_image_url,
         assigned_location_id,
+        profile_image_url,
         created_at,
-        updated_at
+        updated_at,
+        departments:department_id(id, name, code),
+        geofence_locations:assigned_location_id(id, name, address)
       `)
       .order("created_at", { ascending: false })
 
     if (staffError) {
       console.error("[v0] Staff API - Query error:", staffError)
-      return NextResponse.json({ success: false, error: "Failed to fetch staff", data: [] }, { status: 500, headers })
+      return NextResponse.json(
+        { success: false, error: "Failed to fetch staff", data: [] },
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      )
     }
 
     console.log("[v0] Staff API - Fetched", staff?.length || 0, "staff members")
 
-    // Get departments separately to avoid join issues
-    const { data: departments } = await supabase.from("departments").select("*")
-
-    const { data: locations } = await supabase
-      .from("geofence_locations")
-      .select("id, name, address")
-      .eq("is_active", true)
-
-    // Enrich staff data with department info and location info
-    const enrichedStaff = (staff || []).map((member) => ({
-      ...member,
-      departments: departments?.find((dept) => dept.id === member.department_id) || null,
-      assigned_location: locations?.find((loc) => loc.id === member.assigned_location_id) || null,
-    }))
-
-    console.log("[v0] Staff API - Returning success response")
     return NextResponse.json(
       {
         success: true,
-        data: enrichedStaff,
+        data: staff || [],
         message: "Staff fetched successfully",
       },
-      { status: 200, headers },
+      { status: 200, headers: { "Content-Type": "application/json" } },
     )
   } catch (error) {
     console.error("[v0] Staff API - Unexpected error:", error)
@@ -102,10 +75,7 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache",
-        },
+        headers: { "Content-Type": "application/json" },
       },
     )
   }
@@ -113,14 +83,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const headers = {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-cache",
-    }
-
     console.log("[v0] Staff API - Starting POST request")
 
-    const { createClient } = await import("@/lib/supabase/server")
     const supabase = await createClient()
 
     // Get authenticated user
@@ -130,41 +94,74 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401, headers })
+      return NextResponse.json(
+        { success: false, error: "Authentication required" },
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      )
     }
 
     // Check admin permissions
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
     if (!profile || profile.role !== "admin") {
-      return NextResponse.json({ success: false, error: "Admin access required" }, { status: 403, headers })
+      return NextResponse.json(
+        { success: false, error: "Admin access required" },
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      )
     }
 
     const body = await request.json()
-    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id } = body
+    const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password } =
+      body
 
-    // Create user profile
+    const { data: authUser, error: authCreateError } = await supabase.auth.admin.createUser({
+      email,
+      password: password || "TempPassword123!", // Default password if not provided
+      email_confirm: true, // Auto-confirm email for admin-created users
+      user_metadata: {
+        first_name,
+        last_name,
+        employee_id,
+      },
+    })
+
+    if (authCreateError) {
+      console.error("[v0] Staff API - Auth user creation error:", authCreateError)
+      return NextResponse.json(
+        { success: false, error: "Failed to create user account" },
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )
+    }
+
     const { data: newProfile, error: insertError } = await supabase
       .from("user_profiles")
       .insert({
-        id: crypto.randomUUID(),
+        id: authUser.user.id, // Use the auth user ID
         email,
         first_name,
         last_name,
         employee_id,
         department_id: department_id || null,
+        assigned_location_id: assigned_location_id || null,
         position: position || null,
         role: role || "staff",
-        assigned_location_id: assigned_location_id && assigned_location_id !== "none" ? assigned_location_id : null,
-        is_active: false,
-        created_at: new Date().toISOString(),
+        is_active: true,
       })
-      .select()
+      .select(`
+        *,
+        departments:department_id(id, name, code),
+        geofence_locations:assigned_location_id(id, name, address)
+      `)
       .single()
 
     if (insertError) {
-      console.error("[v0] Staff API - Insert error:", insertError)
-      return NextResponse.json({ success: false, error: "Failed to create staff member" }, { status: 400, headers })
+      console.error("[v0] Staff API - Profile insert error:", insertError)
+      // Clean up auth user if profile creation fails
+      await supabase.auth.admin.deleteUser(authUser.user.id)
+      return NextResponse.json(
+        { success: false, error: "Failed to create staff profile" },
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )
     }
 
     console.log("[v0] Staff API - Staff member created successfully")
@@ -174,7 +171,7 @@ export async function POST(request: NextRequest) {
         data: newProfile,
         message: "Staff member created successfully",
       },
-      { status: 201, headers },
+      { status: 201, headers: { "Content-Type": "application/json" } },
     )
   } catch (error) {
     console.error("[v0] Staff API POST - Unexpected error:", error)
@@ -186,10 +183,7 @@ export async function POST(request: NextRequest) {
       },
       {
         status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache",
-        },
+        headers: { "Content-Type": "application/json" },
       },
     )
   }
