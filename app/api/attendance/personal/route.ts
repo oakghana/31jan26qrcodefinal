@@ -1,31 +1,28 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-      },
-    })
+    console.log("[v0] Personal attendance API - Starting request")
+    const supabase = await createClient()
 
-    // Get current user
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
     if (authError || !user) {
+      console.log("[v0] Personal attendance API - Auth error:", authError)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    console.log("[v0] Personal attendance API - User authenticated:", user.id)
 
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
     const status = searchParams.get("status")
+
+    console.log("[v0] Personal attendance API - Query params:", { startDate, endDate, status })
 
     let query = supabase
       .from("attendance_records")
@@ -51,7 +48,6 @@ export async function GET(request: NextRequest) {
       .eq("user_id", user.id)
       .order("check_in_time", { ascending: false })
 
-    // Apply date filters
     if (startDate) {
       query = query.gte("check_in_time", startDate)
     }
@@ -65,9 +61,11 @@ export async function GET(request: NextRequest) {
     const { data: records, error: recordsError } = await query
 
     if (recordsError) {
-      console.error("Error fetching attendance records:", recordsError)
+      console.error("[v0] Personal attendance API - Records error:", recordsError)
       return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 })
     }
+
+    console.log("[v0] Personal attendance API - Found records:", records?.length)
 
     const locationIds = new Set()
     records?.forEach((record) => {
@@ -97,7 +95,6 @@ export async function GET(request: NextRequest) {
         : locationMap[record.check_out_location_id] || null,
     }))
 
-    // Calculate summary statistics
     const summary = {
       totalDays: enhancedRecords?.length || 0,
       presentDays: enhancedRecords?.filter((r) => r.status === "present").length || 0,
@@ -109,17 +106,14 @@ export async function GET(request: NextRequest) {
       monthlyStats: {},
     }
 
-    // Calculate average hours
     const workingDays = enhancedRecords?.filter((r) => r.work_hours && r.work_hours > 0).length || 0
     summary.averageHours = workingDays > 0 ? summary.totalHours / workingDays : 0
 
-    // Calculate status counts
     enhancedRecords?.forEach((record) => {
       const status = record.status || "unknown"
       summary.statusCounts[status] = (summary.statusCounts[status] || 0) + 1
     })
 
-    // Calculate monthly stats
     enhancedRecords?.forEach((record) => {
       const month = new Date(record.check_in_time).toISOString().slice(0, 7) // YYYY-MM
       if (!summary.monthlyStats[month]) {
@@ -129,12 +123,14 @@ export async function GET(request: NextRequest) {
       summary.monthlyStats[month].hours += record.work_hours || 0
     })
 
+    console.log("[v0] Personal attendance API - Returning data with summary:", summary)
+
     return NextResponse.json({
       records: enhancedRecords || [],
       summary,
     })
   } catch (error) {
-    console.error("Error in personal attendance API:", error)
+    console.error("[v0] Personal attendance API - Unexpected error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

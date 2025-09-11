@@ -47,7 +47,6 @@ interface AttendanceRecord {
   check_in_location_name?: string
   check_out_location_name?: string
   is_remote_location?: boolean
-  different_checkout_location?: boolean
   geofence_locations?: {
     name: string
     address: string
@@ -116,7 +115,6 @@ export function PersonalAttendanceHistory() {
           check_in_location_name,
           check_out_location_name,
           is_remote_location,
-          different_checkout_location,
           geofence_locations!check_in_location_id (
             name,
             address
@@ -135,7 +133,6 @@ export function PersonalAttendanceHistory() {
 
       setRecords(attendanceData || [])
 
-      // Calculate summary statistics
       if (attendanceData && attendanceData.length > 0) {
         const totalRecords = attendanceData.length
         const totalWorkHours = attendanceData.reduce((sum, record) => sum + (record.work_hours || 0), 0)
@@ -266,7 +263,6 @@ export function PersonalAttendanceHistory() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-primary">My Attendance History</h2>
         <p className="text-muted-foreground mt-1">
@@ -274,7 +270,6 @@ export function PersonalAttendanceHistory() {
         </p>
       </div>
 
-      {/* Date Selection and Filters */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -361,7 +356,6 @@ export function PersonalAttendanceHistory() {
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
       {summary && (
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
@@ -410,7 +404,6 @@ export function PersonalAttendanceHistory() {
         </div>
       )}
 
-      {/* Charts and Details */}
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -565,11 +558,6 @@ export function PersonalAttendanceHistory() {
                                 <span className="text-sm">
                                   {record.check_out_location_name || record.checkout_location?.name}
                                 </span>
-                                {record.different_checkout_location && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Different
-                                  </Badge>
-                                )}
                               </div>
                             ) : (
                               "N/A"
@@ -586,11 +574,6 @@ export function PersonalAttendanceHistory() {
                               {record.is_remote_location && (
                                 <Badge variant="outline" className="text-xs">
                                   Remote Location
-                                </Badge>
-                              )}
-                              {record.different_checkout_location && (
-                                <Badge variant="outline" className="text-xs">
-                                  Different Checkout
                                 </Badge>
                               )}
                             </div>
