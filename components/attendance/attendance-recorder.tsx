@@ -22,7 +22,7 @@ import {
 import { getDeviceInfo } from "@/lib/device-info"
 import { QRScanner } from "@/components/qr/qr-scanner"
 import { validateQRCode, type QRCodeData } from "@/lib/qr-code"
-import { MapPin, Clock, CheckCircle, XCircle, Loader2, AlertTriangle, QrCode } from "lucide-react"
+import { MapPin, Clock, CheckCircle, XCircle, Loader2, AlertTriangle, QrCode, Navigation } from "lucide-react"
 
 interface GeofenceLocation {
   id: string
@@ -39,6 +39,10 @@ interface AttendanceRecorderProps {
     check_in_time: string
     check_out_time?: string
     work_hours?: number
+    check_in_location_name?: string
+    check_out_location_name?: string
+    is_remote_location?: boolean
+    different_checkout_location?: boolean
   } | null
 }
 
@@ -145,7 +149,14 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Successfully checked in at ${validation.nearestLocation!.name}`)
+        const locationInfo = result.data.location_tracking
+        let message = result.message
+
+        if (locationInfo?.is_remote_location) {
+          message += " (Note: This is different from your assigned location)"
+        }
+
+        setSuccess(message)
         window.location.reload()
       } else {
         setError(result.error || "Failed to check in")
@@ -189,7 +200,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Successfully checked out from ${validation.nearestLocation!.name}`)
+        setSuccess(result.message)
         window.location.reload()
       } else {
         setError(result.error || "Failed to check out")
@@ -239,7 +250,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Successfully checked in at ${location.name} using QR code`)
+        setSuccess(result.message)
         window.location.reload()
       } else {
         setError(result.error || "Failed to check in with QR code")
@@ -286,7 +297,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(`Successfully checked out from ${location.name} using QR code`)
+        setSuccess(result.message)
         window.location.reload()
       } else {
         setError(result.error || "Failed to check out")
@@ -348,10 +359,40 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             </div>
           )}
 
+          {todayAttendance?.check_in_location_name && (
+            <div className="flex items-center justify-between">
+              <span>Check-in Location:</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{todayAttendance.check_in_location_name}</span>
+                {todayAttendance.is_remote_location && (
+                  <Badge variant="outline" className="text-xs">
+                    <Navigation className="h-3 w-3 mr-1" />
+                    Remote
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
           {todayAttendance?.check_out_time && (
             <div className="flex items-center justify-between">
               <span>Check-out Time:</span>
               <span className="font-medium">{new Date(todayAttendance.check_out_time).toLocaleTimeString()}</span>
+            </div>
+          )}
+
+          {todayAttendance?.check_out_location_name && (
+            <div className="flex items-center justify-between">
+              <span>Check-out Location:</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{todayAttendance.check_out_location_name}</span>
+                {todayAttendance.different_checkout_location && (
+                  <Badge variant="outline" className="text-xs">
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Different
+                  </Badge>
+                )}
+              </div>
             </div>
           )}
 
@@ -371,7 +412,13 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             <MapPin className="h-5 w-5" />
             Location Status
           </CardTitle>
-          <CardDescription>Your current location relative to QCC campuses (20m precision required)</CardDescription>
+          <CardDescription>
+            Your current location relative to QCC campuses (20m precision required)
+            <br />
+            <span className="text-sm text-muted-foreground">
+              You can check in/out at any QCC location, not just your assigned one
+            </span>
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!userLocation ? (
@@ -467,7 +514,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>
-            Record your attendance using GPS (20m precision) or QR code
+            Record your attendance using GPS (20m precision) or QR code at any QCC location
             {!userLocation && " - QR code works without location access"}
           </CardDescription>
         </CardHeader>
@@ -538,7 +585,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Check In with QR Code</DialogTitle>
-                    <DialogDescription>Scan the location QR code to check in</DialogDescription>
+                    <DialogDescription>Scan the location QR code to check in at any QCC location</DialogDescription>
                   </DialogHeader>
                   <QRScanner onScanSuccess={handleQRCheckIn} onClose={() => setShowQRScanner(false)} />
                 </DialogContent>

@@ -9,9 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { format } from "date-fns"
 import {
   BarChart,
   Bar,
@@ -42,7 +39,6 @@ import {
   Loader2,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { cn } from "@/lib/utils"
 
 interface AttendanceRecord {
   id: string
@@ -82,8 +78,13 @@ export function AttendanceReports() {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [summary, setSummary] = useState<ReportSummary | null>(null)
   const [loading, setLoading] = useState(false)
-  const [startDate, setStartDate] = useState<Date>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-  const [endDate, setEndDate] = useState<Date>(new Date())
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    return date.toISOString().split("T")[0]
+  })
+  const [endDate, setEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0]
+  })
   const [selectedDepartment, setSelectedDepartment] = useState("all")
   const [selectedUser, setSelectedUser] = useState("all")
   const [locations, setLocations] = useState([])
@@ -116,15 +117,11 @@ export function AttendanceReports() {
     setLoading(true)
     setExportError(null)
     try {
-      console.log(
-        "[v0] Fetching report with dates:",
-        startDate.toISOString().split("T")[0],
-        endDate.toISOString().split("T")[0],
-      )
+      console.log("[v0] Fetching report with dates:", startDate, endDate)
 
       const params = new URLSearchParams({
-        start_date: startDate.toISOString().split("T")[0],
-        end_date: endDate.toISOString().split("T")[0],
+        start_date: startDate,
+        end_date: endDate,
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
@@ -258,7 +255,7 @@ export function AttendanceReports() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `qcc-attendance-report-${startDate.toISOString().split("T")[0]}-to-${endDate.toISOString().split("T")[0]}.csv`
+        a.download = `qcc-attendance-report-${startDate}-to-${endDate}.csv`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -279,8 +276,8 @@ export function AttendanceReports() {
             data: records,
             summary,
             filters: {
-              startDate: startDate.toISOString().split("T")[0],
-              endDate: endDate.toISOString().split("T")[0],
+              startDate,
+              endDate,
               locationId: selectedLocation !== "all" ? selectedLocation : null,
               districtId: selectedDistrict !== "all" ? selectedDistrict : null,
               departmentId: selectedDepartment !== "all" ? selectedDepartment : null,
@@ -306,7 +303,7 @@ export function AttendanceReports() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `qcc-attendance-report-${startDate.toISOString().split("T")[0]}-to-${endDate.toISOString().split("T")[0]}.${format === "excel" ? "xlsx" : "pdf"}`
+        a.download = `qcc-attendance-report-${startDate}-to-${endDate}.${format === "excel" ? "xlsx" : "pdf"}`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -340,6 +337,34 @@ export function AttendanceReports() {
       }))
     : []
 
+  const setQuickDate = (preset: "today" | "week" | "month" | "quarter") => {
+    const today = new Date()
+    const todayStr = today.toISOString().split("T")[0]
+
+    switch (preset) {
+      case "today":
+        setStartDate(todayStr)
+        setEndDate(todayStr)
+        break
+      case "week":
+        const weekStart = new Date(today)
+        weekStart.setDate(today.getDate() - today.getDay())
+        setStartDate(weekStart.toISOString().split("T")[0])
+        setEndDate(todayStr)
+        break
+      case "month":
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+        setStartDate(monthStart.toISOString().split("T")[0])
+        setEndDate(todayStr)
+        break
+      case "quarter":
+        const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1)
+        setStartDate(quarterStart.toISOString().split("T")[0])
+        setEndDate(todayStr)
+        break
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Enhanced Filters */}
@@ -364,47 +389,23 @@ export function AttendanceReports() {
           <div className="grid gap-4 md:grid-cols-7">
             <div>
               <Label htmlFor="startDate">Start Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={startDate}
-                    onSelect={(date) => date && setStartDate(date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <input
+                id="startDate"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
             </div>
             <div>
               <Label htmlFor="endDate">End Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={endDate}
-                    onSelect={(date) => date && setEndDate(date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <input
+                id="endDate"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
             </div>
             <div>
               <Label htmlFor="location">Location</Label>
@@ -490,6 +491,24 @@ export function AttendanceReports() {
             </div>
           </div>
 
+          <div className="mt-4 pt-4 border-t">
+            <Label>Quick Date Selection</Label>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Button size="sm" variant="outline" onClick={() => setQuickDate("today")}>
+                Today
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setQuickDate("week")}>
+                This Week
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setQuickDate("month")}>
+                This Month
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setQuickDate("quarter")}>
+                This Quarter
+              </Button>
+            </div>
+          </div>
+
           <div className="flex gap-2 mt-4 pt-4 border-t">
             <Button
               onClick={() => exportReport("excel")}
@@ -561,11 +580,7 @@ export function AttendanceReports() {
                   variant="ghost"
                   size="sm"
                   className="w-full justify-start text-xs h-6 text-orange-700 hover:bg-orange-100"
-                  onClick={() => {
-                    const today = new Date()
-                    setStartDate(today)
-                    setEndDate(today)
-                  }}
+                  onClick={() => setQuickDate("today")}
                 >
                   Today
                 </Button>
@@ -573,12 +588,7 @@ export function AttendanceReports() {
                   variant="ghost"
                   size="sm"
                   className="w-full justify-start text-xs h-6 text-orange-700 hover:bg-orange-100"
-                  onClick={() => {
-                    const today = new Date()
-                    const weekStart = new Date(today.setDate(today.getDate() - today.getDay()))
-                    setStartDate(weekStart)
-                    setEndDate(new Date())
-                  }}
+                  onClick={() => setQuickDate("week")}
                 >
                   This Week
                 </Button>
@@ -586,12 +596,7 @@ export function AttendanceReports() {
                   variant="ghost"
                   size="sm"
                   className="w-full justify-start text-xs h-6 text-orange-700 hover:bg-orange-100"
-                  onClick={() => {
-                    const today = new Date()
-                    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-                    setStartDate(monthStart)
-                    setEndDate(new Date())
-                  }}
+                  onClick={() => setQuickDate("month")}
                 >
                   This Month
                 </Button>

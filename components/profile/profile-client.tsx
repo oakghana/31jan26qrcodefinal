@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 
 interface UserProfile {
   id: string
@@ -33,6 +35,16 @@ interface UserProfile {
   }
 }
 
+interface AttendanceSummary {
+  totalDays: number
+  totalHours: number
+  averageHours: number
+  thisMonthDays: number
+  thisMonthHours: number
+  presentDays: number
+  lateDays: number
+}
+
 export function ProfileClient() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -40,6 +52,7 @@ export function ProfileClient() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary | null>(null)
 
   const [editForm, setEditForm] = useState({
     first_name: "",
@@ -55,6 +68,7 @@ export function ProfileClient() {
 
   useEffect(() => {
     fetchProfile()
+    fetchAttendanceSummary()
   }, [])
 
   const fetchProfile = async () => {
@@ -94,6 +108,61 @@ export function ProfileClient() {
       setError("Failed to load profile")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAttendanceSummary = async () => {
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const startOfYear = new Date(now.getFullYear(), 0, 1)
+
+      // Fetch all-time attendance summary
+      const { data: allTimeData, error: allTimeError } = await supabase
+        .from("attendance_records")
+        .select("work_hours, status, check_in_time")
+        .eq("user_id", user.id)
+        .gte("check_in_time", startOfYear.toISOString())
+
+      if (allTimeError) throw allTimeError
+
+      // Fetch this month's attendance
+      const { data: monthData, error: monthError } = await supabase
+        .from("attendance_records")
+        .select("work_hours, status")
+        .eq("user_id", user.id)
+        .gte("check_in_time", startOfMonth.toISOString())
+
+      if (monthError) throw monthError
+
+      const totalDays = allTimeData?.length || 0
+      const totalHours = allTimeData?.reduce((sum, record) => sum + (record.work_hours || 0), 0) || 0
+      const averageHours = totalDays > 0 ? totalHours / totalDays : 0
+
+      const thisMonthDays = monthData?.length || 0
+      const thisMonthHours = monthData?.reduce((sum, record) => sum + (record.work_hours || 0), 0) || 0
+
+      const presentDays = allTimeData?.filter((record) => record.status === "present").length || 0
+      const lateDays = allTimeData?.filter((record) => record.status === "late").length || 0
+
+      setAttendanceSummary({
+        totalDays,
+        totalHours,
+        averageHours,
+        thisMonthDays,
+        thisMonthHours,
+        presentDays,
+        lateDays,
+      })
+    } catch (error) {
+      console.error("Failed to fetch attendance summary:", error)
     }
   }
 
@@ -179,7 +248,9 @@ export function ProfileClient() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-primary">Profile Settings</h1>
-        <p className="text-muted-foreground mt-2">Manage your personal information and account details</p>
+        <p className="text-muted-foreground mt-2">
+          Manage your personal information, account details, and attendance history
+        </p>
       </div>
 
       {error && (
@@ -194,202 +265,315 @@ export function ProfileClient() {
         </Alert>
       )}
 
-      {/* Profile Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Personal Information
-          </CardTitle>
-          <CardDescription>Your QCC account details and contact information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Profile Picture */}
-          <div className="flex items-center gap-6">
-            <Avatar className="h-24 w-24">
-              <AvatarImage src={profile.profile_image_url || "/placeholder.svg"} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-xl">{userInitials}</AvatarFallback>
-            </Avatar>
-            <div>
-              <Button variant="outline" size="sm">
-                <Camera className="mr-2 h-4 w-4" />
-                Change Photo
-              </Button>
-              <p className="text-sm text-muted-foreground mt-2">Upload a professional photo for your profile</p>
-            </div>
-          </div>
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="profile">Profile Info</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance History</TabsTrigger>
+          <TabsTrigger value="summary">Quick Summary</TabsTrigger>
+        </TabsList>
 
-          {/* Basic Information */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="firstName">First Name</Label>
-              {isEditing ? (
-                <Input
-                  id="firstName"
-                  value={editForm.first_name}
-                  onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                />
-              ) : (
-                <div className="p-2 bg-muted rounded-md">{profile.first_name}</div>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="lastName">Last Name</Label>
-              {isEditing ? (
-                <Input
-                  id="lastName"
-                  value={editForm.last_name}
-                  onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                />
-              ) : (
-                <div className="p-2 bg-muted rounded-md">{profile.last_name}</div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="email">Email Address</Label>
-              <div className="p-2 bg-muted rounded-md flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                {profile.email}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">Email cannot be changed</p>
-            </div>
-            <div>
-              <Label htmlFor="employeeId">Employee ID</Label>
-              <div className="p-2 bg-muted rounded-md">{profile.employee_id}</div>
-              <p className="text-sm text-muted-foreground mt-1">Employee ID cannot be changed</p>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="position">Position</Label>
-              <div className="p-2 bg-muted rounded-md flex items-center gap-2">
-                <Lock className="h-4 w-4 text-muted-foreground" />
-                {profile.position}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">Only admin can change position</p>
-            </div>
-            <div>
-              <Label htmlFor="phone">Phone Number</Label>
-              <div className="p-2 bg-muted rounded-md flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                {profile.phone_number || "Not provided"}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">Only admin can change phone number</p>
-            </div>
-          </div>
-
-          {/* Organization Information */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label>Department</Label>
-              <div className="p-2 bg-muted rounded-md flex items-center gap-2">
-                <Building className="h-4 w-4 text-muted-foreground" />
-                {profile.departments?.name || "No department assigned"}
-              </div>
-            </div>
-            <div>
-              <Label>Location</Label>
-              <div className="p-2 bg-muted rounded-md flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                {profile.districts?.name || "No location assigned"}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label>Role</Label>
-              <div className="p-2">
-                <Badge variant={profile.role === "admin" ? "default" : "secondary"}>
-                  {profile.role.replace("_", " ").toUpperCase()}
-                </Badge>
-              </div>
-            </div>
-            <div>
-              <Label>Account Status</Label>
-              <div className="p-2">
-                <Badge variant={profile.is_active ? "default" : "destructive"}>
-                  {profile.is_active ? "Active" : "Inactive"}
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-2 pt-4">
-            {isEditing ? (
-              <>
-                <Button onClick={handleSave} disabled={saving}>
-                  <Save className="mr-2 h-4 w-4" />
-                  {saving ? "Saving..." : "Save Changes"}
-                </Button>
-                <Button variant="outline" onClick={() => setIsEditing(false)}>
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
-            )}
-          </div>
-
-          {/* Password Change Section */}
-          <div className="border-t pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-medium">Password</h3>
-                <p className="text-sm text-muted-foreground">Change your account password</p>
-              </div>
-              <Button variant="outline" onClick={() => setShowPasswordChange(!showPasswordChange)}>
-                <Key className="mr-2 h-4 w-4" />
-                Change Password
-              </Button>
-            </div>
-
-            {showPasswordChange && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+        <TabsContent value="profile" className="space-y-6">
+          {/* Profile Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Personal Information
+              </CardTitle>
+              <CardDescription>Your QCC account details and contact information</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Profile Picture */}
+              <div className="flex items-center gap-6">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={profile.profile_image_url || "/placeholder.svg"} />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xl">{userInitials}</AvatarFallback>
+                </Avatar>
                 <div>
-                  <Label htmlFor="newPassword">New Password</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    placeholder="Enter new password"
-                  />
+                  <Button variant="outline" size="sm">
+                    <Camera className="mr-2 h-4 w-4" />
+                    Change Photo
+                  </Button>
+                  <p className="text-sm text-muted-foreground mt-2">Upload a professional photo for your profile</p>
+                </div>
+              </div>
+
+              {/* Basic Information */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="firstName">First Name</Label>
+                  {isEditing ? (
+                    <Input
+                      id="firstName"
+                      value={editForm.first_name}
+                      onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                    />
+                  ) : (
+                    <div className="p-2 bg-muted rounded-md">{profile.first_name}</div>
+                  )}
                 </div>
                 <div>
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    placeholder="Confirm new password"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handlePasswordChange} disabled={saving}>
-                    {saving ? "Updating..." : "Update Password"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowPasswordChange(false)
-                      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
-                    }}
-                  >
-                    Cancel
-                  </Button>
+                  <Label htmlFor="lastName">Last Name</Label>
+                  {isEditing ? (
+                    <Input
+                      id="lastName"
+                      value={editForm.last_name}
+                      onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                    />
+                  ) : (
+                    <div className="p-2 bg-muted rounded-md">{profile.last_name}</div>
+                  )}
                 </div>
               </div>
-            )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="email">Email Address</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    {profile.email}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Email cannot be changed</p>
+                </div>
+                <div>
+                  <Label htmlFor="employeeId">Employee ID</Label>
+                  <div className="p-2 bg-muted rounded-md">{profile.employee_id}</div>
+                  <p className="text-sm text-muted-foreground mt-1">Employee ID cannot be changed</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="position">Position</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                    {profile.position}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Only admin can change position</p>
+                </div>
+                <div>
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    {profile.phone_number || "Not provided"}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">Only admin can change phone number</p>
+                </div>
+              </div>
+
+              {/* Organization Information */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Department</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <Building className="h-4 w-4 text-muted-foreground" />
+                    {profile.departments?.name || "No department assigned"}
+                  </div>
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <div className="p-2 bg-muted rounded-md flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    {profile.districts?.name || "No location assigned"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Role</Label>
+                  <div className="p-2">
+                    <Badge variant={profile.role === "admin" ? "default" : "secondary"}>
+                      {profile.role.replace("_", " ").toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <Label>Account Status</Label>
+                  <div className="p-2">
+                    <Badge variant={profile.is_active ? "default" : "destructive"}>
+                      {profile.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-4">
+                {isEditing ? (
+                  <>
+                    <Button onClick={handleSave} disabled={saving}>
+                      <Save className="mr-2 h-4 w-4" />
+                      {saving ? "Saving..." : "Save Changes"}
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
+                )}
+              </div>
+
+              {/* Password Change Section */}
+              <div className="border-t pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-medium">Password</h3>
+                    <p className="text-sm text-muted-foreground">Change your account password</p>
+                  </div>
+                  <Button variant="outline" onClick={() => setShowPasswordChange(!showPasswordChange)}>
+                    <Key className="mr-2 h-4 w-4" />
+                    Change Password
+                  </Button>
+                </div>
+
+                {showPasswordChange && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                    <div>
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                        placeholder="Enter new password"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handlePasswordChange} disabled={saving}>
+                        {saving ? "Updating..." : "Update Password"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowPasswordChange(false)
+                          setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="attendance" className="space-y-6">
+          <PersonalAttendanceHistory />
+        </TabsContent>
+
+        <TabsContent value="summary" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Profile Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Profile Summary
+                </CardTitle>
+                <CardDescription>Your account overview</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={profile.profile_image_url || "/placeholder.svg"} />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      {profile.first_name} {profile.last_name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">{profile.position}</p>
+                    <p className="text-sm text-muted-foreground">ID: {profile.employee_id}</p>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Department:</span>
+                    <span className="text-sm font-medium">{profile.departments?.name || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Location:</span>
+                    <span className="text-sm font-medium">{profile.districts?.name || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Role:</span>
+                    <Badge variant={profile.role === "admin" ? "default" : "secondary"} className="text-xs">
+                      {profile.role.replace("_", " ").toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Attendance Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Attendance Overview
+                </CardTitle>
+                <CardDescription>Your attendance statistics this year</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {attendanceSummary ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 grid-cols-2">
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold text-primary">{attendanceSummary.totalDays}</div>
+                        <p className="text-xs text-muted-foreground">Total Days</p>
+                      </div>
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold text-primary">
+                          {Math.round(attendanceSummary.totalHours)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Total Hours</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm">This Month:</span>
+                        <span className="text-sm font-medium">{attendanceSummary.thisMonthDays} days</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Average Hours:</span>
+                        <span className="text-sm font-medium">{attendanceSummary.averageHours.toFixed(1)}h/day</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Present Days:</span>
+                        <span className="text-sm font-medium text-green-600">{attendanceSummary.presentDays}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Late Days:</span>
+                        <span className="text-sm font-medium text-orange-600">{attendanceSummary.lateDays}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Loading attendance summary...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
