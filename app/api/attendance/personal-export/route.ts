@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
         check_in_location_name,
         check_out_location_name,
         is_remote_location,
-        different_checkout_location,
         geofence_locations!check_in_location_id (
           name,
           address,
@@ -89,7 +88,6 @@ export async function POST(request: NextRequest) {
           "Work Hours",
           "Status",
           "Remote Location",
-          "Different Checkout Location",
           "Notes",
         ].join(","),
         ...attendanceRecords.map((record) => {
@@ -100,7 +98,9 @@ export async function POST(request: NextRequest) {
           if (record.is_remote_location) {
             notes.push("Checked in at non-assigned location")
           }
-          if (record.different_checkout_location) {
+          const hasCheckoutLocation = record.check_out_location_name || record.checkout_location?.name
+          const hasCheckinLocation = record.check_in_location_name || record.geofence_locations?.name
+          if (hasCheckoutLocation && hasCheckinLocation && hasCheckoutLocation !== hasCheckinLocation) {
             notes.push("Checked out at different location")
           }
 
@@ -116,7 +116,6 @@ export async function POST(request: NextRequest) {
             record.work_hours?.toFixed(2) || "0",
             `"${record.status}"`,
             record.is_remote_location ? "Yes" : "No",
-            record.different_checkout_location ? "Yes" : "No",
             `"${notes.join("; ")}"`,
           ].join(",")
         }),
