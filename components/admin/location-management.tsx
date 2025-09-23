@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { MapPin, Plus, QrCode, Edit, AlertTriangle, Loader2, Navigation, Wifi, WifiOff } from "lucide-react"
+import { MapPin, Plus, QrCode, Edit, AlertTriangle, Loader2, Navigation, Wifi, WifiOff, Power } from "lucide-react"
 import { generateQRCode, generateSignature, type QRCodeData } from "@/lib/qr-code"
 
 interface GeofenceLocation {
@@ -234,6 +234,42 @@ export function LocationManagement() {
       setEditingLocation(null)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update location"
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleToggleLocation = async (location: GeofenceLocation) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/admin/locations/${location.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: location.name,
+          address: location.address,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          radius_meters: location.radius_meters,
+          is_active: !location.is_active, // Toggle the active status
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update location status")
+      }
+
+      const action = location.is_active ? "deactivated" : "activated"
+      setSuccess(`Location ${action} successfully - All staff dashboards will update automatically`)
+      await fetchLocations()
+
+      setTimeout(() => setSuccess(null), 5000)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to update location status"
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -604,6 +640,15 @@ export function LocationManagement() {
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)}>
                   <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={location.is_active ? "destructive" : "default"}
+                  onClick={() => handleToggleLocation(location)}
+                  disabled={loading}
+                  title={location.is_active ? "Deactivate location" : "Activate location"}
+                >
+                  <Power className="h-4 w-4" />
                 </Button>
               </div>
             </CardContent>

@@ -140,6 +140,8 @@ export function validateAttendanceLocation(
   distance?: number
   message: string
   accuracyWarning?: string
+  allLocations?: Array<{ location: GeofenceLocation; distance: number }>
+  availableLocations?: Array<{ location: GeofenceLocation; distance: number }>
 } {
   const nearest = findNearestLocation(userLocation, qccLocations)
 
@@ -150,24 +152,40 @@ export function validateAttendanceLocation(
     }
   }
 
+  const allLocationsWithDistance = qccLocations
+    .map((location) => ({
+      location,
+      distance: Math.round(
+        calculateDistance(userLocation.latitude, userLocation.longitude, location.latitude, location.longitude),
+      ),
+    }))
+    .sort((a, b) => a.distance - b.distance)
+
+  const availableLocations = allLocationsWithDistance.filter(({ distance }) => distance <= 50)
+
   const validation = isWithinGeofence(userLocation, nearest.location)
 
-  if (validation.isWithin) {
-    return {
-      canCheckIn: true,
-      nearestLocation: nearest.location,
-      distance: validation.distance,
-      message: `You are within ${nearest.location.name} (${validation.distance}m away). You can check in.`,
-      accuracyWarning: validation.accuracyWarning,
+  const canCheckIn = availableLocations.length > 0
+
+  let message: string
+  if (canCheckIn) {
+    if (availableLocations.length === 1) {
+      message = `Ready for check-in at ${availableLocations[0].location.name} (${availableLocations[0].distance}m away)`
+    } else {
+      message = `Ready for check-in at ${availableLocations.length} nearby locations. Nearest: ${availableLocations[0].location.name} (${availableLocations[0].distance}m away)`
     }
   } else {
-    return {
-      canCheckIn: false,
-      nearestLocation: nearest.location,
-      distance: validation.distance,
-      message: `You are ${validation.distance}m away from ${nearest.location.name}. You must be within 50 meters to check in.`,
-      accuracyWarning: validation.accuracyWarning,
-    }
+    message = `Outside 50m range - Cannot check in. Nearest location: ${nearest.location.name} (Distance: ${nearest.distance}m)`
+  }
+
+  return {
+    canCheckIn,
+    nearestLocation: nearest.location,
+    distance: validation.distance,
+    message,
+    accuracyWarning: validation.accuracyWarning,
+    allLocations: allLocationsWithDistance,
+    availableLocations,
   }
 }
 

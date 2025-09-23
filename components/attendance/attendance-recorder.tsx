@@ -13,27 +13,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   getCurrentLocation,
   validateAttendanceLocation,
   requestLocationPermission,
+  calculateDistance,
   type LocationData,
 } from "@/lib/geolocation"
 import { getDeviceInfo } from "@/lib/device-info"
 import { QRScanner } from "@/components/qr/qr-scanner"
 import { validateQRCode, type QRCodeData } from "@/lib/qr-code"
-import {
-  MapPin,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  AlertTriangle,
-  QrCode,
-  Navigation,
-  Wifi,
-  WifiOff,
-} from "lucide-react"
+import { MapPin, Clock, CheckCircle, Loader2, AlertTriangle, QrCode, Navigation, Wifi, WifiOff } from "lucide-react"
 import { useRealTimeLocations } from "@/hooks/use-real-time-locations"
 
 interface GeofenceLocation {
@@ -68,6 +59,8 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     distance?: number
     message: string
     accuracyWarning?: string
+    allLocations?: { location: GeofenceLocation; distance: number }[]
+    availableLocations?: { location: GeofenceLocation; distance: number }[]
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -78,6 +71,8 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     message: string
   }>({ granted: null, message: "" })
   const [showLocationHelp, setShowLocationHelp] = useState(false)
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("")
+  const [showLocationSelector, setShowLocationSelector] = useState(false)
 
   useEffect(() => {
     if (userLocation && locations.length > 0) {
@@ -98,6 +93,23 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         accuracy: userLocation.accuracy,
       })
 
+      const locationDistances = locations
+        .map((location) => {
+          const distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            location.latitude,
+            location.longitude,
+          )
+          return {
+            location,
+            distance: Math.round(distance),
+          }
+        })
+        .sort((a, b) => a.distance - b.distance)
+
+      console.log("[v0] Distance to each location:", locationDistances)
+
       const validation = validateAttendanceLocation(userLocation, locations)
       console.log("[v0] Location validation result:", validation)
       console.log(
@@ -108,7 +120,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       console.log("[v0] Can check in:", validation.canCheckIn)
       console.log("[v0] Distance:", validation.distance)
       console.log("[v0] Nearest location being checked:", validation.nearestLocation?.name)
-      setLocationValidation(validation)
+      setLocationValidation({ ...validation, allLocations: locationDistances })
     }
   }, [userLocation, locations])
 
@@ -152,10 +164,28 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const location = await getCurrentLocation()
       setUserLocation(location)
 
-      const validation = validateAttendanceLocation(location, locations)
+      if (!locationValidation?.canCheckIn) {
+        setError("You must be within 50m of a QCC location to check in")
+        setIsLoading(false)
+        return
+      }
 
-      if (!validation.canCheckIn) {
-        setError(validation.message)
+      if (
+        !selectedLocationId &&
+        locationValidation.availableLocations &&
+        locationValidation.availableLocations.length > 1
+      ) {
+        setShowLocationSelector(true)
+        setIsLoading(false)
+        return
+      }
+
+      const targetLocationId = selectedLocationId || locationValidation.availableLocations?.[0]?.location.id
+      const targetLocation = locations.find((loc) => loc.id === targetLocationId)
+
+      if (!targetLocation) {
+        setError("No location available for check-in within 50m range")
+        setIsLoading(false)
         return
       }
 
@@ -169,7 +199,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         body: JSON.stringify({
           latitude: location.latitude,
           longitude: location.longitude,
-          location_id: validation.nearestLocation!.id,
+          location_id: targetLocation.id,
           device_info: deviceInfo,
         }),
       })
@@ -185,6 +215,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         }
 
         setSuccess(message)
+        setSelectedLocationId("") // Reset selection
         window.location.reload()
       } else {
         setError(result.error || "Failed to check in")
@@ -371,6 +402,39 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     setIsLoading(false)
   }
 
+  const handleRefreshLocations = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Force refresh location data by adding cache-busting parameter
+      const timestamp = Date.now()
+      const response = await fetch(`/api/attendance/locations?refresh=${timestamp}`, {
+        cache: "no-store",
+      })
+
+      if (response.ok) {
+        // Trigger a page reload to ensure all data is fresh
+        window.location.reload()
+      } else {
+        setError("Failed to refresh location data")
+      }
+    } catch (error) {
+      setError("Failed to refresh location data")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLocationSelect = (locationId: string) => {
+    setSelectedLocationId(locationId)
+    setShowLocationSelector(false)
+    // Automatically proceed with check-in
+    setTimeout(() => {
+      handleCheckIn()
+    }, 100)
+  }
+
   const isCheckedIn = todayAttendance?.check_in_time && !todayAttendance?.check_out_time
   const isCheckedOut = todayAttendance?.check_out_time
   const canCheckIn = !todayAttendance?.check_in_time
@@ -474,11 +538,10 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             </div>
           </CardTitle>
           <CardDescription>
-            Your current location relative to QCC Stations/Locations (50m proximity required for check-in)
+            You can check in at any registered QCC location. Check-out can be done from anywhere within the company.
             <br />
             <span className="text-sm text-muted-foreground">
-              Check-in requires being within 50m of any QCC location. Check-out can be done from anywhere within the
-              company.
+              Select your location from the available QCC stations/offices.
               {isConnected && " Location data updates automatically when admins make changes."}
             </span>
           </CardDescription>
@@ -491,24 +554,36 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             </div>
           ) : !userLocation ? (
             <div className="space-y-3">
-              <Button
-                onClick={getCurrentLocationData}
-                disabled={isLoading}
-                variant="outline"
-                className="w-full bg-transparent"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Getting Location...
-                  </>
-                ) : (
-                  <>
-                    <MapPin className="mr-2 h-4 w-4" />
-                    Get Current Location
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={getCurrentLocationData}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="flex-1 bg-transparent"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Getting Location...
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="mr-2 h-4 w-4" />
+                      Get Current Location
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleRefreshLocations}
+                  disabled={isLoading}
+                  variant="outline"
+                  size="sm"
+                  className="bg-transparent"
+                  title="Refresh location data"
+                >
+                  <Navigation className="h-4 w-4" />
+                </Button>
+              </div>
 
               {showLocationHelp && (
                 <Alert>
@@ -548,42 +623,59 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
               )}
 
               {locationValidation && (
-                <div className="p-3 bg-muted rounded-lg">
-                  <div className="font-medium">{locationValidation.nearestLocation?.name || "Unknown Location"}</div>
-                  {locationValidation.nearestLocation?.address && (
-                    <div className="text-sm text-muted-foreground">{locationValidation.nearestLocation.address}</div>
-                  )}
-                  <div className="text-sm mt-1">
-                    Distance: <span className="font-medium">{locationValidation.distance}m</span>
-                  </div>
-                  <div className="space-y-1 mt-2">
-                    <div className="flex items-center gap-2">
-                      {locationValidation.canCheckIn ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm text-green-600">Within 50m - Can check in</span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 text-orange-600" />
-                          <span className="text-sm text-orange-600">
-                            Outside 50m range - Cannot check in (Distance: {locationValidation.distance}m)
-                          </span>
-                        </>
+                <div className="space-y-3">
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="font-medium mb-2">Available QCC Locations:</div>
+                    <div className="space-y-2">
+                      {locationValidation.allLocations?.slice(0, 5).map(({ location, distance }) => (
+                        <div
+                          key={location.id}
+                          className="flex items-center justify-between p-2 bg-background rounded border"
+                        >
+                          <div>
+                            <div className="font-medium text-sm">{location.name}</div>
+                            <div className="text-xs text-muted-foreground">{location.address}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium">{distance}m</div>
+                            {distance <= 50 ? (
+                              <Badge variant="secondary" className="text-xs">
+                                Available
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">
+                                Too Far
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {locationValidation.allLocations && locationValidation.allLocations.length > 5 && (
+                        <div className="text-xs text-muted-foreground text-center">
+                          +{locationValidation.allLocations.length - 5} more locations available
+                        </div>
                       )}
                     </div>
-                    {canCheckOut && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-600">Check-out allowed from any QCC location</span>
-                      </div>
-                    )}
                   </div>
-                  <div className="text-sm mt-2 text-muted-foreground">
-                    {canCheckIn
-                      ? `Ready for check-in at ${locationValidation.nearestLocation?.name} (nearest QCC location within 50m)`
-                      : `Move within 50m of any QCC location to check in. Nearest location: ${locationValidation.nearestLocation?.name}`}
-                  </div>
+
+                  {locationValidation.canCheckIn ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span className="text-sm text-green-600">{locationValidation.message}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-600" />
+                      <span className="text-sm text-orange-600">{locationValidation.message}</span>
+                    </div>
+                  )}
+
+                  {canCheckOut && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <span className="text-sm text-green-600">Check-out allowed from any location</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -591,12 +683,51 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         </CardContent>
       </Card>
 
+      {/* Location Selector Dialog */}
+      <Dialog open={showLocationSelector} onOpenChange={setShowLocationSelector}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Check-in Location</DialogTitle>
+            <DialogDescription>Choose which QCC location you want to check in at</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select onValueChange={handleLocationSelect}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a location" />
+              </SelectTrigger>
+              <SelectContent>
+                {locationValidation?.availableLocations?.map(({ location, distance }) => (
+                  <SelectItem key={location.id} value={location.id}>
+                    <div className="flex items-center justify-between w-full">
+                      <div>
+                        <div className="font-medium">{location.name}</div>
+                        <div className="text-xs text-muted-foreground">{location.address}</div>
+                      </div>
+                      <div className="text-xs text-muted-foreground ml-2">{distance}m away</div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowLocationSelector(false)}
+                className="flex-1 bg-transparent"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Action Buttons */}
       <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>
-            Record your attendance using GPS (50m proximity) or QR code at any QCC location
+            Record your attendance at any registered QCC location using GPS or QR code
             {!userLocation && " - QR code works without location access"}
           </CardDescription>
         </CardHeader>
@@ -618,7 +749,12 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
           <div className="space-y-3">
             {/* GPS Check-in/out buttons */}
             <div className="grid gap-3 md:grid-cols-2">
-              <Button onClick={handleCheckIn} disabled={!canCheckIn || isLoading} className="h-12" size="lg">
+              <Button
+                onClick={handleCheckIn}
+                disabled={!canCheckIn || !locationValidation?.canCheckIn || isLoading}
+                className="h-12"
+                size="lg"
+              >
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
                 GPS Check In
               </Button>
