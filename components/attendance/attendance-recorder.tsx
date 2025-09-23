@@ -514,24 +514,28 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                       {locationValidation.canCheckIn ? (
                         <>
                           <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm text-green-600">Within 20m - Can check in</span>
+                          <span className="text-sm text-green-600">Within 20m of QCC location - Can check in</span>
                         </>
                       ) : (
                         <>
                           <XCircle className="h-4 w-4 text-orange-600" />
-                          <span className="text-sm text-orange-600">Outside 20m range - Cannot check in</span>
+                          <span className="text-sm text-orange-600">
+                            Outside 20m range - Move closer to any QCC location
+                          </span>
                         </>
                       )}
                     </div>
                     {canCheckOut && (
                       <div className="flex items-center gap-2">
                         <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-600">Check-out allowed from any QCC location</span>
+                        <span className="text-sm text-green-600">Check-out allowed at any QCC location</span>
                       </div>
                     )}
                   </div>
                   <div className="text-sm mt-2 text-muted-foreground">
-                    {canCheckIn ? "Ready for check-in" : "Move closer to check in, or check out from anywhere"}
+                    {canCheckIn
+                      ? "Ready for check-in at any QCC location"
+                      : "Move closer to any QCC location to check in, or check out from any QCC location"}
                   </div>
                 </div>
               )}
@@ -569,7 +573,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             <div className="grid gap-3 md:grid-cols-2">
               <Button onClick={handleCheckIn} disabled={!canCheckIn || isLoading} className="h-12" size="lg">
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
-                GPS Check In
+                GPS Check In (Any QCC Location)
               </Button>
 
               <Button
@@ -580,7 +584,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                 size="lg"
               >
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
-                Check Out (Any Location)
+                Check Out (Any QCC Location)
               </Button>
             </div>
 
@@ -610,13 +614,13 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                     size="lg"
                   >
                     <QrCode className="mr-2 h-4 w-4" />
-                    QR Check In
+                    QR Check In (Any Location)
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Check In with QR Code</DialogTitle>
-                    <DialogDescription>Scan the location QR code to check in at any QCC location</DialogDescription>
+                    <DialogDescription>Scan the QR code at any QCC location to check in</DialogDescription>
                   </DialogHeader>
                   <QRScanner onScanSuccess={handleQRCheckIn} onClose={() => setShowQRScanner(false)} />
                 </DialogContent>
@@ -637,13 +641,13 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                     size="lg"
                   >
                     <QrCode className="mr-2 h-4 w-4" />
-                    QR Check Out
+                    QR Check Out (Any Location)
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Check Out with QR Code</DialogTitle>
-                    <DialogDescription>Scan the location QR code to check out</DialogDescription>
+                    <DialogDescription>Scan the QR code at any QCC location to check out</DialogDescription>
                   </DialogHeader>
                   <QRScanner onScanSuccess={handleQRCheckOut} onClose={() => setShowQRScanner(false)} />
                 </DialogContent>

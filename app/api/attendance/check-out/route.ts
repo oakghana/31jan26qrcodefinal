@@ -59,6 +59,11 @@ export async function POST(request: NextRequest) {
       if (!locationError && locationData) {
         checkoutLocationData = locationData
         console.log("[v0] Using provided location:", locationData.name)
+
+        // Check if checkout location is different from check-in location
+        if (attendanceRecord.check_in_location_id !== location_id) {
+          isRemoteCheckout = true
+        }
       }
     }
 
@@ -170,7 +175,7 @@ export async function POST(request: NextRequest) {
 
     let locationMessage = ""
     if (isRemoteCheckout) {
-      locationMessage = `Checked out remotely (reference: ${checkoutLocationData?.name || "Unknown"})`
+      locationMessage = `Checked out at ${checkoutLocationData?.name || "Unknown"} (On Trek - different from check-in location: ${attendanceRecord.geofence_locations?.name})`
     } else if (isDifferentLocation) {
       locationMessage = `Checked out at ${checkoutLocationData?.name} (different from check-in location: ${attendanceRecord.geofence_locations?.name})`
     } else {

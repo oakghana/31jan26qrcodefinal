@@ -254,6 +254,7 @@ export function AttendanceReports() {
             "Work Hours",
             "Status",
             "Location Status",
+            "Remarks",
           ].join(","),
           ...records.map((record) =>
             [
@@ -264,13 +265,14 @@ export function AttendanceReports() {
               `"${record.user_profiles.assigned_location?.name || "N/A"}"`,
               `"${new Date(record.check_in_time).toLocaleTimeString()}"`,
               `"${record.check_in_location?.name || record.check_in_location_name || "N/A"}"`,
-              `"${record.is_check_in_outside_location ? "Outside Assigned Location" : "On-site"}"`,
+              `"${record.is_check_in_outside_location ? "On Trek" : "On-site"}"`,
               `"${record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : "N/A"}"`,
               `"${record.check_out_location?.name || record.check_out_location_name || "N/A"}"`,
-              `"${record.is_check_out_outside_location ? "Outside Assigned Location" : "On-site"}"`,
+              `"${record.is_check_out_outside_location ? "On Trek" : "On-site"}"`,
               record.work_hours?.toFixed(2) || "0",
               `"${record.status}"`,
-              `"${record.is_check_in_outside_location || record.is_check_out_outside_location ? "Remote Work" : "On-site"}"`,
+              `"${record.is_check_in_outside_location || record.is_check_out_outside_location ? "On Trek" : "On-site"}"`,
+              `"${record.is_check_in_outside_location || record.is_check_out_outside_location ? "Staff checked in/out at different location from assigned" : "Normal attendance at assigned location"}"`,
             ].join(","),
           ),
         ].join("\n")
@@ -820,18 +822,19 @@ export function AttendanceReports() {
                       <TableHead>Hours</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Location Status</TableHead>
+                      <TableHead>Remarks</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8">
+                        <TableCell colSpan={11} className="text-center py-8">
                           Loading records...
                         </TableCell>
                       </TableRow>
                     ) : records.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8">
+                        <TableCell colSpan={11} className="text-center py-8">
                           No records found for the selected period
                         </TableCell>
                       </TableRow>
@@ -860,7 +863,7 @@ export function AttendanceReports() {
                               {record.is_check_in_outside_location && (
                                 <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
                                   <MapPin className="h-3 w-3 mr-1" />
-                                  Outside
+                                  On Trek
                                 </Badge>
                               )}
                             </div>
@@ -874,7 +877,7 @@ export function AttendanceReports() {
                               {record.is_check_out_outside_location && (
                                 <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
                                   <MapPin className="h-3 w-3 mr-1" />
-                                  Outside
+                                  On Trek
                                 </Badge>
                               )}
                             </div>
@@ -889,13 +892,24 @@ export function AttendanceReports() {
                             {record.is_check_in_outside_location || record.is_check_out_outside_location ? (
                               <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50">
                                 <AlertTriangle className="h-3 w-3 mr-1" />
-                                Remote Work
+                                On Trek
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 On-site
                               </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {record.is_check_in_outside_location || record.is_check_out_outside_location ? (
+                              <span className="text-sm text-muted-foreground">
+                                Staff checked in/out at different location from assigned
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                Normal attendance at assigned location
+                              </span>
                             )}
                           </TableCell>
                         </TableRow>
