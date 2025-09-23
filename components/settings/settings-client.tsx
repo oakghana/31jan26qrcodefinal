@@ -571,13 +571,13 @@ export function SettingsClient({ profile }: SettingsClientProps) {
                   <Input
                     id="defaultRadius"
                     type="number"
-                    min="20"
+                    min="50"
                     max="500"
                     value={geoSettings.defaultRadius}
                     onChange={(e) => setGeoSettings({ ...geoSettings, defaultRadius: e.target.value })}
                   />
                   <p className="text-sm text-muted-foreground mt-1">
-                    Minimum distance for attendance scanning (minimum 20m)
+                    Minimum distance for attendance scanning (minimum 50m)
                   </p>
                 </div>
                 <div>

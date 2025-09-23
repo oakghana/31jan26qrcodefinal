@@ -86,12 +86,10 @@ export function isWithinGeofence(
     geofenceLocation.longitude,
   )
 
-  // Enhanced validation for 20-meter precision
   const isWithin = distance <= geofenceLocation.radius_meters
   let accuracyWarning: string | undefined
 
-  // Warn if GPS accuracy is poor for 20-meter geofencing
-  if (userLocation.accuracy > 10) {
+  if (userLocation.accuracy > 20) {
     accuracyWarning =
       "GPS accuracy is low. Please ensure you have a clear view of the sky for better location precision."
   }
@@ -167,7 +165,7 @@ export function validateAttendanceLocation(
       canCheckIn: false,
       nearestLocation: nearest.location,
       distance: validation.distance,
-      message: `You are ${validation.distance}m away from ${nearest.location.name}. You must be within 20 meters to check in.`,
+      message: `You are ${validation.distance}m away from ${nearest.location.name}. You must be within 50 meters to check in.`,
       accuracyWarning: validation.accuracyWarning,
     }
   }

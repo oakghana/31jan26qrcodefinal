@@ -22,7 +22,19 @@ import {
 import { getDeviceInfo } from "@/lib/device-info"
 import { QRScanner } from "@/components/qr/qr-scanner"
 import { validateQRCode, type QRCodeData } from "@/lib/qr-code"
-import { MapPin, Clock, CheckCircle, XCircle, Loader2, AlertTriangle, QrCode, Navigation } from "lucide-react"
+import {
+  MapPin,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  AlertTriangle,
+  QrCode,
+  Navigation,
+  Wifi,
+  WifiOff,
+} from "lucide-react"
+import { useRealTimeLocations } from "@/hooks/use-real-time-locations"
 
 interface GeofenceLocation {
   id: string
@@ -49,7 +61,7 @@ interface AttendanceRecorderProps {
 export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [userLocation, setUserLocation] = useState<LocationData | null>(null)
-  const [locations, setLocations] = useState<GeofenceLocation[]>([])
+  const { locations, loading: locationsLoading, error: locationsError, isConnected } = useRealTimeLocations()
   const [locationValidation, setLocationValidation] = useState<{
     canCheckIn: boolean
     nearestLocation?: GeofenceLocation
@@ -68,27 +80,43 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   const [showLocationHelp, setShowLocationHelp] = useState(false)
 
   useEffect(() => {
-    fetchLocations()
-  }, [])
-
-  useEffect(() => {
     if (userLocation && locations.length > 0) {
+      console.log(
+        "[v0] All available locations:",
+        locations.map((l) => ({
+          name: l.name,
+          address: l.address,
+          lat: l.latitude,
+          lng: l.longitude,
+          radius: l.radius_meters,
+        })),
+      )
+
+      console.log("[v0] User location:", {
+        lat: userLocation.latitude,
+        lng: userLocation.longitude,
+        accuracy: userLocation.accuracy,
+      })
+
       const validation = validateAttendanceLocation(userLocation, locations)
+      console.log("[v0] Location validation result:", validation)
+      console.log(
+        "[v0] Locations data:",
+        locations.map((l) => ({ name: l.name, radius: l.radius_meters })),
+      )
+      console.log("[v0] Validation message:", validation.message)
+      console.log("[v0] Can check in:", validation.canCheckIn)
+      console.log("[v0] Distance:", validation.distance)
+      console.log("[v0] Nearest location being checked:", validation.nearestLocation?.name)
       setLocationValidation(validation)
     }
   }, [userLocation, locations])
 
-  const fetchLocations = async () => {
-    try {
-      const response = await fetch("/api/attendance/locations")
-      const result = await response.json()
-      if (result.success) {
-        setLocations(result.data)
-      }
-    } catch (error) {
-      console.error("Failed to fetch locations:", error)
+  useEffect(() => {
+    if (locationsError) {
+      setError(`Location data error: ${locationsError}`)
     }
-  }
+  }, [locationsError])
 
   const getCurrentLocationData = async () => {
     setIsLoading(true)
@@ -431,18 +459,37 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
           <CardTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5" />
             Location Status
+            <div className="flex items-center gap-1 ml-auto">
+              {isConnected ? (
+                <div className="flex items-center gap-1 text-green-600 text-xs">
+                  <Wifi className="h-3 w-3" />
+                  <span>Live Updates</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-orange-600 text-xs">
+                  <WifiOff className="h-3 w-3" />
+                  <span>Offline</span>
+                </div>
+              )}
+            </div>
           </CardTitle>
           <CardDescription>
-            Your current location relative to QCC Stations/Locations (20m precision required for check-in)
+            Your current location relative to QCC Stations/Locations (50m proximity required for check-in)
             <br />
             <span className="text-sm text-muted-foreground">
-              Check-in requires being within 20m of a QCC location. Check-out can be done from anywhere within the
+              Check-in requires being within 50m of any QCC location. Check-out can be done from anywhere within the
               company.
+              {isConnected && " Location data updates automatically when admins make changes."}
             </span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!userLocation ? (
+          {locationsLoading && locations.length === 0 ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading location data...</span>
+            </div>
+          ) : !userLocation ? (
             <div className="space-y-3">
               <Button
                 onClick={getCurrentLocationData}
@@ -514,12 +561,14 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                       {locationValidation.canCheckIn ? (
                         <>
                           <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm text-green-600">Within 20m - Can check in</span>
+                          <span className="text-sm text-green-600">Within 50m - Can check in</span>
                         </>
                       ) : (
                         <>
                           <XCircle className="h-4 w-4 text-orange-600" />
-                          <span className="text-sm text-orange-600">Outside 20m range - Cannot check in</span>
+                          <span className="text-sm text-orange-600">
+                            Outside 50m range - Cannot check in (Distance: {locationValidation.distance}m)
+                          </span>
                         </>
                       )}
                     </div>
@@ -531,7 +580,9 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                     )}
                   </div>
                   <div className="text-sm mt-2 text-muted-foreground">
-                    {canCheckIn ? "Ready for check-in" : "Move closer to check in, or check out from anywhere"}
+                    {canCheckIn
+                      ? `Ready for check-in at ${locationValidation.nearestLocation?.name} (nearest QCC location within 50m)`
+                      : `Move within 50m of any QCC location to check in. Nearest location: ${locationValidation.nearestLocation?.name}`}
                   </div>
                 </div>
               )}
@@ -545,7 +596,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>
-            Record your attendance using GPS (20m precision) or QR code at any QCC location
+            Record your attendance using GPS (50m proximity) or QR code at any QCC location
             {!userLocation && " - QR code works without location access"}
           </CardDescription>
         </CardHeader>

@@ -52,7 +52,7 @@ export function LocationManagement() {
     address: "",
     latitude: "",
     longitude: "",
-    radius_meters: "100",
+    radius_meters: "50",
   })
 
   useEffect(() => {
@@ -179,10 +179,10 @@ export function LocationManagement() {
           throw new Error(errorData.error || `Server error (${response.status})`)
         }
 
-        setSuccess("Location added successfully")
+        setSuccess("Location added successfully - All staff dashboards will update automatically")
         await fetchLocations()
         setIsAddingLocation(false)
-        setNewLocation({ name: "", address: "", latitude: "", longitude: "", radius_meters: "100" })
+        setNewLocation({ name: "", address: "", latitude: "", longitude: "", radius_meters: "50" })
         setFormErrors({})
         setRetryCount(0)
 
@@ -229,7 +229,7 @@ export function LocationManagement() {
         throw new Error(errorData.error || "Failed to update location")
       }
 
-      setSuccess("Location updated successfully")
+      setSuccess("Location updated successfully - All staff dashboards will update automatically")
       await fetchLocations()
       setEditingLocation(null)
     } catch (err) {
@@ -490,7 +490,7 @@ export function LocationManagement() {
                   max="10000"
                   value={newLocation.radius_meters}
                   onChange={(e) => setNewLocation((prev) => ({ ...prev, radius_meters: e.target.value }))}
-                  placeholder="100"
+                  placeholder="50"
                   required
                   className={formErrors.radius_meters ? "border-red-500" : ""}
                 />
@@ -501,7 +501,7 @@ export function LocationManagement() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                  Recommended: 50-200m for buildings, 10-50m for rooms
+                  Recommended: 50m for standard attendance tracking, 10-30m for specific rooms
                 </p>
               </div>
 
@@ -692,7 +692,7 @@ export function LocationManagement() {
                   onChange={(e) =>
                     setEditingLocation({ ...editingLocation, radius_meters: Number.parseInt(e.target.value) })
                   }
-                  placeholder="100"
+                  placeholder="50"
                   required
                 />
               </div>
