@@ -13,7 +13,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   getCurrentLocation,
   validateAttendanceLocation,
@@ -316,7 +315,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       if (
         !selectedLocationId &&
         locationValidation.availableLocations &&
-        locationValidation.availableLocations.length > 1
+        locationValidation.availableLocations.length > 0
       ) {
         setShowLocationSelector(true)
         setIsLoading(false)
@@ -385,11 +384,44 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         setUserLocation(location)
         console.log("[v0] Location acquired for check-out:", location)
 
-        const nearest = findNearestLocation(location, locations)
-        nearestLocation = nearest?.location || locations[0]
+        if (locations.length > 1) {
+          const locationDistances = locations
+            .map((loc) => {
+              const distance = calculateDistance(location.latitude, location.longitude, loc.latitude, loc.longitude)
+              return { location: loc, distance: Math.round(distance) }
+            })
+            .sort((a, b) => a.distance - b.distance)
+
+          setLocationValidation((prev) => ({
+            ...prev,
+            availableLocations: locationDistances,
+          }))
+
+          if (!selectedLocationId) {
+            setShowLocationSelector(true)
+            setIsLoading(false)
+            return
+          }
+
+          nearestLocation = locations.find((loc) => loc.id === selectedLocationId)
+        } else {
+          const nearest = findNearestLocation(location, locations)
+          nearestLocation = nearest?.location || locations[0]
+        }
       } catch (locationError) {
         console.log("[v0] Location unavailable for check-out, proceeding without GPS:", locationError)
-        nearestLocation = locations[0] // Use first available location as fallback
+
+        if (locations.length > 1 && !selectedLocationId) {
+          setLocationValidation((prev) => ({
+            ...prev,
+            availableLocations: locations.map((loc) => ({ location: loc, distance: 0 })),
+          }))
+          setShowLocationSelector(true)
+          setIsLoading(false)
+          return
+        }
+
+        nearestLocation = selectedLocationId ? locations.find((loc) => loc.id === selectedLocationId) : locations[0] // Use first available location as fallback
       }
 
       console.log("[v0] Attempting check-out with location:", nearestLocation?.name)
@@ -415,6 +447,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
 
       if (result.success) {
         setSuccess(result.message)
+        setSelectedLocationId("") // Reset selection
         setTimeout(() => {
           window.location.reload()
         }, 1500)
@@ -893,34 +926,65 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
 
       {/* Location Selector Dialog */}
       <Dialog open={showLocationSelector} onOpenChange={setShowLocationSelector}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Select Check-in Location</DialogTitle>
-            <DialogDescription>Choose which QCC location you want to check in at</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              {canCheckIn && !isCheckedIn ? "Select Check-in Location" : "Select Check-out Location"}
+            </DialogTitle>
+            <DialogDescription>
+              {locationValidation?.availableLocations && locationValidation.availableLocations.length > 0
+                ? `Choose from ${locationValidation.availableLocations.length} available QCC location${locationValidation.availableLocations.length > 1 ? "s" : ""}`
+                : "Choose which QCC location to use for attendance"}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <Select onValueChange={handleLocationSelect}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a location" />
-              </SelectTrigger>
-              <SelectContent>
-                {locationValidation?.availableLocations?.map(({ location, distance }) => (
-                  <SelectItem key={location.id} value={location.id}>
-                    <div className="flex items-center justify-between w-full">
-                      <div>
-                        <div className="font-medium">{location.name}</div>
-                        <div className="text-xs text-muted-foreground">{location.address}</div>
-                      </div>
-                      <div className="text-xs text-muted-foreground ml-2">{distance}m away</div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {locationValidation?.availableLocations?.map(({ location, distance }) => (
+                <div
+                  key={location.id}
+                  onClick={() => handleLocationSelect(location.id)}
+                  className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{location.name}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-1">{location.address}</div>
+                  </div>
+                  <div className="text-right ml-3">
+                    <div className="text-sm font-medium">{distance}m</div>
+                    {distance <= proximitySettings.checkInProximityRange ? (
+                      <Badge variant="secondary" className="text-xs">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Available
+                      </Badge>
+                    ) : canCheckOut ? (
+                      <Badge variant="outline" className="text-xs">
+                        <Navigation className="h-3 w-3 mr-1" />
+                        Checkout OK
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">
+                        Too Far
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+              {canCheckIn && !isCheckedIn
+                ? `💡 Check-in requires being within ${proximitySettings.checkInProximityRange}m of a location`
+                : "💡 Check-out can be done from any QCC location"}
+            </div>
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => setShowLocationSelector(false)}
+                onClick={() => {
+                  setShowLocationSelector(false)
+                  setSelectedLocationId("")
+                }}
                 className="flex-1 bg-transparent"
               >
                 Cancel
