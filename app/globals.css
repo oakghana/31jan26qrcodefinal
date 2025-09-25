@@ -62,51 +62,51 @@
 }
 
 .dark {
-  /* Much lighter dark theme to be more lively */
-  --background: oklch(0.12 0.01 120); /* Lighter dark background */
-  --foreground: oklch(0.95 0.003 120); /* Light text */
-  --card: oklch(0.16 0.015 120); /* Lighter dark cards */
-  --card-foreground: oklch(0.95 0.003 120); /* Light text on cards */
-  --popover: oklch(0.16 0.015 120); /* Lighter dark popover */
-  --popover-foreground: oklch(0.95 0.003 120); /* Light text */
+  /* Much brighter dark theme with lighter backgrounds and better contrast */
+  --background: oklch(0.25 0.015 120); /* Much lighter dark background */
+  --foreground: oklch(0.98 0.002 120); /* Very light text */
+  --card: oklch(0.3 0.02 120); /* Much lighter dark cards */
+  --card-foreground: oklch(0.98 0.002 120); /* Very light text on cards */
+  --popover: oklch(0.3 0.02 120); /* Much lighter dark popover */
+  --popover-foreground: oklch(0.98 0.002 120); /* Very light text */
 
-  --primary: oklch(0.65 0.2 140); /* Brighter green primary */
-  --primary-foreground: oklch(0.08 0.01 120); /* Dark text on bright green */
+  --primary: oklch(0.7 0.22 140); /* Much brighter green primary */
+  --primary-foreground: oklch(0.05 0.01 120); /* Dark text on bright green */
 
-  --secondary: oklch(0.2 0.015 120); /* Lighter dark gray */
-  --secondary-foreground: oklch(0.95 0.003 120); /* Light text */
+  --secondary: oklch(0.35 0.02 120); /* Much lighter dark gray */
+  --secondary-foreground: oklch(0.98 0.002 120); /* Very light text */
 
-  --muted: oklch(0.18 0.015 120); /* Lighter dark muted background */
-  --muted-foreground: oklch(0.7 0.01 120); /* Brighter medium gray text */
+  --muted: oklch(0.32 0.02 120); /* Much lighter dark muted background */
+  --muted-foreground: oklch(0.8 0.015 120); /* Much brighter medium gray text */
 
-  --accent: oklch(0.75 0.2 45); /* Brighter orange accent */
-  --accent-foreground: oklch(0.08 0.01 120); /* Dark text on bright orange */
+  --accent: oklch(0.8 0.22 45); /* Much brighter orange accent */
+  --accent-foreground: oklch(0.05 0.01 120); /* Dark text on bright orange */
 
-  --destructive: oklch(0.65 0.25 25); /* Brighter red */
-  --destructive-foreground: oklch(0.95 0.003 120); /* Light text */
+  --destructive: oklch(0.7 0.25 25); /* Much brighter red */
+  --destructive-foreground: oklch(0.98 0.002 120); /* Very light text */
 
-  --border: oklch(0.25 0.015 120); /* Lighter dark border */
-  --input: oklch(0.18 0.015 120); /* Lighter dark input background */
-  --ring: oklch(0.65 0.2 140); /* Bright green ring */
+  --border: oklch(0.4 0.02 120); /* Much lighter dark border */
+  --input: oklch(0.32 0.02 120); /* Much lighter dark input background */
+  --ring: oklch(0.7 0.22 140); /* Much brighter green ring */
 
-  --chart-1: oklch(0.65 0.2 140); /* Brighter green */
-  --chart-2: oklch(0.75 0.2 45); /* Brighter orange */
-  --chart-3: oklch(0.55 0.18 140); /* Medium green */
-  --chart-4: oklch(0.8 0.15 45); /* Light orange */
-  --chart-5: oklch(0.7 0.18 180); /* Brighter teal */
+  --chart-1: oklch(0.7 0.22 140); /* Much brighter green */
+  --chart-2: oklch(0.8 0.22 45); /* Much brighter orange */
+  --chart-3: oklch(0.6 0.2 140); /* Bright medium green */
+  --chart-4: oklch(0.85 0.18 45); /* Very light orange */
+  --chart-5: oklch(0.75 0.2 180); /* Much brighter teal */
 
-  --sidebar: oklch(0.1 0.01 120); /* Slightly darker sidebar */
-  --sidebar-foreground: oklch(0.95 0.003 120); /* Light text */
-  --sidebar-primary: oklch(0.65 0.2 140); /* Brighter green primary */
-  --sidebar-primary-foreground: oklch(0.08 0.01 120); /* Dark text */
-  --sidebar-accent: oklch(0.75 0.2 45); /* Brighter orange accent */
-  --sidebar-accent-foreground: oklch(0.08 0.01 120); /* Dark text */
-  --sidebar-border: oklch(0.25 0.015 120); /* Lighter dark border */
-  --sidebar-ring: oklch(0.65 0.2 140); /* Bright green ring */
+  --sidebar: oklch(0.22 0.015 120); /* Lighter sidebar background */
+  --sidebar-foreground: oklch(0.98 0.002 120); /* Very light text */
+  --sidebar-primary: oklch(0.7 0.22 140); /* Much brighter green primary */
+  --sidebar-primary-foreground: oklch(0.05 0.01 120); /* Dark text */
+  --sidebar-accent: oklch(0.8 0.22 45); /* Much brighter orange accent */
+  --sidebar-accent-foreground: oklch(0.05 0.01 120); /* Dark text */
+  --sidebar-border: oklch(0.4 0.02 120); /* Much lighter dark border */
+  --sidebar-ring: oklch(0.7 0.22 140); /* Much brighter green ring */
 
-  --shadow-sm: 0 1px 3px oklch(0.05 0.01 120 / 0.2);
-  --shadow-md: 0 4px 12px oklch(0.05 0.01 120 / 0.25);
-  --shadow-lg: 0 8px 24px oklch(0.05 0.01 120 / 0.3);
+  --shadow-sm: 0 1px 3px oklch(0.05 0.01 120 / 0.15);
+  --shadow-md: 0 4px 12px oklch(0.05 0.01 120 / 0.2);
+  --shadow-lg: 0 8px 24px oklch(0.05 0.01 120 / 0.25);
 }
 
 @theme inline {
@@ -164,9 +164,8 @@
   }
 
   .dark body {
-    /* Subtle texture for dark mode only */
-    background-image: radial-gradient(circle at 1px 1px, oklch(0.2 0.015 120 / 0.2) 1px, transparent 0);
-    background-size: 20px 20px;
+    /* Removed dark texture pattern for cleaner brighter appearance */
+    background-image: none;
   }
 
   /* Enhanced scrollbar styling */
@@ -198,8 +197,9 @@
   }
 
   .dark .glass-effect {
-    background: oklch(0.22 0.025 120 / 0.9);
-    border: 1px solid oklch(0.28 0.025 120 / 0.7);
+    /* Much brighter glass effect for dark mode */
+    background: oklch(0.35 0.03 120 / 0.9);
+    border: 1px solid oklch(0.45 0.03 120 / 0.7);
   }
 
   /* Enhanced focus states with green */
