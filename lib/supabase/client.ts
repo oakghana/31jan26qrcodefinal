@@ -28,7 +28,7 @@ export function createClient() {
       fetch: (url, options = {}) => {
         console.log("[v0] Supabase client fetch:", url)
 
-        const timeoutMs = isV0Preview ? 5000 : 10000
+        const timeoutMs = isV0Preview ? 8000 : 10000
 
         return fetch(url, {
           ...options,
@@ -67,6 +67,12 @@ export function createClient() {
       },
       heartbeatIntervalMs: 30000,
       reconnectAfterMs: (tries) => Math.min(tries * 1000, 10000),
+      timeout: 15000,
+      logger: (level, message, details) => {
+        if (level === "error") {
+          console.warn("[v0] Realtime connection issue:", message, details)
+        }
+      },
     },
   })
 }

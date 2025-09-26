@@ -86,67 +86,109 @@ export function useRealTimeLocations() {
       navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage)
     }
 
-    const channel = supabase
-      .channel("locations_realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "geofence_locations",
-        },
-        (payload) => {
-          console.log(
-            "[v0] Real-time locations - Change detected:",
-            payload.eventType,
-            payload.new?.name || payload.old?.name,
+    let channel: any = null
+    let retryCount = 0
+    const maxRetries = 3
+
+    const setupSubscription = () => {
+      try {
+        channel = supabase
+          .channel("locations_realtime")
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "geofence_locations",
+            },
+            (payload) => {
+              console.log(
+                "[v0] Real-time locations - Change detected:",
+                payload.eventType,
+                payload.new?.name || payload.old?.name,
+              )
+
+              // Always refetch locations when changes occur
+              fetchLocations()
+
+              if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready
+                  .then((registration) => {
+                    if (registration.sync) {
+                      return registration.sync.register("location-sync")
+                    }
+                  })
+                  .catch((error) => {
+                    console.warn("[v0] Failed to register location sync (non-critical):", error)
+                  })
+              }
+            },
           )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "app_settings",
+            },
+            (payload) => {
+              console.log("[v0] Real-time locations - Settings change detected:", payload.eventType)
 
-          // Always refetch locations when changes occur
-          fetchLocations()
+              if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready
+                  .then((registration) => {
+                    if (registration.sync) {
+                      return registration.sync.register("proximity-sync")
+                    }
+                  })
+                  .catch((error) => {
+                    console.warn("[v0] Failed to register proximity sync (non-critical):", error)
+                  })
+              }
+            },
+          )
+          .subscribe((status) => {
+            console.log("[v0] Real-time locations - Subscription status:", status)
+            setIsConnected(status === "SUBSCRIBED")
 
-          // Trigger background sync for all clients
-          if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.ready
-              .then((registration) => {
-                return registration.sync.register("location-sync")
-              })
-              .catch((error) => {
-                console.error("[v0] Failed to register location sync:", error)
-              })
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "app_settings",
-        },
-        (payload) => {
-          console.log("[v0] Real-time locations - Settings change detected:", payload.eventType)
+            if (status === "CHANNEL_ERROR" && retryCount < maxRetries) {
+              retryCount++
+              console.log(`[v0] Real-time locations - Retrying subscription (${retryCount}/${maxRetries})`)
+              setTimeout(() => {
+                if (channel) {
+                  supabase.removeChannel(channel)
+                }
+                setupSubscription()
+              }, 2000 * retryCount)
+            } else if (status === "CLOSED" && retryCount < maxRetries) {
+              retryCount++
+              console.log(`[v0] Real-time locations - Connection closed, retrying (${retryCount}/${maxRetries})`)
+              setTimeout(() => {
+                setupSubscription()
+              }, 1000 * retryCount)
+            }
+          })
+      } catch (error) {
+        console.error("[v0] Real-time locations - Subscription setup error:", error)
+        setIsConnected(false)
+      }
+    }
 
-          // Trigger proximity settings sync for instant admin updates
-          if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.ready
-              .then((registration) => {
-                return registration.sync.register("proximity-sync")
-              })
-              .catch((error) => {
-                console.error("[v0] Failed to register proximity sync:", error)
-              })
-          }
-        },
-      )
-      .subscribe((status) => {
-        console.log("[v0] Real-time locations - Subscription status:", status)
-        setIsConnected(status === "SUBSCRIBED")
-      })
+    const subscriptionTimeout = setTimeout(() => {
+      setupSubscription()
+    }, 1000)
 
     return () => {
       console.log("[v0] Real-time locations - Cleaning up subscription")
-      supabase.removeChannel(channel)
+      clearTimeout(subscriptionTimeout)
+
+      if (channel) {
+        try {
+          supabase.removeChannel(channel)
+        } catch (error) {
+          console.warn("[v0] Error removing channel:", error)
+        }
+      }
 
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage)

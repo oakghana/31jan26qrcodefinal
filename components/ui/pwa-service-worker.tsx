@@ -34,13 +34,30 @@ export function PWAServiceWorker() {
           console.log("[PWA] App is online")
           window.dispatchEvent(new CustomEvent("pwa-online"))
 
-          if (navigator.serviceWorker.controller) {
+          if (navigator.serviceWorker.controller && "sync" in window.ServiceWorkerRegistration.prototype) {
             navigator.serviceWorker.ready
               .then((registration) => {
-                return registration.sync.register("location")
+                // Register multiple sync events with correct tags that match the service worker
+                const syncPromises = [
+                  registration.sync.register("location-sync").catch((error) => {
+                    console.warn("[PWA] Failed to register location-sync:", error.message)
+                  }),
+                  registration.sync.register("attendance-sync").catch((error) => {
+                    console.warn("[PWA] Failed to register attendance-sync:", error.message)
+                  }),
+                  registration.sync.register("proximity-sync").catch((error) => {
+                    console.warn("[PWA] Failed to register proximity-sync:", error.message)
+                  }),
+                ]
+
+                return Promise.allSettled(syncPromises)
+              })
+              .then((results) => {
+                const successful = results.filter((result) => result.status === "fulfilled").length
+                console.log(`[PWA] Registered ${successful}/${results.length} sync events on online`)
               })
               .catch((error) => {
-                console.error("[PWA] Failed to register location sync on online:", error)
+                console.warn("[PWA] Failed to register sync events on online:", error.message)
               })
           }
         }
@@ -122,16 +139,31 @@ export function PWAServiceWorker() {
             }
           })
 
-          // Register for background sync if supported
           if ("sync" in window.ServiceWorkerRegistration.prototype) {
             console.log("[PWA] Background sync supported")
 
             try {
-              await registration.sync.register("location")
-              console.log("[PWA] Initial location sync registered")
+              // Register initial sync events with correct tags
+              const syncPromises = [
+                registration.sync.register("location-sync").catch((error) => {
+                  console.warn("[PWA] Failed to register initial location-sync:", error.message)
+                }),
+                registration.sync.register("attendance-sync").catch((error) => {
+                  console.warn("[PWA] Failed to register initial attendance-sync:", error.message)
+                }),
+                registration.sync.register("proximity-sync").catch((error) => {
+                  console.warn("[PWA] Failed to register initial proximity-sync:", error.message)
+                }),
+              ]
+
+              const results = await Promise.allSettled(syncPromises)
+              const successful = results.filter((result) => result.status === "fulfilled").length
+              console.log(`[PWA] Registered ${successful}/${results.length} initial sync events`)
             } catch (error) {
-              console.error("[PWA] Failed to register initial location sync:", error)
+              console.warn("[PWA] Failed to register initial sync events:", error.message)
             }
+          } else {
+            console.log("[PWA] Background sync not supported in this environment")
           }
 
           // Request persistent storage for offline functionality
