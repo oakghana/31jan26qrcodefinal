@@ -5,7 +5,7 @@ const JSON_HEADERS = {
   ...createSecurityHeaders(),
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Accept",
 }
 
@@ -16,12 +16,23 @@ export async function OPTIONS() {
   })
 }
 
+export async function GET() {
+  return NextResponse.json(
+    {
+      status: "ok",
+      message: "Email validation API is operational",
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200, headers: JSON_HEADERS },
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const clientId = getClientIdentifier(request)
     const isAllowed = rateLimit(clientId, {
-      windowMs: 5 * 60 * 1000, // 5 minutes
-      maxRequests: 10, // Max 10 email validation attempts per 5 minutes
+      windowMs: 5 * 60 * 1000,
+      maxRequests: 10,
     })
 
     if (!isAllowed) {
@@ -37,30 +48,25 @@ export async function POST(request: NextRequest) {
     try {
       const body = await request.json()
       email = sanitizeInput(body.email?.trim()?.toLowerCase())
-      console.log("[v0] Parsed and sanitized email from request:", email)
+      console.log("[v0] Validating email:", email)
     } catch (parseError) {
       console.error("[v0] Failed to parse request body:", parseError)
       return NextResponse.json({ error: "Invalid request body", exists: false }, { status: 400, headers: JSON_HEADERS })
     }
 
     if (!email) {
-      console.log("[v0] No email provided")
       return NextResponse.json({ error: "Email is required", exists: false }, { status: 400, headers: JSON_HEADERS })
     }
 
     const emailRegex =
       /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
     if (!emailRegex.test(email)) {
-      console.log("[v0] Invalid email format:", email)
       return NextResponse.json({ error: "Invalid email format", exists: false }, { status: 400, headers: JSON_HEADERS })
     }
-
-    console.log("[v0] Validating email:", email)
 
     const { createClient } = await import("@/lib/supabase/server")
     const supabase = await createClient()
 
-    console.log("[v0] Querying user_profiles table for email:", email)
     const { data: user, error: queryError } = await supabase
       .from("user_profiles")
       .select("id, email, is_active, first_name, last_name")
@@ -68,23 +74,21 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (queryError) {
-      console.error("[v0] Database error during email validation:", queryError)
+      console.error("[v0] Database error:", queryError)
       return NextResponse.json(
         {
           error: "Database error during validation",
           exists: false,
-          details: queryError.message || "Unknown database error",
         },
         { status: 500, headers: JSON_HEADERS },
       )
     }
 
     if (!user) {
-      console.log("[v0] Email not found in user_profiles:", email)
+      console.log("[v0] Email not found:", email)
       return NextResponse.json(
         {
-          error:
-            "This email is not registered in the QCC system. Please contact your administrator or use a registered email address.",
+          error: "This email is not registered in the QCC system.",
           exists: false,
         },
         { status: 404, headers: JSON_HEADERS },
@@ -92,14 +96,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!user.is_active) {
-      console.log("[v0] User account not active but allowing OTP:", email)
+      console.log("[v0] User account not active:", email)
       return NextResponse.json(
         {
           exists: true,
           approved: false,
-          message: "Account pending approval - OTP will be sent but login may be restricted",
+          message: "Account pending approval",
         },
-        { headers: JSON_HEADERS },
+        { status: 200, headers: JSON_HEADERS },
       )
     }
 
@@ -110,24 +114,16 @@ export async function POST(request: NextRequest) {
         approved: true,
         message: "Email validated successfully",
       },
-      { headers: JSON_HEADERS },
+      { status: 200, headers: JSON_HEADERS },
     )
   } catch (error) {
     console.error("[v0] Email validation error:", error)
     return NextResponse.json(
       {
-        error: "Server error occurred. Please try again.",
+        error: "Server error occurred",
         exists: false,
-        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500, headers: JSON_HEADERS },
     )
   }
-}
-
-export async function GET() {
-  return NextResponse.json(
-    { error: "Method not allowed. Use POST to validate email." },
-    { status: 405, headers: JSON_HEADERS },
-  )
 }

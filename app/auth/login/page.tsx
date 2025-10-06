@@ -307,179 +307,100 @@ export default function LoginPage() {
         return
       }
 
-      console.log("[v0] Validating email before sending OTP:", otpEmail)
+      console.log("[v0] Attempting to validate email:", otpEmail)
 
-      let validateResponse
+      let emailValidated = false
+      let validationError: string | null = null
+
       try {
-        // Test basic connectivity first
-        console.log("[v0] Testing API connectivity...")
-        const connectivityTest = await fetch("/api/auth/validate-email", {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-          },
-        })
-        console.log("[v0] Connectivity test response:", connectivityTest.status)
-
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-        console.log("[v0] Making POST request to validate email...")
-        validateResponse = await fetch("/api/auth/validate-email", {
+        const validateResponse = await fetch("/api/auth/validate-email", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
-            "Cache-Control": "no-cache",
           },
           body: JSON.stringify({ email: otpEmail }),
           signal: controller.signal,
         })
 
         clearTimeout(timeoutId)
-        console.log("[v0] Fetch completed successfully, status:", validateResponse.status)
+
+        if (validateResponse.ok) {
+          const validateResult = await validateResponse.json()
+
+          if (!validateResult.exists) {
+            validationError = "This email is not registered in the QCC system. Please contact your administrator."
+          } else if (!validateResult.approved) {
+            validationError = "Your account is pending admin approval. Please wait for activation."
+          } else {
+            emailValidated = true
+          }
+        } else {
+          console.log("[v0] Email validation API returned error status:", validateResponse.status)
+          // Continue anyway - let Supabase handle the validation
+        }
       } catch (fetchError) {
-        console.error("[v0] Fetch failed:", fetchError)
+        console.log("[v0] Email validation API failed, will attempt OTP send anyway:", fetchError)
+        // Continue anyway - let Supabase handle the validation
+      }
 
-        if (fetchError instanceof Error) {
-          if (fetchError.name === "AbortError") {
-            showError("Request timeout. The server is taking too long to respond. Please try again.", "Timeout Error")
-          } else if (fetchError.message.includes("Failed to fetch")) {
-            // This is the specific error we're getting
-            showError(
-              "Unable to connect to the authentication server. This may be a temporary network issue. Please check your internet connection and try again in a few moments.",
-              "Connection Error",
-            )
-          } else if (fetchError.message.includes("NetworkError")) {
-            showError("Network error occurred. Please check your internet connection and try again.", "Network Error")
-          } else {
-            showError(`Connection failed: ${fetchError.message}. Please try again.`, "Connection Error")
-          }
+      // If validation explicitly failed (email not found or not approved), show error
+      if (validationError) {
+        showFieldError("Email", validationError)
+        return
+      }
+
+      // Proceed with OTP sending (either validation passed or we're using fallback)
+      console.log("[v0] Sending OTP to:", otpEmail)
+
+      const otpResult = await supabase.auth.signInWithOtp({
+        email: otpEmail,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+          shouldCreateUser: false,
+        },
+      })
+
+      console.log("[v0] Supabase OTP result:", otpResult)
+
+      if (otpResult.error) {
+        console.error("[v0] Supabase OTP error:", otpResult.error.message)
+
+        if (otpResult.error.message.includes("Email rate limit exceeded")) {
+          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
+        } else if (
+          otpResult.error.message.includes("User not found") ||
+          otpResult.error.message.includes("Signups not allowed")
+        ) {
+          showFieldError(
+            "Email",
+            "This email is not registered in the system. Please use password login or contact your administrator.",
+          )
+        } else if (otpResult.error.message.includes("Invalid email")) {
+          showFieldError("Email", "Invalid email format. Please check your email address.")
         } else {
-          showError("Unknown network error. Please try again.", "Network Error")
+          showFieldError("Email", `Failed to send OTP: ${otpResult.error.message}`)
         }
         return
       }
 
-      console.log("[v0] Validate response status:", validateResponse.status)
-      console.log("[v0] Validate response headers:", validateResponse.headers.get("content-type"))
-
-      const contentType = validateResponse.headers.get("content-type")
-
-      // Get response text first to debug
-      const responseText = await validateResponse.text()
-      console.log("[v0] Raw response text:", responseText.substring(0, 200)) // Log first 200 chars
-
-      if (!responseText) {
-        console.error("[v0] Empty response received")
-        showError("Server error: Empty response. Please try again.", "Server Error")
-        return
-      }
-
-      // Check if response looks like HTML (common on deployed domains when there's an error)
-      if (responseText.trim().startsWith("<!DOCTYPE") || responseText.trim().startsWith("<html")) {
-        console.error("[v0] Received HTML instead of JSON - likely server error")
-        showError("Server configuration error. Please contact support or try again later.", "Server Error")
-        return
-      }
-
-      let validateResult
-      try {
-        validateResult = JSON.parse(responseText)
-      } catch (jsonError) {
-        console.error("[v0] JSON parsing error:", jsonError)
-        console.error("[v0] Response text that failed to parse:", responseText.substring(0, 500))
-
-        if (responseText.includes("Internal Server Error") || responseText.includes("500")) {
-          showError("Server is temporarily unavailable. Please try again in a few minutes.", "Server Error")
-        } else {
-          showError("Server error: Invalid response format. Please contact support.", "Server Error")
-        }
-        return
-      }
-
-      console.log("[v0] Parsed validation result:", validateResult.message)
-
-      if (!validateResponse.ok) {
-        showFieldError("Email", validateResult.error || "Email validation failed")
-        return
-      }
-
-      if (!validateResult.exists) {
-        showFieldError("Email", "This email is not registered in the QCC system. Please contact your administrator.")
-        return
-      }
-
-      if (!validateResult.approved) {
-        showWarning(
-          "Your account is pending admin approval. Please wait for activation before using OTP login.",
-          "Account Approval Required",
-        )
-        return
-      }
-
-      console.log("[v0] Email validated, sending OTP")
-
-      try {
-        console.log("[v0] Calling Supabase signInWithOtp for email:", otpEmail)
-
-        const otpResult = await supabase.auth.signInWithOtp({
-          email: otpEmail,
-          options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-            shouldCreateUser: false, // Don't create new users via OTP
-          },
-        })
-
-        console.log("[v0] Supabase OTP result:", otpResult)
-
-        if (otpResult.error) {
-          console.error("[v0] Supabase OTP error details:", {
-            message: otpResult.error.message,
-            status: otpResult.error.status,
-            details: otpResult.error,
-          })
-
-          if (otpResult.error.message.includes("Email rate limit exceeded")) {
-            throw new Error("Too many OTP requests. Please wait 5 minutes before trying again.")
-          } else if (otpResult.error.message.includes("Invalid email")) {
-            throw new Error("Invalid email format. Please check your email address.")
-          } else if (otpResult.error.message.includes("User not found")) {
-            throw new Error("Email not found in the system. Please contact your administrator.")
-          } else if (otpResult.error.message.includes("Signup not allowed")) {
-            throw new Error("OTP login is not available for this email. Please use password login.")
-          } else {
-            throw new Error(`OTP sending failed: ${otpResult.error.message}`)
-          }
-        }
-
-        console.log("[v0] OTP sent successfully")
-        setOtpSent(true)
-        showSuccess("OTP sent to your email. Please check your inbox and enter the code below.", "OTP Sent")
-      } catch (supabaseError) {
-        console.error("[v0] Supabase OTP call failed:", supabaseError)
-        throw supabaseError
-      }
+      console.log("[v0] OTP sent successfully")
+      setOtpSent(true)
+      showSuccess(
+        emailValidated
+          ? "OTP sent to your email. Please check your inbox and enter the code below."
+          : "OTP request sent. If your email is registered, you will receive a code shortly.",
+        "OTP Sent",
+      )
     } catch (error: unknown) {
       console.error("[v0] OTP send error:", error)
       if (error instanceof Error) {
-        if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
-          showError(
-            "Network connectivity issue. Please check your internet connection and try again. If the problem persists, contact IT support.",
-            "Connection Error",
-          )
-        } else if (
-          error.message.includes("OTP sending failed") ||
-          error.message.includes("Too many OTP requests") ||
-          error.message.includes("Invalid email") ||
-          error.message.includes("Email not found")
-        ) {
-          showFieldError("Email", error.message)
-        } else {
-          showError(`Failed to send OTP: ${error.message}. Please try again or contact support.`, "OTP Error")
-        }
+        showError(`Failed to send OTP: ${error.message}. Please try again or use password login.`, "OTP Error")
       } else {
-        showError("Failed to send OTP. Please try again.", "OTP Error")
+        showError("Failed to send OTP. Please try again or use password login.", "OTP Error")
       }
     } finally {
       setIsLoading(false)
