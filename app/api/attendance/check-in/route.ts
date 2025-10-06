@@ -22,6 +22,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Location coordinates are required for GPS check-in" }, { status: 400 })
     }
 
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayDate = yesterday.toISOString().split("T")[0]
+
+    const { data: yesterdayRecord } = await supabase
+      .from("attendance_records")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("check_in_time", `${yesterdayDate}T00:00:00`)
+      .lt("check_in_time", `${yesterdayDate}T23:59:59`)
+      .single()
+
+    let missedCheckoutWarning = null
+    if (yesterdayRecord && yesterdayRecord.check_in_time && !yesterdayRecord.check_out_time) {
+      // Auto check-out the previous day at 11:59 PM
+      const autoCheckoutTime = new Date(`${yesterdayDate}T23:59:59`)
+      const checkInTime = new Date(yesterdayRecord.check_in_time)
+      const workHours = (autoCheckoutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+
+      await supabase
+        .from("attendance_records")
+        .update({
+          check_out_time: autoCheckoutTime.toISOString(),
+          work_hours: Math.round(workHours * 100) / 100,
+          check_out_method: "auto_system",
+          check_out_location_name: "Auto Check-out (Missed)",
+          missed_checkout: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", yesterdayRecord.id)
+
+      // Create audit log for missed check-out
+      await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "auto_checkout_missed",
+        table_name: "attendance_records",
+        record_id: yesterdayRecord.id,
+        new_values: {
+          reason: "Missed check-out from previous day",
+          auto_checkout_time: autoCheckoutTime.toISOString(),
+          work_hours_calculated: workHours,
+        },
+        ip_address: request.ip || null,
+        user_agent: request.headers.get("user-agent"),
+      })
+
+      missedCheckoutWarning = {
+        date: yesterdayDate,
+        message: "You did not check out yesterday. This has been recorded and will be visible to your department head.",
+      }
+    }
+
     // Check if user already checked in today
     const today = new Date().toISOString().split("T")[0]
     const { data: existingRecord } = await supabase
@@ -167,6 +219,7 @@ export async function POST(request: NextRequest) {
         message: attendanceData.is_remote_location
           ? `Successfully checked in at ${locationData?.name} (different from your assigned location)`
           : `Successfully checked in at ${locationData?.name}`,
+        missedCheckoutWarning,
       },
       {
         headers: {

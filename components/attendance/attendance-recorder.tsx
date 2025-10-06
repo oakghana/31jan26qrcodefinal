@@ -398,6 +398,10 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         const locationInfo = result.data.location_tracking
         let message = result.message
 
+        if (result.missedCheckoutWarning) {
+          message = `⚠️ WARNING: ${result.missedCheckoutWarning.message}\n\n${message}`
+        }
+
         if (locationInfo?.is_remote_location) {
           message += " (Note: This is different from your assigned location)"
         }
@@ -405,7 +409,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         setSuccess(message)
         setTimeout(() => {
           window.location.reload()
-        }, 1500)
+        }, 3000) // Increased timeout to allow reading warning
       } else {
         setError(result.error || "Failed to check in")
       }
@@ -555,8 +559,19 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const result = await response.json()
 
       if (result.success) {
-        setSuccess(result.message)
-        window.location.reload()
+        let message = result.message
+
+        if (result.missedCheckoutWarning) {
+          message = `⚠️ WARNING: ${result.missedCheckoutWarning.message}\n\n${message}`
+        }
+
+        setSuccess(message)
+        setTimeout(
+          () => {
+            window.location.reload()
+          },
+          result.missedCheckoutWarning ? 3000 : 1500,
+        )
       } else {
         setError(result.error || "Failed to check in with QR code")
       }
@@ -664,6 +679,8 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   const isCheckedOut = todayAttendance?.check_out_time
   const canCheckIn = !todayAttendance?.check_in_time
   const canCheckOut = isCheckedIn
+
+  const defaultMode = canCheckIn ? "checkin" : canCheckOut ? "checkout" : "completed"
 
   const findNearestLocation = (userLocation: LocationData, locations: GeofenceLocation[]) => {
     return { location: locations[0] }

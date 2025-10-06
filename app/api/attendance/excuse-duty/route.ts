@@ -55,21 +55,19 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Excuse duty API - File processed:", file.name, file.type, file.size)
 
-    // Get user profile to find department head
-    const { data: userProfile } = await supabase
-      .from("user_profiles")
-      .select("department_id, first_name, last_name, employee_id")
-      .eq("id", user.id)
-      .single()
-
     // Check if there's an attendance record for this date
-    const { data: attendanceRecord } = await supabase
+    const startOfDay = `${excuseDate}T00:00:00`
+    const endOfDay = `${excuseDate}T23:59:59`
+
+    const { data: attendanceRecords } = await supabase
       .from("attendance_records")
       .select("id")
       .eq("user_id", user.id)
-      .gte("check_in_time", `${excuseDate}T00:00:00`)
-      .lt("check_in_time", `${excuseDate}T23:59:59`)
-      .single()
+      .gte("check_in_time", startOfDay)
+      .lte("check_in_time", endOfDay)
+      .limit(1)
+
+    const attendanceRecord = attendanceRecords?.[0] || null
 
     console.log("[v0] Excuse duty API - Attendance record check:", attendanceRecord?.id || "none")
 
@@ -114,6 +112,13 @@ export async function POST(request: NextRequest) {
         console.log("[v0] Excuse duty API - Attendance record updated")
       }
     }
+
+    // Get user profile to find department head
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("department_id, first_name, last_name, employee_id")
+      .eq("id", user.id)
+      .single()
 
     if (userProfile?.department_id) {
       // Find department head

@@ -148,6 +148,13 @@ const navigationItems = [
     roles: ["admin", "department_head", "staff"],
     category: "settings",
   },
+  {
+    title: "HR Excuse Duty Portal",
+    href: "/dashboard/hr-excuse-duty",
+    icon: UserCheck,
+    roles: ["admin"],
+    category: "admin",
+  },
 ]
 
 export function Sidebar({ user, profile }: SidebarProps) {

@@ -1,0 +1,484 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  FileText,
+  Calendar,
+  Eye,
+  Loader2,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Filter,
+  Archive,
+  UserCheck,
+} from "lucide-react"
+
+interface ExcuseDocument {
+  id: string
+  document_name: string
+  document_type: string
+  file_url: string
+  excuse_reason: string
+  excuse_date: string
+  hod_status: string
+  hod_reviewed_by: string
+  hod_reviewed_at: string
+  hod_review_notes: string
+  hr_status: string
+  hr_reviewed_by: string
+  hr_reviewed_at: string
+  hr_review_notes: string
+  final_status: string
+  created_at: string
+  user_profiles: {
+    first_name: string
+    last_name: string
+    employee_id: string
+    department_id: string
+    departments: {
+      name: string
+      code: string
+    }
+  }
+  hod_reviewer?: {
+    first_name: string
+    last_name: string
+  }
+}
+
+export function HRExcuseDutyClient() {
+  const [excuseDocuments, setExcuseDocuments] = useState<ExcuseDocument[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedDoc, setSelectedDoc] = useState<ExcuseDocument | null>(null)
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+  const [hrAction, setHrAction] = useState<"approved" | "rejected" | "archived">("approved")
+  const [hrNotes, setHrNotes] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [statusFilter, setStatusFilter] = useState("hr_review")
+
+  useEffect(() => {
+    fetchExcuseDocuments()
+  }, [statusFilter])
+
+  const fetchExcuseDocuments = async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (statusFilter !== "all") {
+        params.append("final_status", statusFilter)
+      }
+
+      const response = await fetch(`/api/admin/hr-excuse-duty?${params.toString()}`)
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch excuse documents")
+      }
+
+      const data = await response.json()
+      setExcuseDocuments(data.excuseDocuments || [])
+    } catch (error) {
+      console.error("Failed to fetch excuse documents:", error)
+      setError("Failed to load excuse documents")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleHRReview = async () => {
+    if (!selectedDoc) return
+
+    setSubmitting(true)
+    try {
+      const response = await fetch("/api/admin/hr-excuse-duty", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          documentId: selectedDoc.id,
+          hrStatus: hrAction,
+          hrNotes: hrNotes.trim() || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to process document")
+      }
+
+      await fetchExcuseDocuments()
+
+      setReviewDialogOpen(false)
+      setSelectedDoc(null)
+      setHrNotes("")
+      setHrAction("approved")
+    } catch (error) {
+      console.error("HR review error:", error)
+      setError(error instanceof Error ? error.message : "Failed to process document")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openReviewDialog = (doc: ExcuseDocument) => {
+    setSelectedDoc(doc)
+    setHrAction("approved")
+    setHrNotes("")
+    setReviewDialogOpen(true)
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "approved":
+        return (
+          <Badge className="bg-green-100 text-green-800 border-green-200">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Approved
+          </Badge>
+        )
+      case "rejected":
+        return (
+          <Badge variant="destructive">
+            <XCircle className="h-3 w-3 mr-1" />
+            Rejected
+          </Badge>
+        )
+      case "archived":
+        return (
+          <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+            <Archive className="h-3 w-3 mr-1" />
+            Archived
+          </Badge>
+        )
+      case "hr_review":
+        return (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+            <UserCheck className="h-3 w-3 mr-1" />
+            Awaiting HR
+          </Badge>
+        )
+      case "hod_review":
+        return (
+          <Badge variant="secondary">
+            <Clock className="h-3 w-3 mr-1" />
+            HOD Review
+          </Badge>
+        )
+      default:
+        return (
+          <Badge variant="secondary">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        )
+    }
+  }
+
+  const getDocumentTypeBadge = (type: string) => {
+    const colors = {
+      medical: "bg-blue-100 text-blue-800 border-blue-200",
+      emergency: "bg-red-100 text-red-800 border-red-200",
+      personal: "bg-purple-100 text-purple-800 border-purple-200",
+      official: "bg-green-100 text-green-800 border-green-200",
+    }
+
+    return (
+      <Badge className={colors[type as keyof typeof colors] || "bg-gray-100 text-gray-800 border-gray-200"}>
+        {type.charAt(0).toUpperCase() + type.slice(1)}
+      </Badge>
+    )
+  }
+
+  const viewDocument = (fileUrl: string) => {
+    window.open(fileUrl, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes")
+  }
+
+  const pendingCount = excuseDocuments.filter((doc) => doc.final_status === "hr_review").length
+  const approvedCount = excuseDocuments.filter((doc) => doc.hr_status === "approved").length
+  const archivedCount = excuseDocuments.filter((doc) => doc.hr_status === "archived").length
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          Loading excuse documents...
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Awaiting HR Review</CardTitle>
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{pendingCount}</div>
+            <p className="text-xs text-muted-foreground">Approved by HOD, needs HR processing</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">HR Approved</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{approvedCount}</div>
+            <p className="text-xs text-muted-foreground">Fully processed and approved</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Archived</CardTitle>
+            <Archive className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-600">{archivedCount}</div>
+            <p className="text-xs text-muted-foreground">Archived for records</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Excuse Duty Requests
+              </CardTitle>
+              <CardDescription>Process excuse duty requests approved by department heads</CardDescription>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Requests</SelectItem>
+                  <SelectItem value="hr_review">Awaiting HR Review</SelectItem>
+                  <SelectItem value="approved">HR Approved</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {excuseDocuments.length === 0 ? (
+            <div className="text-center py-8">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
+                {statusFilter === "all"
+                  ? "No excuse duty requests found"
+                  : "No requests found matching the selected filter"}
+              </p>
+            </div>
+          ) : (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Staff Member</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>HOD Approval</TableHead>
+                    <TableHead>HR Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {excuseDocuments.map((doc) => (
+                    <TableRow key={doc.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            {doc.user_profiles.first_name} {doc.user_profiles.last_name}
+                          </div>
+                          <div className="text-sm text-muted-foreground">{doc.user_profiles.employee_id}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{doc.user_profiles.departments.name}</div>
+                          <div className="text-sm text-muted-foreground">{doc.user_profiles.departments.code}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          {new Date(doc.excuse_date).toLocaleDateString()}
+                        </div>
+                      </TableCell>
+                      <TableCell>{getDocumentTypeBadge(doc.document_type)}</TableCell>
+                      <TableCell>
+                        <div>
+                          {getStatusBadge(doc.hod_status)}
+                          {doc.hod_reviewer && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              By: {doc.hod_reviewer.first_name} {doc.hod_reviewer.last_name}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(doc.hr_status)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => viewDocument(doc.file_url)}
+                            className="flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            View
+                          </Button>
+                          {doc.final_status === "hr_review" && (
+                            <Button size="sm" onClick={() => openReviewDialog(doc)} className="flex items-center gap-1">
+                              <FileText className="h-3 w-3" />
+                              Process
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>HR Processing - Excuse Duty Request</DialogTitle>
+            <DialogDescription>Review and process this excuse duty request approved by the HOD</DialogDescription>
+          </DialogHeader>
+
+          {selectedDoc && (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Staff Member</label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedDoc.user_profiles.first_name} {selectedDoc.user_profiles.last_name}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Department</label>
+                  <p className="text-sm text-muted-foreground">{selectedDoc.user_profiles.departments.name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Date of Absence</label>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(selectedDoc.excuse_date).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Document Type</label>
+                  <div className="mt-1">{getDocumentTypeBadge(selectedDoc.document_type)}</div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Reason for Absence</label>
+                <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted rounded-lg">
+                  {selectedDoc.excuse_reason}
+                </p>
+              </div>
+
+              {selectedDoc.hod_review_notes && (
+                <div>
+                  <label className="text-sm font-medium">HOD Review Notes</label>
+                  <p className="text-sm text-muted-foreground mt-1 p-3 bg-blue-50 rounded-lg">
+                    {selectedDoc.hod_review_notes}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium">HR Action</label>
+                <Select
+                  value={hrAction}
+                  onValueChange={(value: "approved" | "rejected" | "archived") => setHrAction(value)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approved">Approve & Process</SelectItem>
+                    <SelectItem value="archived">Archive for Records</SelectItem>
+                    <SelectItem value="rejected">Reject</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">HR Notes (Optional)</label>
+                <Textarea
+                  placeholder="Add any HR processing notes or comments..."
+                  value={hrNotes}
+                  onChange={(e) => setHrNotes(e.target.value)}
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleHRReview} disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `${hrAction === "approved" ? "Approve" : hrAction === "archived" ? "Archive" : "Reject"}`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

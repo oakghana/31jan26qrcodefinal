@@ -131,7 +131,6 @@ export async function PUT(request: NextRequest) {
 
     const supabase = await createClient()
 
-    // Check authentication
     const {
       data: { user },
       error: authError,
@@ -141,7 +140,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get user profile to check role and department
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
       .select("role, department_id, first_name, last_name")
@@ -153,7 +151,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 })
     }
 
-    // Check if user has admin or department_head role
     if (!["admin", "department_head"].includes(profile.role)) {
       console.log("[v0] HOD Excuse duty API - Insufficient permissions")
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
@@ -188,7 +185,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "User profile not found" }, { status: 404 })
     }
 
-    // Check if department head can review this document (must be from their department)
     if (profile.role === "department_head") {
       if (profile.department_id !== docUserProfile.department_id) {
         console.log("[v0] HOD Excuse duty API - Department mismatch")
@@ -196,10 +192,17 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Update the excuse document
+    const finalStatus = status === "approved" ? "hr_review" : "rejected"
+
     const { data: updatedDoc, error: updateError } = await supabase
       .from("excuse_documents")
       .update({
+        hod_status: status,
+        hod_reviewed_by: user.id,
+        hod_reviewed_at: new Date().toISOString(),
+        hod_review_notes: reviewNotes || null,
+        final_status: finalStatus,
+        // Keep old fields for backward compatibility
         status,
         reviewed_by: user.id,
         reviewed_at: new Date().toISOString(),
@@ -214,11 +217,21 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Failed to update document" }, { status: 500 })
     }
 
+    if (status === "approved" && excuseDoc.attendance_record_id) {
+      await supabase
+        .from("attendance_records")
+        .update({
+          status: "excused_absence",
+          notes: `Excuse duty approved by HOD: ${excuseDoc.document_type} - ${excuseDoc.excuse_reason}`,
+        })
+        .eq("id", excuseDoc.attendance_record_id)
+    }
+
     await supabase.from("email_notifications").insert({
       user_id: excuseDoc.user_id,
       email_type: "excuse_duty_decision",
-      subject: `Excuse Duty ${status === "approved" ? "Approved" : "Rejected"}`,
-      body: `Your excuse duty submission has been ${status}:
+      subject: `Excuse Duty ${status === "approved" ? "Approved by HOD" : "Rejected"}`,
+      body: `Your excuse duty submission has been ${status} by your Head of Department:
 
 Date of Absence: ${new Date(excuseDoc.excuse_date).toLocaleDateString()}
 Document Type: ${excuseDoc.document_type}
@@ -227,21 +240,19 @@ ${reviewNotes ? `\nReview Notes: ${reviewNotes}` : ""}
 
 ${
   status === "approved"
-    ? "Your excuse duty has been approved and will be processed by HR."
+    ? "Your request has been forwarded to HR for final processing. You will be notified once HR completes the review."
     : "Please contact your supervisor if you have questions about this decision."
 }`,
       status: "pending",
     })
 
-    if (status === "approved" && profile.role === "department_head") {
-      // Find admin users for HR notification
+    if (status === "approved") {
       const { data: adminUsers } = await supabase
         .from("user_profiles")
         .select("id, first_name, last_name, email")
         .eq("role", "admin")
 
       if (adminUsers && adminUsers.length > 0) {
-        // Send notification to all admin users
         const notifications = adminUsers.map((admin) => ({
           user_id: admin.id,
           email_type: "excuse_duty_hr_review",
@@ -253,7 +264,7 @@ Date of Absence: ${new Date(excuseDoc.excuse_date).toLocaleDateString()}
 Document Type: ${excuseDoc.document_type}
 Approved By: ${profile.first_name} ${profile.last_name}
 
-Please log in to the system to complete the final processing.`,
+Please log in to the HR Excuse Duty Portal to complete the final processing.`,
           status: "pending",
         }))
 
@@ -262,20 +273,19 @@ Please log in to the system to complete the final processing.`,
       }
     }
 
-    // Log the action
     await supabase.from("audit_logs").insert({
       user_id: user.id,
-      action: `excuse_duty_${status}`,
+      action: `excuse_duty_hod_${status}`,
       table_name: "excuse_documents",
       record_id: documentId,
       old_values: {
-        status: excuseDoc.status,
-        reviewed_by: excuseDoc.reviewed_by,
+        hod_status: excuseDoc.hod_status,
+        final_status: excuseDoc.final_status,
       },
       new_values: {
-        status,
-        reviewed_by: user.id,
-        review_notes: reviewNotes,
+        hod_status: status,
+        final_status: finalStatus,
+        hod_review_notes: reviewNotes,
       },
     })
 
@@ -283,7 +293,7 @@ Please log in to the system to complete the final processing.`,
 
     return NextResponse.json({
       success: true,
-      message: `Excuse duty ${status} successfully`,
+      message: `Excuse duty ${status} successfully${status === "approved" ? " and forwarded to HR" : ""}`,
       document: updatedDoc,
     })
   } catch (error) {

@@ -8,38 +8,11 @@ import { cookies } from "next/headers"
  */
 export async function createClient() {
   try {
-    console.log("[v0] Creating Supabase server client")
-
-    console.log("[v0] Environment variable check:", {
-      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? "present" : "missing",
-      SUPABASE_URL: process.env.SUPABASE_URL ? "present" : "missing",
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "present" : "missing",
-      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ? "present" : "missing",
-      allEnvKeys: Object.keys(process.env).filter((key) => key.includes("SUPABASE")),
-    })
-
-    // Validate environment variables with fallback values
-    const supabaseUrl =
-      process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://vgtajtqxgczhjboatvol.supabase.co"
-
-    const supabaseKey =
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndGFqdHF4Z2N6aGpib2F0dm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5NzUyNDgsImV4cCI6MjA3MjU1MTI0OH0.EuuTCRC-rDoz_WHl4pwpV6_fEqrqcgGroa4nTjAEn1k"
-
-    console.log("[v0] Using Supabase URL:", supabaseUrl)
-    console.log("[v0] Using Supabase Key:", supabaseKey ? "present" : "missing")
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseKey) {
-      console.error("[v0] Missing Supabase environment variables after fallback:", {
-        hasUrl: !!supabaseUrl,
-        hasKey: !!supabaseKey,
-        nextPublicUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-        regularUrl: !!process.env.SUPABASE_URL,
-        nextPublicKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        regularKey: !!process.env.SUPABASE_ANON_KEY,
-      })
-      throw new Error("Missing Supabase environment variables")
+      throw new Error("Missing Supabase environment variables. Please configure SUPABASE_URL and SUPABASE_ANON_KEY.")
     }
 
     const cookieStore = await cookies()
@@ -61,10 +34,11 @@ export async function createClient() {
       },
     })
 
-    console.log("[v0] Supabase server client created successfully")
     return client
   } catch (error) {
-    console.error("[v0] Failed to create Supabase server client:", error)
+    if (process.env.NODE_ENV === "development") {
+      console.error("[v0] Failed to create Supabase server client:", error)
+    }
     throw error
   }
 }
