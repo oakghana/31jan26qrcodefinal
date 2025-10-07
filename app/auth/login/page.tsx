@@ -676,7 +676,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center border-t border-border pt-6">
               <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
               <p className="text-xs text-muted-foreground mt-1">Intranet Portal - Powered by IT Department</p>
-              <p className="text-xs text-muted-foreground mt-2 font-mono">v.1.6.10.25</p>
+              <p className="text-xs text-muted-foreground mt-2 font-mono">v.1.7.10.25</p>
             </div>
           </CardContent>
         </Card>

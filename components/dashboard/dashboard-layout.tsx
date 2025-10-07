@@ -2,8 +2,8 @@ import type React from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Sidebar } from "./sidebar"
-import { PWAInstallPrompt } from "@/components/ui/pwa-install-prompt"
 import { OfflineIndicator } from "@/components/ui/offline-indicator"
+import { PWAUpdateNotification } from "@/components/ui/pwa-update-notification"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -42,7 +42,7 @@ export async function DashboardLayout({ children }: DashboardLayoutProps) {
         </main>
       </div>
 
-      <PWAInstallPrompt />
+      <PWAUpdateNotification />
       <OfflineIndicator />
     </div>
   )

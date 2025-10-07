@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { X, RefreshCw } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { X, RefreshCw, Sparkles } from "lucide-react"
 
 export function PWAUpdateNotification() {
   const [showUpdate, setShowUpdate] = useState(false)
@@ -82,28 +83,38 @@ export function PWAUpdateNotification() {
 
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-md animate-in slide-in-from-bottom-5">
-      <Card className="border-primary bg-card p-4 shadow-lg">
+      <Card className="border-green-500 bg-card p-4 shadow-xl ring-2 ring-green-500/20">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <RefreshCw className="h-5 w-5 text-primary" />
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-500/10">
+            <RefreshCw className="h-6 w-6 text-green-600 animate-spin" style={{ animationDuration: "3s" }} />
+            <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-green-500 p-0 flex items-center justify-center">
+              <Sparkles className="h-3 w-3 text-white" />
+            </Badge>
           </div>
           <div className="flex-1 space-y-2">
             <div className="space-y-1">
-              <h3 className="font-semibold text-sm">Update Available</h3>
-              <p className="text-muted-foreground text-xs">
-                A new version of QCC Attendance is available. Update now to get the latest features and improvements.
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sm">New Update Available!</h3>
+                <Badge variant="secondary" className="bg-green-500/10 text-green-700 text-xs">
+                  v.1.6.10.25
+                </Badge>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                A new version of QCC Attendance is ready. Update now to get the latest features, improvements, and bug
+                fixes.
               </p>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleUpdate} className="h-8">
+              <Button size="sm" onClick={handleUpdate} className="h-8 bg-green-600 hover:bg-green-700 text-white">
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                 Update Now
               </Button>
-              <Button size="sm" variant="ghost" onClick={handleDismiss} className="h-8">
-                Later
+              <Button size="sm" variant="outline" onClick={handleDismiss} className="h-8 bg-transparent">
+                Remind Me Later
               </Button>
             </div>
           </div>
-          <Button size="icon" variant="ghost" onClick={handleDismiss} className="h-6 w-6 shrink-0">
+          <Button size="icon" variant="ghost" onClick={handleDismiss} className="h-6 w-6 shrink-0 hover:bg-muted">
             <X className="h-4 w-4" />
           </Button>
         </div>

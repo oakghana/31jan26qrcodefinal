@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Activity } from "lucide-react"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { MobileAppNotification } from "@/components/ui/mobile-app-notification"
+import { MobileAppDownload } from "@/components/ui/mobile-app-download"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -113,8 +113,6 @@ export default async function DashboardPage() {
             {profile?.last_name || ""}
           </p>
         </div>
-
-        <MobileAppNotification />
 
         {profile?.role === "admin" && pendingApprovals > 0 && (
           <Alert className="border-primary/20 bg-primary/5 shadow-sm">
@@ -242,6 +240,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <MobileAppDownload variant="dashboard" />
     </DashboardLayout>
   )
 }

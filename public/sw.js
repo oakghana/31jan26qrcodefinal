@@ -2,7 +2,7 @@ const CACHE_NAME = "qcc-attendance-v1"
 const STATIC_CACHE = "qcc-static-v1"
 const DYNAMIC_CACHE = "qcc-dynamic-v1"
 
-const APP_VERSION = "1.0.1"
+const APP_VERSION = "1.6.10.25"
 
 const STATIC_ASSETS = [
   "/",
