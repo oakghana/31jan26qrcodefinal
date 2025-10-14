@@ -17,14 +17,13 @@ export async function GET(request: NextRequest) {
     // Get user profile to check role
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    // Get user settings
-    const { data: userSettings } = await supabase.from("user_settings").select("*").eq("user_id", user.id).single()
+    const { data: userSettings } = await supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle()
 
     let systemSettings = null
 
     // Get system settings if admin
     if (profile?.role === "admin") {
-      const { data: sysSettings } = await supabase.from("system_settings").select("*").single()
+      const { data: sysSettings } = await supabase.from("system_settings").select("*").maybeSingle()
       systemSettings = sysSettings
     }
 

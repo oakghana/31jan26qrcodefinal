@@ -169,14 +169,32 @@ export function QRScanner() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
     try {
-      // Use a QR code detection library (you'd need to install qr-scanner or similar)
-      // For now, we'll simulate QR detection with a manual input fallback
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
 
-      // This is where you'd integrate with a QR code detection library
-      // For demonstration, we'll use a different approach
+      // Use jsQR library to detect QR codes
+      const code = await detectQRCode(imageData)
+
+      if (code) {
+        console.log("[v0] QR code detected:", code)
+        await processQRCode(code)
+      }
     } catch (error) {
-      console.error("QR scanning error:", error)
+      console.error("[v0] QR scanning error:", error)
+    }
+  }
+
+  const detectQRCode = async (imageData: ImageData): Promise<string | null> => {
+    try {
+      // Import jsQR dynamically to avoid SSR issues
+      const jsQR = (await import("jsqr")).default
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      })
+
+      return code?.data || null
+    } catch (error) {
+      console.error("[v0] QR detection error:", error)
+      return null
     }
   }
 

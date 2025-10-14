@@ -399,8 +399,24 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         let message = result.message
 
         if (result.missedCheckoutWarning) {
-          message = `⚠️ WARNING: ${result.missedCheckoutWarning.message}\n\n${message}`
+          // Show prominent warning message
+          setError(
+            `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
+          )
+          // Wait for user to see the warning before showing success
+          setTimeout(() => {
+            setError(null)
+            if (locationInfo?.is_remote_location) {
+              message += " (Note: This is different from your assigned location)"
+            }
+            setSuccess(message)
+            setTimeout(() => {
+              window.location.reload()
+            }, 2000)
+          }, 4000) // Show warning for 4 seconds
+          return
         }
+        // </CHANGE>
 
         if (locationInfo?.is_remote_location) {
           message += " (Note: This is different from your assigned location)"
@@ -409,7 +425,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         setSuccess(message)
         setTimeout(() => {
           window.location.reload()
-        }, 3000) // Increased timeout to allow reading warning
+        }, 1500)
       } else {
         setError(result.error || "Failed to check in")
       }
@@ -559,19 +575,29 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       const result = await response.json()
 
       if (result.success) {
-        let message = result.message
+        const message = result.message
 
         if (result.missedCheckoutWarning) {
-          message = `⚠️ WARNING: ${result.missedCheckoutWarning.message}\n\n${message}`
+          // Show prominent warning message
+          setError(
+            `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
+          )
+          // Wait for user to see the warning before showing success
+          setTimeout(() => {
+            setError(null)
+            setSuccess(message)
+            setTimeout(() => {
+              window.location.reload()
+            }, 2000)
+          }, 4000) // Show warning for 4 seconds
+          return
         }
+        // </CHANGE>
 
         setSuccess(message)
-        setTimeout(
-          () => {
-            window.location.reload()
-          },
-          result.missedCheckoutWarning ? 3000 : 1500,
-        )
+        setTimeout(() => {
+          window.location.reload()
+        }, 1500)
       } else {
         setError(result.error || "Failed to check in with QR code")
       }

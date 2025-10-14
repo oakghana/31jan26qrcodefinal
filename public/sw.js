@@ -4,6 +4,8 @@ const DYNAMIC_CACHE = "qcc-dynamic-v1"
 
 const APP_VERSION = "1.6.10.25"
 
+const CACHE_EXPIRATION_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
+
 const STATIC_ASSETS = [
   "/",
   "/dashboard",
@@ -12,6 +14,18 @@ const STATIC_ASSETS = [
   "/auth/login",
   "/images/qcc-logo.png",
   "/manifest.json",
+]
+
+const NO_CACHE_ENDPOINTS = [
+  "/api/attendance/check-in",
+  "/api/attendance/check-out",
+  "/api/attendance/personal",
+  "/api/admin/users",
+  "/api/admin/reports",
+  "/api/admin/analytics",
+  "/api/admin/audit-logs",
+  "/api/auth/",
+  "/api/settings",
 ]
 
 self.addEventListener("install", (event) => {
@@ -49,6 +63,10 @@ self.addEventListener("activate", (event) => {
         )
       })
       .then(() => {
+        console.log("[SW] Clearing dynamic cache for fresh start")
+        return caches.delete(DYNAMIC_CACHE)
+      })
+      .then(() => {
         console.log("[SW] Service worker activated")
         return self.clients.claim()
       })
@@ -66,12 +84,21 @@ self.addEventListener("activate", (event) => {
   )
 })
 
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
-    console.log("[SW] Received SKIP_WAITING message, activating new version")
-    self.skipWaiting()
-  }
-})
+function isCacheExpired(cachedResponse) {
+  if (!cachedResponse) return true
+
+  const cachedDate = cachedResponse.headers.get("sw-cache-date")
+  if (!cachedDate) return true
+
+  const cacheTime = new Date(cachedDate).getTime()
+  const now = Date.now()
+
+  return now - cacheTime > CACHE_EXPIRATION_TIME
+}
+
+function shouldNotCache(url) {
+  return NO_CACHE_ENDPOINTS.some((endpoint) => url.pathname.includes(endpoint))
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event
@@ -82,41 +109,83 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
-  // Handle API requests with network-first strategy
   if (url.pathname.startsWith("/api/")) {
+    if (shouldNotCache(url)) {
+      event.respondWith(
+        fetch(request)
+          .then((response) => {
+            const headers = new Headers(response.headers)
+            headers.set("Cache-Control", "no-cache, no-store, must-revalidate")
+            headers.set("Pragma", "no-cache")
+            headers.set("Expires", "0")
+
+            return new Response(response.body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: headers,
+            })
+          })
+          .catch(() => {
+            return new Response(
+              JSON.stringify({
+                error: "Network Error",
+                message: "Unable to connect. Please check your internet connection and try again.",
+              }),
+              {
+                status: 503,
+                statusText: "Service Unavailable",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-cache, no-store, must-revalidate",
+                },
+              },
+            )
+          }),
+      )
+      return
+    }
+
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful API responses for offline access
           if (response.ok) {
             const responseClone = response.clone()
             caches.open(DYNAMIC_CACHE).then((cache) => {
-              cache.put(request, responseClone)
+              const headers = new Headers(responseClone.headers)
+              headers.set("sw-cache-date", new Date().toISOString())
+
+              const cachedResponse = new Response(responseClone.body, {
+                status: responseClone.status,
+                statusText: responseClone.statusText,
+                headers: headers,
+              })
+
+              cache.put(request, cachedResponse)
             })
           }
           return response
         })
         .catch(() => {
-          // Return cached response if network fails
           return caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
+            if (cachedResponse && !isCacheExpired(cachedResponse)) {
+              console.log("[SW] Serving cached API response (offline mode)")
               return cachedResponse
             }
-            // Return offline fallback for critical API endpoints
-            if (url.pathname.includes("/attendance") || url.pathname.includes("/profile")) {
-              return new Response(
-                JSON.stringify({
-                  error: "Offline",
-                  message: "You are currently offline. Please try again when connected.",
-                }),
-                {
-                  status: 503,
-                  statusText: "Service Unavailable",
-                  headers: { "Content-Type": "application/json" },
+
+            return new Response(
+              JSON.stringify({
+                error: "Offline",
+                message: "You are currently offline. Please try again when connected.",
+              }),
+              {
+                status: 503,
+                statusText: "Service Unavailable",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Cache-Control": "no-cache, no-store, must-revalidate",
                 },
-              )
-            }
-            throw new Error("Network error and no cached response available")
+              },
+            )
           })
         }),
     )
