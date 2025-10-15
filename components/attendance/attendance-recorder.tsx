@@ -98,6 +98,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     typeof detectWindowsLocationCapabilities
   > | null>(null)
   const [locationWatchId, setLocationWatchId] = useState<number | null>(null)
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0])
 
   useEffect(() => {
     fetchUserProfile()
@@ -110,6 +111,23 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   useEffect(() => {
     loadProximitySettings()
   }, [])
+
+  useEffect(() => {
+    const checkDateChange = () => {
+      const newDate = new Date().toISOString().split("T")[0]
+      if (newDate !== currentDate) {
+        console.log("[v0] Date changed from", currentDate, "to", newDate)
+        setCurrentDate(newDate)
+        // Force re-render to update button state
+        window.location.reload()
+      }
+    }
+
+    // Check every minute for date changes
+    const interval = setInterval(checkDateChange, 60000)
+
+    return () => clearInterval(interval)
+  }, [currentDate])
 
   const loadProximitySettings = async () => {
     try {
@@ -441,19 +459,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     setSuccess(null)
 
     try {
-      if (todayAttendance?.check_in_time) {
-        const checkInDate = new Date(todayAttendance.check_in_time).toISOString().split("T")[0]
-        const currentDate = new Date().toISOString().split("T")[0]
-
-        if (checkInDate !== currentDate) {
-          setError(
-            "Check-out must be done before 11:59 PM on the same day. The system has switched to check-in mode for the new day. Please check in for today.",
-          )
-          setIsLoading(false)
-          return
-        }
-      }
-      // </CHANGE>
+      // The server will return a proper error if checkout is not allowed
 
       let location = null
       let nearestLocation = null
@@ -545,7 +551,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         setIsLoading(false)
         return
       }
-      // </CHANGE>
 
       console.log("[v0] Check-out response:", result)
 
@@ -563,7 +568,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
           }, 7000)
           return
         }
-        // </CHANGE>
 
         setSuccess(result.message)
         setTimeout(() => {
@@ -745,7 +749,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   const checkInDate = todayAttendance?.check_in_time
     ? new Date(todayAttendance.check_in_time).toISOString().split("T")[0]
     : null
-  const currentDate = new Date().toISOString().split("T")[0]
 
   // If check-in was from a previous day, treat as if no check-in exists (allow new check-in)
   const isFromPreviousDay = checkInDate && checkInDate !== currentDate
