@@ -139,6 +139,19 @@ export async function POST(request: NextRequest) {
     const checkOutTime = new Date()
     const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
 
+    const checkOutHour = checkOutTime.getHours()
+    const isEarlyCheckout = checkOutHour < 17 // Before 5 PM (17:00)
+    let earlyCheckoutWarning = null
+
+    if (isEarlyCheckout) {
+      earlyCheckoutWarning = {
+        message: `Early checkout detected at ${checkOutTime.toLocaleTimeString()}. Standard work hours end at 5:00 PM. This will be visible to your department head.`,
+        checkoutTime: checkOutTime.toISOString(),
+        standardEndTime: "17:00:00",
+      }
+      console.log("[v0] Early checkout warning:", earlyCheckoutWarning)
+    }
+
     const checkoutData = {
       check_out_time: checkOutTime.toISOString(),
       check_out_location_id: checkoutLocationData?.id || null,
@@ -240,6 +253,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+        earlyCheckoutWarning,
         data: {
           ...updatedRecord,
           location_tracking: {

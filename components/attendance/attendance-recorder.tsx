@@ -403,7 +403,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
           setError(
             `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
           )
-          // Wait for user to see the warning before showing success
           setTimeout(() => {
             setError(null)
             if (locationInfo?.is_remote_location) {
@@ -536,6 +535,21 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       console.log("[v0] Check-out response:", result)
 
       if (result.success) {
+        if (result.earlyCheckoutWarning) {
+          setError(
+            `⚠️ EARLY CHECKOUT WARNING: ${result.earlyCheckoutWarning.message}\n\nYou are checking out before the standard 5:00 PM end time. This will be recorded and visible to your department head.`,
+          )
+          setTimeout(() => {
+            setError(null)
+            setSuccess(result.message)
+            setTimeout(() => {
+              window.location.reload()
+            }, 2000)
+          }, 7000) // Show warning for 7 seconds
+          return
+        }
+        // </CHANGE>
+
         setSuccess(result.message)
         setTimeout(() => {
           window.location.reload()
@@ -596,7 +610,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
           setError(
             `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
           )
-          // Wait for user to see the warning before showing success
           setTimeout(() => {
             setError(null)
             setSuccess(message)
