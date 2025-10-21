@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { latitude, longitude, location_id, qr_code_used, qr_timestamp } = body
+    const { latitude, longitude, location_id, qr_code_used, qr_timestamp, early_checkout_reason } = body
 
     if (!qr_code_used && (!latitude || !longitude)) {
       return NextResponse.json({ error: "Location coordinates are required for GPS check-out" }, { status: 400 })
@@ -154,6 +154,10 @@ export async function POST(request: NextRequest) {
 
     if (qr_code_used && qr_timestamp) {
       checkoutData.qr_check_out_timestamp = qr_timestamp
+    }
+
+    if (early_checkout_reason) {
+      checkoutData.early_checkout_reason = early_checkout_reason
     }
 
     const { data: updatedRecord, error: updateError } = await supabase

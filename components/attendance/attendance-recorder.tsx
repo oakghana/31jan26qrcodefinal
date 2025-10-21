@@ -6,6 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import {
   getCurrentLocation,
   validateAttendanceLocation,
   validateCheckoutLocation,
@@ -99,6 +109,12 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   > | null>(null)
   const [locationWatchId, setLocationWatchId] = useState<number | null>(null)
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0])
+  const [showEarlyCheckoutDialog, setShowEarlyCheckoutDialog] = useState(false)
+  const [earlyCheckoutReason, setEarlyCheckoutReason] = useState("")
+  const [pendingCheckoutData, setPendingCheckoutData] = useState<{
+    location: LocationData | null
+    nearestLocation: any
+  } | null>(null)
 
   useEffect(() => {
     fetchUserProfile()
@@ -417,7 +433,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         let message = result.message
 
         if (result.missedCheckoutWarning) {
-          // Show prominent warning message
           setError(
             `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
           )
@@ -430,7 +445,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             setTimeout(() => {
               window.location.reload()
             }, 2000)
-          }, 4000) // Show warning for 4 seconds
+          }, 30000) // Changed from 4000 to 30000 (30 seconds)
           return
         }
 
@@ -459,8 +474,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     setSuccess(null)
 
     try {
-      // The server will return a proper error if checkout is not allowed
-
       let location = null
       let nearestLocation = null
 
@@ -518,12 +531,37 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         return
       }
 
+      const currentHour = new Date().getHours()
+      if (currentHour < 17) {
+        // Before 5:00 PM
+        setPendingCheckoutData({ location, nearestLocation })
+        setShowEarlyCheckoutDialog(true)
+        setIsLoading(false)
+        return
+      }
+
+      await performCheckout(location, nearestLocation, null)
+    } catch (error) {
+      console.error("[v0] Check-out error:", error)
+      const message = error instanceof Error ? error.message : "Failed to check out"
+      setError(message)
+      setIsLoading(false)
+    }
+  }
+
+  const performCheckout = async (location: LocationData | null, nearestLocation: any, reason: string | null) => {
+    setIsLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
       console.log("[v0] Attempting automatic check-out with location:", nearestLocation?.name)
 
       const requestBody = {
         latitude: location?.latitude || null,
         longitude: location?.longitude || null,
         location_id: nearestLocation?.id || null,
+        early_checkout_reason: reason || null,
       }
 
       console.log("[v0] Check-out request body:", requestBody)
@@ -565,7 +603,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             setTimeout(() => {
               window.location.reload()
             }, 2000)
-          }, 7000)
+          }, 30000) // Changed from 7000 to 30000 (30 seconds)
           return
         }
 
@@ -583,6 +621,34 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleEarlyCheckoutConfirm = async () => {
+    if (!earlyCheckoutReason.trim()) {
+      setError("Please provide a reason for early checkout")
+      return
+    }
+
+    setShowEarlyCheckoutDialog(false)
+
+    if (pendingCheckoutData) {
+      await performCheckout(
+        pendingCheckoutData.location,
+        pendingCheckoutData.nearestLocation,
+        earlyCheckoutReason.trim(),
+      )
+    }
+
+    // Reset state
+    setEarlyCheckoutReason("")
+    setPendingCheckoutData(null)
+  }
+
+  const handleEarlyCheckoutCancel = () => {
+    setShowEarlyCheckoutDialog(false)
+    setEarlyCheckoutReason("")
+    setPendingCheckoutData(null)
+    setIsLoading(false)
   }
 
   const handleQRCheckIn = async (qrData: QRCodeData) => {
@@ -625,7 +691,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         const message = result.message
 
         if (result.missedCheckoutWarning) {
-          // Show prominent warning message
           setError(
             `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
           )
@@ -635,7 +700,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
             setTimeout(() => {
               window.location.reload()
             }, 2000)
-          }, 4000) // Show warning for 4 seconds
+          }, 30000) // Changed from 4000 to 30000 (30 seconds)
           return
         }
 
@@ -1223,6 +1288,39 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={showEarlyCheckoutDialog} onOpenChange={setShowEarlyCheckoutDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Early Checkout Confirmation</DialogTitle>
+            <DialogDescription>
+              You are checking out before the standard 5:00 PM end time. Please provide a reason for this early
+              checkout. This will be recorded and visible to your department head.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reason">Reason for Early Checkout *</Label>
+              <Textarea
+                id="reason"
+                placeholder="Please explain why you are checking out early..."
+                value={earlyCheckoutReason}
+                onChange={(e) => setEarlyCheckoutReason(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleEarlyCheckoutCancel} className="bg-transparent">
+              Cancel
+            </Button>
+            <Button onClick={handleEarlyCheckoutConfirm} disabled={!earlyCheckoutReason.trim()}>
+              Confirm Check Out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
