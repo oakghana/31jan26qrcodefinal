@@ -34,6 +34,7 @@ import {
   ChevronRight,
   User,
   LogOut,
+  HelpCircle,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -94,6 +95,13 @@ const navigationItems = [
     title: "Reports",
     href: "/dashboard/reports",
     icon: BarChart3,
+    roles: ["admin", "department_head", "staff"],
+    category: "main",
+  },
+  {
+    title: "Help",
+    href: "/dashboard/help",
+    icon: HelpCircle,
     roles: ["admin", "department_head", "staff"],
     category: "main",
   },
