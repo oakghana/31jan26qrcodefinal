@@ -36,9 +36,31 @@ export function detectWindowsLocationCapabilities(): {
   hasWiFi: boolean
   supportedSources: string[]
   recommendedSettings: PositionOptions
+  browserName: string
+  hasKnownIssues: boolean
+  issueDescription?: string
 } {
   const userAgent = navigator.userAgent.toLowerCase()
   const isWindows = userAgent.includes("windows")
+
+  let browserName = "Unknown"
+  let hasKnownIssues = false
+  let issueDescription = ""
+
+  if (userAgent.includes("opr/") || userAgent.includes("opera")) {
+    browserName = "Opera"
+    hasKnownIssues = true
+    issueDescription =
+      "Opera browser on Windows has known GPS accuracy issues and often uses IP-based location (very inaccurate). We strongly recommend using Chrome or Edge for GPS check-in, or use the QR code option for reliable attendance."
+  } else if (userAgent.includes("firefox")) {
+    browserName = "Firefox"
+  } else if (userAgent.includes("edg/")) {
+    browserName = "Edge"
+  } else if (userAgent.includes("chrome")) {
+    browserName = "Chrome"
+  } else if (userAgent.includes("safari")) {
+    browserName = "Safari"
+  }
 
   // Detect available location sources on Windows
   const hasGPS = "geolocation" in navigator && "permissions" in navigator
@@ -51,8 +73,8 @@ export function detectWindowsLocationCapabilities(): {
 
   const recommendedSettings: PositionOptions = {
     enableHighAccuracy: true,
-    timeout: isWindows ? 10000 : 8000, // Faster timeout for quicker QR code fallback
-    maximumAge: 0, // Always request fresh location data, no cached positions
+    timeout: isWindows ? 10000 : 8000,
+    maximumAge: 0,
   }
 
   return {
@@ -61,6 +83,9 @@ export function detectWindowsLocationCapabilities(): {
     hasWiFi,
     supportedSources,
     recommendedSettings,
+    browserName,
+    hasKnownIssues,
+    issueDescription,
   }
 }
 
@@ -217,7 +242,7 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
 export function isWithinGeofence(
   userLocation: LocationData,
   geofenceLocation: GeofenceLocation,
-): { isWithin: boolean; distance: number; accuracyWarning?: string } {
+): { isWithin: boolean; distance: number; accuracyWarning?: string; criticalAccuracyIssue?: boolean } {
   const distance = calculateDistance(
     userLocation.latitude,
     userLocation.longitude,
@@ -225,27 +250,52 @@ export function isWithinGeofence(
     geofenceLocation.longitude,
   )
 
-  const toleranceBuffer = 20 // Additional buffer for GPS accuracy variations
+  const toleranceBuffer = 20
   const effectiveRadius = geofenceLocation.radius_meters + toleranceBuffer
   const isWithin = distance <= effectiveRadius
 
   let accuracyWarning: string | undefined
+  let criticalAccuracyIssue = false
 
   const capabilities = detectWindowsLocationCapabilities()
 
-  if (userLocation.accuracy > 20) {
-    accuracyWarning = capabilities.isWindows
-      ? `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For better accuracy on Windows:
+  if (userLocation.accuracy > 1000) {
+    criticalAccuracyIssue = true
+    accuracyWarning = capabilities.hasKnownIssues
+      ? `⚠️ CRITICAL: GPS accuracy is extremely poor (${(userLocation.accuracy / 1000).toFixed(1)}km)!
+
+${capabilities.issueDescription}
+
+RECOMMENDED SOLUTION: Use the QR Code option below for instant and accurate check-in/check-out.`
+      : `⚠️ CRITICAL: GPS accuracy is extremely poor (${(userLocation.accuracy / 1000).toFixed(1)}km)!
+
+Your browser is using IP-based location instead of GPS, making it highly inaccurate.
+
+RECOMMENDED SOLUTIONS:
+1. Use the QR Code option below for instant check-in/check-out (FASTEST)
+2. Switch to Chrome or Microsoft Edge browser for better GPS accuracy
+3. Enable Windows Location Services in Settings → Privacy & Security → Location`
+  } else if (userLocation.accuracy > 100) {
+    accuracyWarning = capabilities.hasKnownIssues
+      ? `GPS accuracy is poor (${Math.round(userLocation.accuracy)}m). 
+
+Browser: ${capabilities.browserName} - Known GPS issues on Windows.
+
+RECOMMENDED: Use QR code for reliable check-in, or switch to Chrome/Edge browser.`
+      : capabilities.isWindows
+        ? `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For better accuracy on Windows:
 • Move near a window for better GPS signal
 • Ensure Windows Location Services are enabled
-• Check that Wi-Fi is connected for assisted positioning`
-      : "GPS accuracy is low. Please ensure you have a clear view of the sky for better location precision."
+• Check that Wi-Fi is connected for assisted positioning
+• Or use QR code for instant check-in`
+        : "GPS accuracy is low. Please ensure you have a clear view of the sky for better location precision, or use QR code."
   }
 
   return {
     isWithin,
     distance: Math.round(distance),
     accuracyWarning,
+    criticalAccuracyIssue,
   }
 }
 
@@ -289,11 +339,12 @@ export function validateAttendanceLocation(
   distance?: number
   message: string
   accuracyWarning?: string
+  criticalAccuracyIssue?: boolean
   allLocations?: Array<{ location: GeofenceLocation; distance: number }>
   availableLocations?: Array<{ location: GeofenceLocation; distance: number }>
 } {
   const baseProximityDistance = proximitySettings?.checkInProximityRange || 50
-  const toleranceBuffer = 50 // Increased buffer to account for browser GPS variance (total effective range: 100m)
+  const toleranceBuffer = 50
   const globalProximityDistance = baseProximityDistance + toleranceBuffer
 
   const nearest = findNearestLocation(userLocation, qccLocations)
@@ -330,19 +381,40 @@ export function validateAttendanceLocation(
   }
 
   let accuracyWarning: string | undefined
+  let criticalAccuracyIssue = false
   const capabilities = detectWindowsLocationCapabilities()
 
-  if (userLocation.accuracy > 30) {
-    accuracyWarning = capabilities.isWindows
-      ? `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For better accuracy with ${globalProximityDistance}m proximity range on Windows:
-• Ensure Windows Location Services are enabled in Settings
-• Move to a location with better GPS signal (near windows)
-• Check that Wi-Fi is connected for assisted positioning
-• Consider using QR code for guaranteed check-in`
-      : `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For best results with ${globalProximityDistance}m proximity range:
-• Ensure you have a clear view of the sky
-• Move to a location with better GPS signal
-• Consider using QR code for guaranteed check-in`
+  if (userLocation.accuracy > 1000) {
+    criticalAccuracyIssue = true
+    accuracyWarning = capabilities.hasKnownIssues
+      ? `⚠️ CRITICAL GPS ISSUE: Your location accuracy is ${(userLocation.accuracy / 1000).toFixed(1)}km!
+
+Browser: ${capabilities.browserName}
+${capabilities.issueDescription}
+
+✅ SOLUTION: Use the QR Code button below for instant and accurate attendance tracking!`
+      : `⚠️ CRITICAL GPS ISSUE: Your location accuracy is ${(userLocation.accuracy / 1000).toFixed(1)}km!
+
+Your browser is using IP-based location (very inaccurate) instead of actual GPS.
+
+SOLUTIONS:
+✅ Use QR Code option below (FASTEST & MOST RELIABLE)
+🌐 Switch to Chrome or Microsoft Edge browser for better GPS
+⚙️ Enable Windows Location Services in Settings`
+  } else if (userLocation.accuracy > 100) {
+    accuracyWarning = capabilities.hasKnownIssues
+      ? `⚠️ Poor GPS accuracy (${Math.round(userLocation.accuracy)}m)
+
+Browser: ${capabilities.browserName} has known GPS issues on Windows.
+
+RECOMMENDED: Use QR code or switch to Chrome/Edge for better accuracy.`
+      : capabilities.isWindows
+        ? `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For better accuracy:
+• Move near a window for better GPS signal  
+• Ensure Windows Location Services are enabled
+• Connect to Wi-Fi for assisted positioning
+• Or use QR code for guaranteed check-in`
+        : `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). Consider using QR code for reliable check-in.`
   }
 
   return {
@@ -351,6 +423,7 @@ export function validateAttendanceLocation(
     distance: nearest.distance,
     message,
     accuracyWarning,
+    criticalAccuracyIssue,
     allLocations: allLocationsWithDistance,
     availableLocations,
   }

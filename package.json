@@ -56,7 +56,7 @@
     "next": "14.2.25",
     "next-themes": "latest",
     "nodemailer": "latest",
-    "qr-scanner": "latest",
+    "qr-scanner": "1.4.2",
     "qrcode": "latest",
     "qrcode.react": "latest",
     "react": "^19",

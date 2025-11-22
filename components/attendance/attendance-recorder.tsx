@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -26,12 +26,11 @@ import {
   type ProximitySettings,
 } from "@/lib/geolocation"
 import { getDeviceInfo } from "@/lib/device-info"
-import { validateQRCode, type QRCodeData } from "@/lib/qr-code"
+import type { QRCodeData } from "@/lib/qr-code"
 import { MapPin, Clock, Loader2, AlertTriangle, Navigation, QrCode, CheckCircle2 } from "lucide-react"
 import { useRealTimeLocations } from "@/hooks/use-real-time-locations"
 import { createClient } from "@/lib/supabase/client"
-import QrScanner from "qr-scanner" // Import QrScanner
-import { useRef } from "react" // Import React and useRef
+import { QRScanner } from "@/components/qr/qr-scanner"
 
 interface GeofenceLocation {
   id: string
@@ -97,6 +96,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     distance?: number
     message: string
     accuracyWarning?: string
+    criticalAccuracyIssue?: boolean
     allLocations?: { location: GeofenceLocation; distance: number }[]
     availableLocations?: { location: GeofenceLocation; distance: number }[]
   } | null>(null)
@@ -124,9 +124,9 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   } | null>(null)
 
   // QR Scanner state and refs
-  const qrScannerRef = useRef<QrScanner | null>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const qrResultRef = useRef<string | null>(null)
+  // const qrScannerRef = useRef<QrScanner | null>(null) // REMOVED
+  // const videoRef = useRef<HTMLVideoElement>(null) // REMOVED
+  // const qrResultRef = useRef<string | null>(null) // REMOVED
 
   // Redundant state, managed by `todayAttendance` prop.
   // const [canCheckIn, setCanCheckIn] = useState(false)
@@ -148,6 +148,97 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     granted: false,
     message: "Click 'Get Current Location' to enable GPS-based attendance",
   })
+
+  const handleQRScanSuccess = async (qrData: QRCodeData) => {
+    console.log("[v0] QR scan successful, mode:", qrScanMode)
+    setShowQRScanner(false)
+
+    if (qrScanMode === "checkin") {
+      await handleQRCheckIn(qrData)
+    } else {
+      await handleQRCheckOut(qrData)
+    }
+  }
+
+  const handleQRCheckIn = async (qrData: QRCodeData) => {
+    setIsLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      console.log("[v0] Processing QR check-in with data:", qrData)
+
+      const response = await fetch("/api/attendance/qr-checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          qrData,
+          deviceInfo: getDeviceInfo(),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to check in with QR code")
+      }
+
+      setSuccess("✓ Checked in successfully with QR code!")
+      console.log("[v0] QR check-in successful")
+
+      // mutate() // Assuming mutate is a function from SWR or similar, not defined here, so commented out.
+
+      // Show success popup
+      setTimeout(() => {
+        setSuccess(null)
+      }, 5000)
+    } catch (error: any) {
+      console.error("[v0] QR check-in error:", error)
+      setError(error.message || "Failed to check in with QR code")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleQRCheckOut = async (qrData: QRCodeData) => {
+    setIsLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      console.log("[v0] Processing QR check-out with data:", qrData)
+
+      const response = await fetch("/api/attendance/qr-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          qrData,
+          deviceInfo: getDeviceInfo(),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to check out with QR code")
+      }
+
+      setSuccess("✓ Checked out successfully with QR code!")
+      console.log("[v0] QR check-out successful")
+
+      // mutate() // Assuming mutate is a function from SWR or similar, not defined here, so commented out.
+
+      // Show success popup
+      setTimeout(() => {
+        setSuccess(null)
+      }, 5000)
+    } catch (error: any) {
+      console.error("[v0] QR check-out error:", error)
+      setError(error.message || "Failed to check out with QR code")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleUseQRCode = (mode: "checkin" | "checkout") => {
     // Redirect to QR Events page with mode parameter
@@ -307,13 +398,25 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       console.log("[v0] Nearest location being checked:", validation.nearestLocation?.name)
       console.log("[v0] Using proximity range:", proximitySettings.checkInProximityRange)
 
+      // Check for critical accuracy issues
+      const criticalAccuracyIssue =
+        userLocation.accuracy > 1000 || (windowsCapabilities?.isWindows && userLocation.accuracy > 100)
+      let accuracyWarning = ""
+      if (criticalAccuracyIssue) {
+        accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is critically low. For accurate attendance, please use the QR code option or ensure you are in an open area with clear sky view.`
+      } else if (userLocation.accuracy > 100) {
+        accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is moderate. For best results, ensure you have a clear view of the sky or move closer to your assigned location.`
+      }
+
       setLocationValidation({
         ...validation,
         canCheckOut: checkoutValidation.canCheckOut,
         allLocations: locationDistances,
+        criticalAccuracyIssue,
+        accuracyWarning,
       })
     }
-  }, [userLocation, locations, proximitySettings])
+  }, [userLocation, locations, proximitySettings, windowsCapabilities])
 
   const fetchUserProfile = async () => {
     try {
@@ -746,178 +849,64 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   }
 
   // QR Scanner functions
-  const startScanner = async () => {
-    if (!videoRef.current) return
+  // REMOVED: startScanner, stopScanner, useEffect for QR scanner start/stop
+  // const startScanner = async () => {
+  //   if (!videoRef.current) return
 
-    try {
-      // Request camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      videoRef.current.srcObject = stream
+  //   try {
+  //     // Request camera permission
+  //     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+  //     videoRef.current.srcObject = stream
 
-      qrScannerRef.current = new QrScanner(
-        videoRef.current,
-        (result) => {
-          qrResultRef.current = result.data // Store result in ref
-          if (qrScanMode === "checkin") {
-            handleQRCheckIn(JSON.parse(result.data))
-          } else {
-            handleQRCheckOut(JSON.parse(result.data))
-          }
-          setShowQRScanner(false) // Close scanner after successful scan
-          qrScannerRef.current?.stop() // Stop the scanner
-        },
-        {
-          // options: https://qr-scanner.github.io/api/#/ScannerOptions
-          highlightScanRegion: true,
-          highlightCodeOutline: true,
-        },
-      )
+  //     qrScannerRef.current = new QrScanner(
+  //       videoRef.current,
+  //       (result) => {
+  //         qrResultRef.current = result.data // Store result in ref
+  //         if (qrScanMode === "checkin") {
+  //           handleQRCheckIn(JSON.parse(result.data))
+  //         } else {
+  //           handleQRCheckOut(JSON.parse(result.data))
+  //         }
+  //         setShowQRScanner(false) // Close scanner after successful scan
+  //         qrScannerRef.current?.stop() // Stop the scanner
+  //       },
+  //       {
+  //         // options: https://qr-scanner.github.io/api/#/ScannerOptions
+  //         highlightScanRegion: true,
+  //         highlightCodeOutline: true,
+  //       },
+  //     )
 
-      await qrScannerRef.current.start()
-    } catch (error) {
-      console.error("Failed to start QR scanner:", error)
-      setError("Could not start camera. Please check permissions or try again.")
-      setShowQRScanner(false) // Close scanner if camera fails
-    }
-  }
+  //     await qrScannerRef.current.start()
+  //   } catch (error) {
+  //     console.error("Failed to start QR scanner:", error)
+  //     setError("Could not start camera. Please check permissions or try again.")
+  //     setShowQRScanner(false) // Close scanner if camera fails
+  //   }
+  // }
 
-  const stopScanner = () => {
-    if (qrScannerRef.current) {
-      qrScannerRef.current.stop()
-      qrScannerRef.current = null
-    }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach((track) => track.stop())
-      videoRef.current.srcObject = null
-    }
-  }
+  // const stopScanner = () => {
+  //   if (qrScannerRef.current) {
+  //     qrScannerRef.current.stop()
+  //     qrScannerRef.current = null
+  //   }
+  //   if (videoRef.current && videoRef.current.srcObject) {
+  //     const stream = videoRef.current.srcObject as MediaStream
+  //     stream.getTracks().forEach((track) => track.stop())
+  //     videoRef.current.srcObject = null
+  //   }
+  // }
 
-  useEffect(() => {
-    if (showQRScanner) {
-      startScanner()
-    } else {
-      stopScanner()
-    }
-    return () => stopScanner() // Cleanup on unmount
-  }, [showQRScanner, qrScanMode])
+  // useEffect(() => {
+  //   if (showQRScanner) {
+  //     startScanner()
+  //   } else {
+  //     stopScanner()
+  //   }
+  //   return () => stopScanner() // Cleanup on unmount
+  // }, [showQRScanner, qrScanMode])
 
-  const handleQRCheckIn = async (qrData: QRCodeData) => {
-    setIsLoading(true)
-    setError(null)
-    setSuccess(null)
-    setShowQRScanner(false) // Ensure scanner is closed
-
-    try {
-      const validation = validateQRCode(qrData)
-      if (!validation.isValid) {
-        setError(validation.reason || "Invalid QR code")
-        return
-      }
-
-      const location = locations.find((loc) => loc.id === qrData.locationId)
-      if (!location) {
-        setError("Location not found")
-        return
-      }
-
-      const deviceInfo = getDeviceInfo()
-
-      const response = await fetch("/api/attendance/check-in", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          location_id: location.id,
-          device_info: deviceInfo,
-          qr_code_used: true,
-          qr_timestamp: qrData.timestamp,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        const message = result.message
-
-        if (result.missedCheckoutWarning) {
-          setError(
-            `⚠️ IMPORTANT: ${result.missedCheckoutWarning.message}\n\nYour previous day's attendance has been automatically closed at 11:59 PM. This will be visible to your department head.`,
-          )
-          setTimeout(() => {
-            setError(null)
-            setSuccessDialogMessage(message)
-            setShowSuccessDialog(true)
-            setTimeout(() => {
-              window.location.reload()
-            }, 70000)
-          }, 70000)
-          return
-        }
-
-        setSuccessDialogMessage(message)
-        setShowSuccessDialog(true)
-        setTimeout(() => {
-          window.location.reload()
-        }, 70000)
-      } else {
-        setError(result.error || "Failed to check in with QR code")
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to check in with QR code"
-      setError(message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleQRCheckOut = async (qrData: QRCodeData) => {
-    setIsLoading(true)
-    setError(null)
-    setSuccess(null)
-    setShowQRScanner(false) // Ensure scanner is closed
-
-    try {
-      const validation = validateQRCode(qrData)
-      if (!validation.isValid) {
-        setError(validation.reason || "Invalid QR code")
-        return
-      }
-
-      const location = locations.find((loc) => loc.id === qrData.locationId)
-      if (!location) {
-        setError("Location not found")
-        return
-      }
-
-      const response = await fetch("/api/attendance/check-out", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          location_id: location.id,
-          qr_code_used: true,
-          qr_timestamp: qrData.timestamp,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        setSuccess(result.message)
-        window.location.reload()
-      } else {
-        setError(result.error || "Failed to check out")
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to check out"
-      setError(message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // REMOVED: handleQRCheckIn, handleQRCheckOut - Replaced by new ones above
 
   const handleRequestLocationPermission = async () => {
     setIsLoading(true)
@@ -1114,7 +1103,13 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                   <div className="font-medium text-sm">Location Detected</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     Accuracy: {userLocation.accuracy.toFixed(0)}m • Source: {userLocation.source || "GPS"}
+                    {windowsCapabilities?.browserName && ` • Browser: ${windowsCapabilities.browserName}`}
                   </div>
+                  {userLocation.accuracy > 1000 && (
+                    <Badge variant="destructive" className="mt-2 text-xs">
+                      ⚠️ Critical: {(userLocation.accuracy / 1000).toFixed(1)}km accuracy - Use QR Code Instead
+                    </Badge>
+                  )}
                 </div>
                 <Button
                   onClick={handleRefreshLocations}
@@ -1126,6 +1121,55 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
                   <Navigation className="h-4 w-4" />
                 </Button>
               </div>
+
+              {windowsCapabilities?.hasKnownIssues && (
+                <Alert variant="destructive" className="border-destructive/50">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle className="text-sm">Browser Compatibility Issue</AlertTitle>
+                  <AlertDescription className="text-xs space-y-2">
+                    <p>{windowsCapabilities.issueDescription}</p>
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        onClick={() => {
+                          const mode = isCheckedIn && !isCheckedOut ? "checkout" : "checkin"
+                          setQrScanMode(mode)
+                          setShowQRScanner(true)
+                        }}
+                        size="sm"
+                        variant="default"
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <QrCode className="h-3 w-3 mr-1" />
+                        Use QR Code Instead
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {locationValidation?.criticalAccuracyIssue && locationValidation?.accuracyWarning && (
+                <Alert variant="destructive" className="border-destructive/50">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle className="text-sm font-semibold">Critical GPS Accuracy Issue</AlertTitle>
+                  <AlertDescription className="text-xs whitespace-pre-line">
+                    {locationValidation.accuracyWarning}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {locationValidation?.accuracyWarning &&
+                !locationValidation?.criticalAccuracyIssue &&
+                userLocation.accuracy > 100 && (
+                  <Alert variant="default" className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    <AlertTitle className="text-sm text-yellow-900 dark:text-yellow-100">
+                      GPS Accuracy Warning
+                    </AlertTitle>
+                    <AlertDescription className="text-xs text-yellow-800 dark:text-yellow-200 whitespace-pre-line">
+                      {locationValidation.accuracyWarning}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
               {userProfile?.assigned_location_id && locations.length > 0 && (
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
@@ -1501,6 +1545,12 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         </Card>
       )}
       {/* NEW CODE END */}
+
+      <Dialog open={showQRScanner} onOpenChange={setShowQRScanner}>
+        <DialogContent className="sm:max-w-md p-0">
+          <QRScanner onScanSuccess={handleQRScanSuccess} onClose={() => setShowQRScanner(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
