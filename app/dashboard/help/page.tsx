@@ -14,6 +14,7 @@ import {
   QrCode,
   Camera,
   Smartphone,
+  MapPin,
 } from "lucide-react"
 
 export default async function HelpPage() {
@@ -391,7 +392,7 @@ export default async function HelpPage() {
 
             <Alert className="bg-green-500/5 border-green-500/20">
               <RefreshCw className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-sm">
+              <AlertDescription>
                 <strong>Tip:</strong> The page automatically refreshes after 70 seconds when you check in or check out,
                 but you can use this button for immediate updates.
               </AlertDescription>
@@ -462,6 +463,151 @@ export default async function HelpPage() {
                 Always hide it before logging in on shared or public computers.
               </AlertDescription>
             </Alert>
+          </CardContent>
+        </Card>
+
+        {/* GPS Location Accuracy Tips */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-purple-600" />
+              GPS Location Accuracy Tips
+            </CardTitle>
+            <CardDescription>Improve GPS accuracy across different browsers and devices</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert className="bg-amber-500/5 border-amber-500/20">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-sm">
+                <strong>Experiencing GPS issues?</strong> GPS accuracy varies significantly across browsers and devices.
+                Follow these tips to improve your location accuracy or use QR codes for instant, reliable check-in.
+              </AlertDescription>
+            </Alert>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="space-y-3">
+                <h4 className="font-medium text-primary">Browser Recommendations</h4>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">Best: Chrome or Edge</p>
+                      <p className="text-muted-foreground">Most accurate GPS on Windows devices</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">Good: Firefox</p>
+                      <p className="text-muted-foreground">Reliable on most devices</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">Avoid: Opera</p>
+                      <p className="text-muted-foreground">
+                        Known GPS issues, often uses IP location (very inaccurate)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-medium text-primary">Windows Users</h4>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Go to Settings → Privacy & Security → Location</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Turn ON "Location services"</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Turn ON "Allow apps to access your location"</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Ensure Wi-Fi is connected (improves accuracy significantly)</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>In browser, click location icon and select "Allow"</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-medium text-primary">Physical Location Tips</h4>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Move near a window for better GPS signal</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Avoid basement or heavily enclosed areas</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Stay still while location is being acquired</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Wait 10-15 seconds for GPS to get accurate fix</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground mt-2 flex-shrink-0" />
+                    <p>Clear sky view improves satellite connection</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <Alert className="bg-green-500/5 border-green-500/20">
+              <QrCode className="h-4 w-4 text-green-600" />
+              <AlertDescription>
+                <strong>Best Alternative:</strong> If GPS continues to have issues, use the QR Code option for instant
+                and 100% accurate check-in/check-out. No GPS needed, works on all browsers!
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <h4 className="font-medium">Understanding GPS Accuracy:</h4>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <p>
+                    <strong>Good accuracy (0-30m):</strong> GPS check-in will work reliably
+                  </p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p>
+                    <strong>Moderate accuracy (30-100m):</strong> May work but consider using QR code
+                  </p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <p>
+                    <strong>Poor accuracy (100m-1km):</strong> Strongly recommend using QR code instead
+                  </p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <p>
+                    <strong>Critical accuracy (&gt;1km):</strong> Browser using IP location - MUST use QR code
+                  </p>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

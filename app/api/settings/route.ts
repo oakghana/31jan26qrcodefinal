@@ -108,9 +108,20 @@ export async function PUT(request: NextRequest) {
 
     // Update system settings if admin
     if (systemSettings && profile?.role === "admin") {
+      if (systemSettings.geo_settings?.browserTolerances) {
+        const tolerances = systemSettings.geo_settings.browserTolerances
+        const validatedTolerances: any = {}
+
+        for (const [browser, distance] of Object.entries(tolerances)) {
+          validatedTolerances[browser] = Math.max(50, Math.min(5000, Number(distance)))
+        }
+
+        systemSettings.geo_settings.browserTolerances = validatedTolerances
+      }
+
       if (systemSettings.geo_settings?.checkInProximityRange) {
         const validatedProximity = Math.max(
-          50, // Updated minimum proximity distance from 100m to 50m
+          50,
           Math.min(2000, Number.parseInt(systemSettings.geo_settings.checkInProximityRange)),
         )
         systemSettings.geo_settings.checkInProximityRange = validatedProximity.toString()
@@ -136,12 +147,12 @@ export async function PUT(request: NextRequest) {
 
       await supabase.from("audit_logs").insert({
         user_id: user.id,
-        action: "update_global_proximity_distance",
+        action: "update_system_settings",
         details: {
           updated_fields: Object.keys(systemSettings),
-          global_proximity_distance:
-            systemSettings.geo_settings?.globalProximityDistance || systemSettings.geo_settings?.checkInProximityRange,
-          message: "Global proximity distance updated - applies to all staff members",
+          browser_tolerances: systemSettings.geo_settings?.browserTolerances,
+          browser_specific_enabled: systemSettings.geo_settings?.enableBrowserSpecificTolerance,
+          message: "System settings updated including browser-specific GPS tolerances",
         },
         ip_address: request.headers.get("x-forwarded-for") || null,
         user_agent: request.headers.get("user-agent") || "unknown",

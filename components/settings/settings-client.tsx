@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Settings, MapPin, Shield, Save, Database, Bell, LogOut, AlertTriangle } from "lucide-react"
+import { Settings, MapPin, Shield, Save, Database, Bell, LogOut, AlertTriangle, Globe, Info } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PasswordManagement } from "@/components/admin/password-management"
 import { useRouter } from "next/navigation"
@@ -40,9 +40,18 @@ export function SettingsClient({ initialSettings }: SettingsClientProps) {
     defaultRadius: "20",
     allowManualOverride: false,
     requireHighAccuracy: true,
-    maxLocationAge: "300000", // 5 minutes
-    checkInProximityRange: "50", // Changed from "500" to "50" - global proximity distance for ALL users
-    globalProximityDistance: "50", // Changed from "500" to "50" - explicit global setting
+    maxLocationAge: "300000",
+    checkInProximityRange: "50",
+    globalProximityDistance: "1500",
+    enableBrowserSpecificTolerance: true,
+    browserTolerances: {
+      chrome: 200,
+      edge: 200,
+      firefox: 500,
+      safari: 300,
+      opera: 1500,
+      default: 1500,
+    },
   })
 
   const [appSettings, setAppSettings] = useState({
@@ -58,7 +67,7 @@ export function SettingsClient({ initialSettings }: SettingsClientProps) {
 
   const [systemSettings, setSystemSettings] = useState({
     maxAttendanceRadius: "20",
-    sessionTimeout: "480", // 8 hours in minutes
+    sessionTimeout: "480",
     allowOfflineMode: false,
     requirePhotoVerification: false,
     enableAuditLog: true,
@@ -563,6 +572,254 @@ export function SettingsClient({ initialSettings }: SettingsClientProps) {
 
       {initialSettings.profile?.role === "admin" && (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                <Shield className="h-4 w-4 text-blue-500" />
+                Browser-Specific GPS Tolerance (Admin Only)
+              </CardTitle>
+              <CardDescription>
+                Configure different proximity tolerances for each browser to account for GPS accuracy variations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
+                <div>
+                  <Label htmlFor="enableBrowserSpecificTolerance" className="text-base font-semibold">
+                    Enable Browser-Specific Tolerances
+                  </Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Automatically adjust GPS acceptance distance based on user's browser
+                  </p>
+                </div>
+                <Switch
+                  id="enableBrowserSpecificTolerance"
+                  checked={geoSettings.enableBrowserSpecificTolerance}
+                  onCheckedChange={(checked) =>
+                    setGeoSettings({ ...geoSettings, enableBrowserSpecificTolerance: checked })
+                  }
+                />
+              </div>
+
+              {geoSettings.enableBrowserSpecificTolerance && (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="chromeTolerance" className="flex items-center gap-2">
+                        <span className="text-green-600">●</span> Chrome / Edge (meters)
+                      </Label>
+                      <Input
+                        id="chromeTolerance"
+                        type="number"
+                        min="50"
+                        max="5000"
+                        value={geoSettings.browserTolerances.chrome}
+                        onChange={(e) =>
+                          setGeoSettings({
+                            ...geoSettings,
+                            browserTolerances: {
+                              ...geoSettings.browserTolerances,
+                              chrome: Number(e.target.value),
+                              edge: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Best GPS accuracy - Recommended: 200m</p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="firefoxTolerance" className="flex items-center gap-2">
+                        <span className="text-orange-600">●</span> Firefox (meters)
+                      </Label>
+                      <Input
+                        id="firefoxTolerance"
+                        type="number"
+                        min="50"
+                        max="5000"
+                        value={geoSettings.browserTolerances.firefox}
+                        onChange={(e) =>
+                          setGeoSettings({
+                            ...geoSettings,
+                            browserTolerances: {
+                              ...geoSettings.browserTolerances,
+                              firefox: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Good accuracy - Recommended: 500m</p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="safariTolerance" className="flex items-center gap-2">
+                        <span className="text-blue-600">●</span> Safari (meters)
+                      </Label>
+                      <Input
+                        id="safariTolerance"
+                        type="number"
+                        min="50"
+                        max="5000"
+                        value={geoSettings.browserTolerances.safari}
+                        onChange={(e) =>
+                          setGeoSettings({
+                            ...geoSettings,
+                            browserTolerances: {
+                              ...geoSettings.browserTolerances,
+                              safari: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Variable - Recommended: 300m</p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="operaTolerance" className="flex items-center gap-2">
+                        <span className="text-red-600">●</span> Opera (meters)
+                      </Label>
+                      <Input
+                        id="operaTolerance"
+                        type="number"
+                        min="50"
+                        max="5000"
+                        value={geoSettings.browserTolerances.opera}
+                        onChange={(e) =>
+                          setGeoSettings({
+                            ...geoSettings,
+                            browserTolerances: {
+                              ...geoSettings.browserTolerances,
+                              opera: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Poor accuracy - Recommended: 1500m</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-950">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-blue-800 dark:text-blue-200">How Browser Tolerances Work</p>
+                        <ul className="text-sm text-blue-700 dark:text-blue-300 mt-2 space-y-1 list-disc list-inside">
+                          <li>System automatically detects which browser the user is using</li>
+                          <li>Applies the appropriate tolerance distance for that browser</li>
+                          <li>Chrome users only need to be within {geoSettings.browserTolerances.chrome}m</li>
+                          <li>Firefox users only need to be within {geoSettings.browserTolerances.firefox}m</li>
+                          <li>Opera users only need to be within {geoSettings.browserTolerances.opera}m</li>
+                          <li>All users still see "50m radius" in the UI for consistency</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Global Proximity Settings (Admin Only) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                <Shield className="h-4 w-4 text-orange-500" />
+                Global Proximity Settings (Admin Only)
+              </CardTitle>
+              <CardDescription>
+                {geoSettings.enableBrowserSpecificTolerance
+                  ? "Reference distance shown to users (actual tolerance varies by browser)"
+                  : "Configure proximity distance that applies to ALL staff members consistently"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-1">
+                <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
+                  <Label htmlFor="globalProximityDistance" className="text-base font-semibold">
+                    Global Proximity Distance (meters)
+                  </Label>
+                  <Input
+                    id="globalProximityDistance"
+                    type="number"
+                    min="50"
+                    max="2000"
+                    value={geoSettings.checkInProximityRange}
+                    onChange={(e) =>
+                      setGeoSettings({
+                        ...geoSettings,
+                        checkInProximityRange: e.target.value,
+                        globalProximityDistance: e.target.value,
+                      })
+                    }
+                    className="mt-2 text-lg font-medium"
+                  />
+                  <p className="text-sm text-muted-foreground mt-2">
+                    <strong>This distance applies to ALL staff members consistently.</strong>
+                    <br />
+                    Staff can check in when they are within this distance from any QCC location.
+                    <br />
+                    Recommended: 50-100m for strict control, 200-500m for general use.
+                  </p>
+                  <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border">
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                      ✓ Current setting: {geoSettings.checkInProximityRange}m proximity for all users
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Individual location radius settings are now used for reference only
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="maxLocationAge">Max Location Age (milliseconds)</Label>
+                  <Input
+                    id="maxLocationAge"
+                    type="number"
+                    value={geoSettings.maxLocationAge}
+                    onChange={(e) => setGeoSettings({ ...geoSettings, maxLocationAge: e.target.value })}
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">Maximum age of cached location data</p>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="requireHighAccuracy">Require High Accuracy GPS</Label>
+                    <Switch
+                      id="requireHighAccuracy"
+                      checked={geoSettings.requireHighAccuracy}
+                      onCheckedChange={(checked) => setGeoSettings({ ...geoSettings, requireHighAccuracy: checked })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="allowManualOverride">Allow Manual Location Override</Label>
+                    <Switch
+                      id="allowManualOverride"
+                      checked={geoSettings.allowManualOverride}
+                      onCheckedChange={(checked) => setGeoSettings({ ...geoSettings, allowManualOverride: checked })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-orange-200 rounded-lg bg-orange-50 dark:bg-orange-950/30">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-orange-800 dark:text-orange-200">Proximity Distance Consistency</p>
+                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                      The global proximity distance setting above will be applied to ALL staff members immediately when
+                      saved. Individual location radius settings are maintained for reference but do not affect
+                      attendance validation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* System Settings - Admin Only */}
           <Card>
             <CardHeader>
@@ -642,104 +899,6 @@ export function SettingsClient({ initialSettings }: SettingsClientProps) {
                     checked={systemSettings.enableAuditLog}
                     onCheckedChange={(checked) => setSystemSettings({ ...systemSettings, enableAuditLog: checked })}
                   />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Enhanced Geolocation Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                <Shield className="h-4 w-4 text-orange-500" />
-                Global Proximity Settings (Admin Only)
-              </CardTitle>
-              <CardDescription>
-                Configure proximity distance that applies to ALL staff members consistently
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-1">
-                <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-950">
-                  <Label htmlFor="globalProximityDistance" className="text-base font-semibold">
-                    Global Proximity Distance (meters)
-                  </Label>
-                  <Input
-                    id="globalProximityDistance"
-                    type="number"
-                    min="50"
-                    max="2000"
-                    value={geoSettings.checkInProximityRange}
-                    onChange={(e) =>
-                      setGeoSettings({
-                        ...geoSettings,
-                        checkInProximityRange: e.target.value,
-                        globalProximityDistance: e.target.value,
-                      })
-                    }
-                    className="mt-2 text-lg font-medium"
-                  />
-                  <p className="text-sm text-muted-foreground mt-2">
-                    <strong>This distance applies to ALL staff members consistently.</strong>
-                    <br />
-                    Staff can check in when they are within this distance from any QCC location.
-                    <br />
-                    Recommended: 50-100m for strict control, 200-500m for general use.
-                  </p>
-                  <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                      ✓ Current setting: {geoSettings.checkInProximityRange}m proximity for all users
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Individual location radius settings are now used for reference only
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="maxLocationAge">Max Location Age (milliseconds)</Label>
-                  <Input
-                    id="maxLocationAge"
-                    type="number"
-                    value={geoSettings.maxLocationAge}
-                    onChange={(e) => setGeoSettings({ ...geoSettings, maxLocationAge: e.target.value })}
-                  />
-                  <p className="text-sm text-muted-foreground mt-1">Maximum age of cached location data</p>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="requireHighAccuracy">Require High Accuracy GPS</Label>
-                    <Switch
-                      id="requireHighAccuracy"
-                      checked={geoSettings.requireHighAccuracy}
-                      onCheckedChange={(checked) => setGeoSettings({ ...geoSettings, requireHighAccuracy: checked })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="allowManualOverride">Allow Manual Location Override</Label>
-                    <Switch
-                      id="allowManualOverride"
-                      checked={geoSettings.allowManualOverride}
-                      onCheckedChange={(checked) => setGeoSettings({ ...geoSettings, allowManualOverride: checked })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border border-orange-200 rounded-lg bg-orange-50 dark:bg-orange-950">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-orange-800 dark:text-orange-200">Proximity Distance Consistency</p>
-                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                      The global proximity distance setting above will be applied to ALL staff members immediately when
-                      saved. Individual location radius settings are maintained for reference but do not affect
-                      attendance validation.
-                    </p>
-                  </div>
                 </div>
               </div>
             </CardContent>

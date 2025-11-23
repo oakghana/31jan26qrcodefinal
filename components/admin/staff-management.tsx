@@ -86,11 +86,14 @@ export function StaffManagement() {
     assigned_location_id: "",
   })
 
+  const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
+
   useEffect(() => {
     fetchStaff()
     fetchDepartments()
     fetchLocations()
-  }, [searchTerm, selectedDepartment, selectedRole])
+    fetchCurrentUserRole()
+  }, [])
 
   const fetchStaff = async () => {
     try {
@@ -150,6 +153,18 @@ export function StaffManagement() {
       }
     } catch (error) {
       console.error("[v0] Locations fetch exception:", error)
+    }
+  }
+
+  const fetchCurrentUserRole = async () => {
+    try {
+      const response = await fetch("/api/settings")
+      const result = await response.json()
+      if (result.success && result.profile) {
+        setCurrentUserRole(result.profile.role)
+      }
+    } catch (error) {
+      console.error("[v0] Failed to fetch current user role:", error)
     }
   }
 
@@ -384,6 +399,7 @@ export function StaffManagement() {
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="it-admin">IT-Admin</SelectItem>
                   <SelectItem value="department_head">Department Head</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
                   <SelectItem value="nsp">NSP</SelectItem>
@@ -528,7 +544,8 @@ export function StaffManagement() {
                         <SelectContent>
                           <SelectItem value="staff">Staff</SelectItem>
                           <SelectItem value="department_head">Department Head</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                          {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
+                          {currentUserRole === "admin" && <SelectItem value="it-admin">IT-Admin</SelectItem>}
                           <SelectItem value="nsp">NSP</SelectItem>
                           <SelectItem value="intern">Intern</SelectItem>
                           <SelectItem value="contract">Contract</SelectItem>
@@ -684,7 +701,8 @@ export function StaffManagement() {
                       <SelectContent>
                         <SelectItem value="staff">Staff</SelectItem>
                         <SelectItem value="department_head">Department Head</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
+                        {currentUserRole === "admin" && <SelectItem value="admin">Admin</SelectItem>}
+                        {currentUserRole === "admin" && <SelectItem value="it-admin">IT-Admin</SelectItem>}
                         <SelectItem value="nsp">NSP</SelectItem>
                         <SelectItem value="intern">Intern</SelectItem>
                         <SelectItem value="contract">Contract</SelectItem>
@@ -823,6 +841,9 @@ export function StaffManagement() {
                             variant="outline"
                             onClick={() => setEditingStaff(member)}
                             className="h-8 w-8 p-0 hover:bg-primary/10 hover:border-primary/20"
+                            disabled={
+                              currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")
+                            }
                           >
                             <Edit className="h-3 w-3" />
                           </Button>
@@ -839,6 +860,9 @@ export function StaffManagement() {
                             variant="outline"
                             onClick={() => handleDeactivateStaff(member.id)}
                             className="h-8 w-8 p-0 hover:bg-destructive/10 hover:border-destructive/20"
+                            disabled={
+                              currentUserRole === "it-admin" && (member.role === "admin" || member.role === "it-admin")
+                            }
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>

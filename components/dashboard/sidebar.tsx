@@ -17,7 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { clearAppCache } from "@/lib/cache-manager"
+import { clearAppCache, clearCacheAndReload } from "@/lib/cache-manager"
 import {
   Home,
   Clock,
@@ -36,6 +36,7 @@ import {
   User,
   LogOut,
   HelpCircle,
+  RefreshCw,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -124,7 +125,7 @@ const navigationItems = [
     title: "Staff Management",
     href: "/dashboard/staff",
     icon: Users,
-    roles: ["admin"],
+    roles: ["admin", "it-admin"],
     category: "admin",
   },
   {
@@ -159,6 +160,7 @@ const navigationItems = [
 
 export function Sidebar({ user, profile }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isClearingCache, setIsClearingCache] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -181,6 +183,16 @@ export function Sidebar({ user, profile }: SidebarProps) {
     await supabase.auth.signOut()
 
     window.location.href = "/auth/login"
+  }
+
+  const handleClearCache = async () => {
+    setIsClearingCache(true)
+    try {
+      await clearCacheAndReload()
+    } catch (error) {
+      console.error("[v0] Failed to clear cache:", error)
+      setIsClearingCache(false)
+    }
   }
 
   const isHRDepartmentHead =
@@ -357,6 +369,19 @@ export function Sidebar({ user, profile }: SidebarProps) {
                   </Link>
                 )
               })}
+              <button
+                onClick={handleClearCache}
+                disabled={isClearingCache}
+                className="group flex items-center gap-3 px-4 py-4 rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px] w-full text-sidebar-foreground hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 hover:text-foreground hover:shadow-md hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-5 w-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-105",
+                    isClearingCache && "animate-spin",
+                  )}
+                />
+                <span className="flex-1 text-left">{isClearingCache ? "Clearing..." : "Clear Cache"}</span>
+              </button>
             </div>
           </nav>
 

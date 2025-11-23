@@ -211,16 +211,27 @@ export async function POST(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Authentication required" }, 401)
     }
 
-    // Check admin permissions
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || profile.role !== "admin") {
-      return createJsonResponse({ success: false, error: "Admin access required" }, 403)
+    if (!profile || (profile.role !== "admin" && profile.role !== "it-admin")) {
+      return createJsonResponse({ success: false, error: "Admin or IT-Admin access required" }, 403)
     }
 
     const body = await request.json()
     const { email, first_name, last_name, employee_id, department_id, position, role, assigned_location_id, password } =
       body
+
+    if (profile.role === "it-admin" && (role === "admin" || role === "it-admin")) {
+      console.error("[v0] Staff API - IT-Admin tried to create admin/it-admin user")
+      return createJsonResponse(
+        {
+          success: false,
+          error: "IT-Admin users cannot create Admin or IT-Admin accounts",
+          details: "You can only create: Staff, Department Head, NSP, Intern, or Contract users",
+        },
+        403,
+      )
+    }
 
     const { data: existingAuthUser } = await adminSupabase.auth.admin.listUsers()
     const userExists = existingAuthUser.users.find((u) => u.email === email)

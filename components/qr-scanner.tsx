@@ -395,6 +395,56 @@ export function QRScanner({ locations = [] }: { locations: Location[] }) {
         return
       }
 
+      const userLocation = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
+        if (!navigator.geolocation) {
+          console.warn("[v0] Geolocation not supported")
+          resolve(null)
+          return
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            })
+          },
+          (error) => {
+            console.warn("[v0] Location access error:", error)
+            resolve(null)
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 8000,
+            maximumAge: 0,
+          },
+        )
+      })
+
+      if (userLocation && location.latitude && location.longitude) {
+        const distance = calculateDistance(
+          userLocation.lat,
+          userLocation.lng,
+          Number.parseFloat(location.latitude),
+          Number.parseFloat(location.longitude),
+        )
+
+        console.log("[v0] Distance to location:", distance, "meters")
+
+        // 1500 meter proximity check
+        if (distance > 1500) {
+          showError(
+            `You are too far from ${location.name} (${Math.round(distance)}m away). You must be within range of the location to check in.`,
+          )
+          return
+        }
+      } else if (!userLocation) {
+        showError(
+          "GPS location is required for manual code entry. Please enable location access or use the QR scanner camera instead.",
+        )
+        return
+      }
+
       const now = new Date()
       const today = now.toISOString().split("T")[0]
 

@@ -64,11 +64,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User profile not found" }, { status: 404 })
     }
 
-    if (profile.role !== "admin") {
-      console.error("[v0] Admin password reset: Not admin:", profile.role)
+    if (profile.role !== "admin" && profile.role !== "it-admin") {
+      console.error("[v0] Admin password reset: Insufficient permissions:", profile.role)
       return NextResponse.json(
         {
-          error: "Admin access required",
+          error: "Admin or IT-Admin access required",
           currentRole: profile.role,
         },
         { status: 403 },
@@ -84,13 +84,24 @@ export async function POST(request: NextRequest) {
 
     const { data: targetUser, error: userError } = await supabase
       .from("user_profiles")
-      .select("first_name, last_name, employee_id, email")
+      .select("first_name, last_name, employee_id, email, role")
       .eq("id", userId)
       .single()
 
     if (userError || !targetUser) {
       console.error("[v0] Admin password reset: User not found:", userError)
       return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    if (profile.role === "it-admin" && (targetUser.role === "admin" || targetUser.role === "it-admin")) {
+      console.error("[v0] Admin password reset: IT-Admin tried to reset admin/it-admin password")
+      return NextResponse.json(
+        {
+          error: "IT-Admin users cannot reset passwords for Admin or IT-Admin accounts",
+          targetRole: targetUser.role,
+        },
+        { status: 403 },
+      )
     }
 
     console.log("[v0] Admin password reset: Found target user:", targetUser.email)

@@ -24,6 +24,7 @@ interface User {
   first_name: string
   last_name: string
   employee_id: string
+  role: string
 }
 
 interface PasswordManagementProps {
@@ -51,10 +52,12 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
   const [selectedUserEmail, setSelectedUserEmail] = useState<string>("")
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
 
   useEffect(() => {
     if (isAdmin) {
       fetchUsers()
+      fetchCurrentUserRole()
     }
   }, [isAdmin])
 
@@ -107,6 +110,18 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
     }
   }
 
+  const fetchCurrentUserRole = async () => {
+    try {
+      const response = await fetch("/api/settings")
+      const result = await response.json()
+      if (result.success && result.profile) {
+        setCurrentUserRole(result.profile.role)
+      }
+    } catch (error) {
+      console.error("[v0] Failed to fetch current user role:", error)
+    }
+  }
+
   const handleUserSelect = (userId: string) => {
     const user = users.find((u) => u.id === userId)
     if (user) {
@@ -117,7 +132,15 @@ export function PasswordManagement({ userId, userEmail, isAdmin = false }: Passw
     }
   }
 
-  const filteredUsers = users.filter(
+  const availableUsers = users.filter((user) => {
+    if (currentUserRole === "it-admin") {
+      // IT-Admin cannot see admin or it-admin users in the list
+      return user.role !== "admin" && user.role !== "it-admin"
+    }
+    return true
+  })
+
+  const filteredUsers = availableUsers.filter(
     (user) =>
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||

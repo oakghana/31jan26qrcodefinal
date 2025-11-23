@@ -17,12 +17,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
   getCurrentLocation,
+  getAveragedLocation,
+  validateLocationWithIP,
   validateAttendanceLocation,
   validateCheckoutLocation,
   calculateDistance,
   detectWindowsLocationCapabilities,
+  isWithinBrowserProximity, // Added
+  detectBrowser, // Added
   type LocationData,
   type ProximitySettings,
+  type GeoSettings, // Added
 } from "@/lib/geolocation"
 import { getDeviceInfo } from "@/lib/device-info"
 import type { QRCodeData } from "@/lib/qr-code"
@@ -88,6 +93,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     requireHighAccuracy: true,
     allowManualOverride: false,
   })
+  const [geoSettings, setGeoSettings] = useState<GeoSettings | null>(null)
   const [locationValidation, setLocationValidation] = useState<{
     canCheckIn: boolean
     canCheckOut?: boolean
@@ -247,6 +253,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   useEffect(() => {
     fetchUserProfile()
     loadProximitySettings()
+    loadGeoSettings()
     const capabilities = detectWindowsLocationCapabilities()
     setWindowsCapabilities(capabilities)
     console.log("[v0] Windows location capabilities detected:", capabilities)
@@ -271,6 +278,21 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   useEffect(() => {
     loadProximitySettings()
   }, [])
+
+  const loadGeoSettings = async () => {
+    try {
+      const response = await fetch("/api/settings")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.systemSettings?.geo_settings) {
+          setGeoSettings(data.systemSettings.geo_settings)
+          console.log("[v0] Loaded geo settings with browser tolerances:", data.systemSettings.geo_settings)
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Failed to load geo settings:", error)
+    }
+  }
 
   useEffect(() => {
     const checkDateChange = () => {
@@ -478,16 +500,33 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     }
   }
 
-  // Simplified getCurrentLocationData without continuous watch and with updated error handling.
   const getCurrentLocationData = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      console.log("[v0] Requesting location with optimized timeout...")
-      const location = await getCurrentLocation()
+      const capabilities = detectWindowsLocationCapabilities()
+      console.log("[v0] Browser:", capabilities.browserName)
+
+      // For Opera and poor GPS browsers, use averaged readings
+      const useSampling = capabilities.browserName === "Opera" || capabilities.hasKnownIssues
+
+      console.log(`[v0] Using ${useSampling ? "multi-sample" : "single"} GPS reading...`)
+      const location = useSampling ? await getAveragedLocation(3) : await getCurrentLocation()
+
       setUserLocation(location)
-      setLocationPermissionStatus({ granted: true, message: "Location access granted" }) // Using the original permission status state here.
+
+      // Validate with IP geolocation for extra confidence
+      const validation = await validateLocationWithIP(location)
+
+      if (!validation.isValid) {
+        setError(validation.message)
+        setShowLocationHelp(true)
+      } else if (validation.message) {
+        console.log("[v0]", validation.message)
+      }
+
+      setLocationPermissionStatus({ granted: true, message: "Location access granted" })
       return location
     } catch (error) {
       console.error("[v0] Failed to get location:", error)
@@ -495,7 +534,6 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         error instanceof Error ? error.message : "Unable to access location. Please enable GPS or use QR code option."
       setError(errorMessage)
       setLocationPermissionStatus({
-        // Using the original permission status state here.
         granted: false,
         message: errorMessage,
       })
@@ -521,48 +559,61 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     setSuccess(null)
 
     try {
-      console.log("[v0] Getting location for check-in...")
-      const location = await getCurrentLocation()
-      setUserLocation(location)
+      console.log("[v0] Getting optimized location for check-in...")
 
-      // Assuming validateCheckinLocation is a new function or an adaptation of validateAttendanceLocation
-      // For now, using validateAttendanceLocation and adapting its output.
-      const validation = validateAttendanceLocation(location, locations, proximitySettings)
-
-      if (!validation.canCheckIn) {
-        setError(validation.message)
-        // setShowLocationHelp(true) // Removed as it might not be necessary if message is clear.
+      // Use browser-optimized location fetching
+      const location = await getCurrentLocationData()
+      if (!location) {
         setIsLoading(false)
         return
       }
 
-      let targetLocationId = null
+      const browserInfo = detectBrowser()
+      console.log("[v0] Browser detected:", browserInfo.name)
 
-      // First priority: Use user's assigned location if they're within range
-      if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
-        targetLocationId = userProfile.assigned_location_id
-        console.log("[v0] Automatically using assigned location for check-in:", assignedLocationInfo.location.name)
+      // Find nearest location
+      const nearest = locations.reduce(
+        (closest, loc) => {
+          const dist = calculateDistance(location.latitude, location.longitude, loc.latitude, loc.longitude)
+          if (!closest || dist < closest.distance) {
+            return { location: loc, distance: dist }
+          }
+          return closest
+        },
+        null as { location: GeofenceLocation; distance: number } | null,
+      )
+
+      if (!nearest) {
+        setError("No QCC locations found")
+        setIsLoading(false)
+        return
       }
-      // Second priority: Use the nearest available location automatically
-      else if (validation.availableLocations && validation.availableLocations.length > 0) {
-        targetLocationId = validation.availableLocations[0].location.id
-        console.log(
-          "[v0] Automatically using nearest available location for check-in:",
-          validation.availableLocations[0].location.name,
+
+      const proximityCheck = await isWithinBrowserProximity(
+        location,
+        nearest.location.latitude,
+        nearest.location.longitude,
+        geoSettings || undefined,
+      )
+
+      console.log("[v0] Browser-specific proximity check:", {
+        browser: proximityCheck.browser,
+        distance: proximityCheck.distance,
+        tolerance: proximityCheck.tolerance,
+        isWithin: proximityCheck.isWithin,
+      })
+
+      if (!proximityCheck.isWithin) {
+        setError(
+          `Too far from location (${proximityCheck.distance}m away, ${proximityCheck.browser} requires ${proximityCheck.tolerance}m). Please move closer or use QR code.`,
         )
-      }
-
-      const targetLocation = locations.find((loc) => loc.id === targetLocationId)
-
-      if (!targetLocation) {
-        setError(`No location available for check-in within ${proximitySettings.checkInProximityRange}m range`)
         setIsLoading(false)
         return
       }
 
       const deviceInfo = getDeviceInfo()
 
-      console.log("[v0] Performing automatic check-in at:", targetLocation.name)
+      console.log("[v0] Performing automatic check-in at:", nearest.location.name)
 
       const response = await fetch("/api/attendance/check-in", {
         method: "POST",
@@ -572,42 +623,28 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         body: JSON.stringify({
           latitude: location.latitude,
           longitude: location.longitude,
-          location_id: targetLocation.id,
-          device_info: deviceInfo,
+          location_id: nearest.location.id,
+          location_name: nearest.location.name, // Added for clarity
+          device_info: navigator.userAgent, // Using navigator.userAgent instead of getDeviceInfo() for simplicity here
         }),
       })
 
-      const result = await response.json()
-
-      if (result.success) {
-        const locationInfo = result.data.location_tracking
-        let message = result.message
-
-        // These states were removed in the updates, so commenting out for now.
-        // setCanCheckIn(false)
-        // setCanCheckOut(true)
-        // setTodayAttendance(result.data.attendance)
-
-        if (result.data.missed_checkout_handled) {
-          message += "\n\n⚠️ Previous day's checkout was automatically recorded."
-        }
-
-        setSuccessMessage(`✓ ${message}`)
-        setShowSuccessPopup(true)
-
-        // Auto-hide success popup after 3 seconds
-        setTimeout(() => {
-          setShowSuccessPopup(false)
-        }, 3000)
-
-        setTimeout(() => {
-          // Assuming loadTodayAttendance and loadRecentAttendance are defined elsewhere or should be added.
-          // For now, replacing with a reload as in the original code.
-          window.location.reload()
-        }, 500)
-      } else {
-        setError(result.message || "Failed to check in")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to check in")
       }
+
+      // const result = await response.json() // Result not used in this block
+
+      setSuccessDialogMessage(
+        `Checked in successfully at ${nearest.location.name}!\n\nBrowser: ${proximityCheck.browser}\nDistance: ${proximityCheck.distance}m (within ${proximityCheck.tolerance}m tolerance)`,
+      )
+      setShowSuccessDialog(true)
+
+      // Reload attendance status
+      setTimeout(() => {
+        window.location.reload()
+      }, 500) // Short delay before reload to ensure dialog shows briefly
     } catch (error) {
       console.error("[v0] Check-in error:", error)
 
@@ -928,25 +965,31 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
   const handleRefreshLocations = async () => {
     setIsLoading(true)
     setError(null)
-
     try {
-      const timestamp = Date.now()
-      const response = await fetch(`/api/attendance/user-location?refresh=${timestamp}`, {
-        cache: "no-store",
-      })
+      console.log("[v0] Manually refreshing location...")
+      const location = await getCurrentLocation()
+      setUserLocation(location)
 
-      if (response.ok) {
-        window.location.reload()
+      if (location.accuracy > 1000) {
+        setError(
+          `GPS accuracy is critically poor (${(location.accuracy / 1000).toFixed(1)}km) - Use QR code for reliable attendance.`,
+        )
+      } else if (location.accuracy > 500) {
+        setError(`GPS accuracy is poor (${Math.round(location.accuracy)}m). Consider using QR code for best results.`)
       } else {
-        const result = await response.json()
-        if (response.status === 403) {
-          setError("Location access restricted. Please contact your administrator.")
-        } else {
-          setError(result.error || "Failed to refresh location data")
-        }
+        setSuccess(`Location refreshed successfully. Accuracy: ${Math.round(location.accuracy)}m`)
+        setTimeout(() => setSuccess(null), 3000)
       }
+
+      setLocationPermissionStatus({ granted: true, message: "Location access granted" })
+      console.log("[v0] Location refreshed successfully")
     } catch (error) {
-      setError("Failed to refresh location data")
+      console.error("[v0] Failed to refresh location:", error)
+      const errorMessage =
+        error instanceof Error ? error.message : "Unable to access location. Please enable GPS or use QR code option."
+      setError(errorMessage)
+      setLocationPermissionStatus({ granted: false, message: errorMessage })
+      setShowLocationHelp(true)
     } finally {
       setIsLoading(false)
     }
@@ -1549,6 +1592,20 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         </Card>
       )}
       {/* NEW CODE END */}
+
+      {geoSettings?.enableBrowserSpecificTolerance && userLocation && (
+        <Alert>
+          <AlertDescription>
+            Browser: {detectBrowser().name} - Using{" "}
+            {geoSettings.browserTolerances?.[
+              detectBrowser().name.toLowerCase() as keyof typeof geoSettings.browserTolerances
+            ] ||
+              geoSettings.browserTolerances?.default ||
+              1500}
+            m tolerance for GPS accuracy
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Dialog open={showQRScanner} onOpenChange={setShowQRScanner}>
         <DialogContent className="max-w-[95vw] sm:max-w-md p-0 max-h-[90vh] overflow-auto">
