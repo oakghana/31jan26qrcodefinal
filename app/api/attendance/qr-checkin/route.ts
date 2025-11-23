@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid or inactive location" }, { status: 400 })
     }
 
-    console.log("[v0] Location verified:", location.name)
+    console.log("[v0] Location verified via QR code - bypassing GPS validation:", location.name)
 
     const now = new Date()
     const today = now.toISOString().split("T")[0]
@@ -98,9 +98,13 @@ export async function POST(request: Request) {
         check_in_location_id: location.id,
         check_in_location_name: location.name,
         check_in_time: now.toISOString(),
-        check_in_method: device_info?.method || "qr_code",
+        check_in_method: "qr_code",
+        check_in_accuracy: 0, // QR code = perfect accuracy, no GPS needed
+        check_in_browser: device_info?.browser || "qr_scanner",
         status: "present",
-        notes: qr_timestamp ? `QR code scanned at ${new Date(qr_timestamp).toLocaleString()}` : "QR code check-in",
+        notes: qr_timestamp
+          ? `QR code scanned at ${new Date(qr_timestamp).toLocaleString()} - GPS validation bypassed`
+          : "QR code check-in - GPS validation bypassed",
       })
       .select()
       .single()
@@ -110,7 +114,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to record attendance" }, { status: 500 })
     }
 
-    console.log("[v0] Attendance record created:", attendance.id)
+    console.log("[v0] Attendance record created via QR code (GPS bypassed):", attendance.id)
 
     if (device_info) {
       await supabase.from("device_sessions").insert({
@@ -128,12 +132,12 @@ export async function POST(request: Request) {
       record_id: attendance.id,
       new_values: {
         location: location.name,
-        check_in_method: device_info?.method || "qr_code",
+        check_in_method: "qr_code",
         timestamp: now.toISOString(),
       },
     })
 
-    console.log("[v0] QR check-in completed successfully")
+    console.log("[v0] QR check-in completed successfully - GPS validation was not required")
 
     return NextResponse.json({
       success: true,
@@ -142,7 +146,8 @@ export async function POST(request: Request) {
         attendance,
         location_tracking: {
           location_name: location.name,
-          check_in_method: device_info?.method || "qr_code",
+          check_in_method: "qr_code",
+          gps_bypass: true,
         },
       },
       missedCheckoutWarning,

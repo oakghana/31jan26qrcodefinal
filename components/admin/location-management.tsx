@@ -138,7 +138,7 @@ export function LocationManagement() {
       }
 
       const data = await response.json()
-      setLocations(data)
+      setLocations(Array.isArray(data) ? data : data.data || [])
       setError(null)
       setRetryCount(0)
     } catch (err) {
@@ -151,6 +151,7 @@ export function LocationManagement() {
       const errorMessage = err instanceof Error ? err.message : "Failed to load locations"
       setError(errorMessage)
       setRetryCount(attempt)
+      setLocations([])
     } finally {
       if (attempt === 1) setLoading(false)
     }
@@ -184,6 +185,15 @@ export function LocationManagement() {
           }),
         })
 
+        if (response.status === 409) {
+          const errorData = await response.json()
+          setError(
+            `⚠️ COORDINATE CONFLICT: ${errorData.error}\n\nA location already exists at or very near these coordinates. Please verify this is not a duplicate.`,
+          )
+          setLoading(false)
+          return
+        }
+
         if (!response.ok) {
           if (response.status >= 500 && attempt < 3) {
             throw new Error("RETRY")
@@ -192,7 +202,7 @@ export function LocationManagement() {
           throw new Error(errorData.error || `Server error (${response.status})`)
         }
 
-        setSuccess("Location added successfully - All staff dashboards will update automatically")
+        setSuccess("✅ Location added successfully - Only this new location was created")
         await fetchLocations()
         setIsAddingLocation(false)
         setNewLocation({ name: "", address: "", latitude: "", longitude: "", radius_meters: "50" })
@@ -220,6 +230,11 @@ export function LocationManagement() {
   const handleEditLocation = async () => {
     if (!editingLocation) return
 
+    if (!validateLocationForm(editingLocation)) {
+      setError("Please fix all form errors before saving")
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -237,14 +252,26 @@ export function LocationManagement() {
         }),
       })
 
+      if (response.status === 409) {
+        const errorData = await response.json()
+        setError(
+          `⚠️ COORDINATE CONFLICT: ${errorData.error}\n\nPlease verify:\n• You have the correct GPS coordinates\n• This is not a duplicate location\n• The location is actually different from: ${errorData.conflictingLocations?.join(", ")}`,
+        )
+        setLoading(false)
+        return
+      }
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || "Failed to update location")
       }
 
-      setSuccess("Location updated successfully - All staff dashboards will update automatically")
+      const result = await response.json()
+      setSuccess(result.message || "Location updated successfully - Only this location was modified")
       await fetchLocations()
       setEditingLocation(null)
+
+      setTimeout(() => setSuccess(null), 5000)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update location"
       setError(errorMessage)
@@ -779,30 +806,34 @@ export function LocationManagement() {
         </Dialog>
       )}
 
-      <Dialog open={!!qrCodeUrl} onOpenChange={() => setQrCodeUrl(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Location QR Code</DialogTitle>
-            <DialogDescription>QR code for {selectedLocation?.name}</DialogDescription>
-          </DialogHeader>
-          {qrCodeUrl && (
-            <div className="text-center space-y-4">
-              <img src={qrCodeUrl || "/placeholder.svg"} alt="Location QR Code" className="mx-auto" />
-              <p className="text-sm text-muted-foreground">Staff can scan this QR code to check in at this location</p>
-              <Button
-                onClick={() => {
-                  const link = document.createElement("a")
-                  link.download = `${selectedLocation?.name}-qr-code.png`
-                  link.href = qrCodeUrl
-                  link.click()
-                }}
-              >
-                Download QR Code
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {qrCodeUrl && (
+        <Dialog open={!!qrCodeUrl} onOpenChange={() => setQrCodeUrl(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Location QR Code</DialogTitle>
+              <DialogDescription>QR code for {selectedLocation?.name}</DialogDescription>
+            </DialogHeader>
+            {qrCodeUrl && (
+              <div className="text-center space-y-4">
+                <img src={qrCodeUrl || "/placeholder.svg"} alt="Location QR Code" className="mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  Staff can scan this QR code to check in at this location
+                </p>
+                <Button
+                  onClick={() => {
+                    const link = document.createElement("a")
+                    link.download = `${selectedLocation?.name}-qr-code.png`
+                    link.href = qrCodeUrl
+                    link.click()
+                  }}
+                >
+                  Download QR Code
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

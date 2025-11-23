@@ -37,6 +37,7 @@ import {
   LogOut,
   HelpCircle,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -118,6 +119,13 @@ const navigationItems = [
     title: "QR Events",
     href: "/dashboard/qr-events",
     icon: QrCode,
+    roles: ["admin", "department_head"],
+    category: "admin",
+  },
+  {
+    title: "Defaulters",
+    href: "/dashboard/defaulters",
+    icon: AlertCircle,
     roles: ["admin", "department_head"],
     category: "admin",
   },

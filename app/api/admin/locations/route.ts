@@ -22,12 +22,16 @@ export async function GET() {
 
     const { data: locations, error } = await supabase.from("geofence_locations").select("*").order("name")
 
-    if (error) throw error
+    if (error) {
+      console.error("[v0] Locations query error:", error)
+      // Return empty array instead of throwing to prevent JSON parse errors
+      return NextResponse.json({ success: true, data: [] })
+    }
 
     return NextResponse.json({ success: true, data: locations || [] })
   } catch (error) {
     console.error("[v0] Locations API error:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch locations" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Failed to fetch locations", data: [] }, { status: 500 })
   }
 }
 

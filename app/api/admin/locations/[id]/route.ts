@@ -1,6 +1,19 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3 // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return R * c
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     console.log("[v0] Location update request for ID:", params.id)
@@ -31,13 +44,67 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     const { name, address, latitude, longitude, radius_meters, is_active } = body
 
+    const newLat = Number(latitude)
+    const newLng = Number(longitude)
+
+    if (isNaN(newLat) || isNaN(newLng)) {
+      return NextResponse.json({ error: "Invalid coordinates provided" }, { status: 400 })
+    }
+
+    const { data: currentLocation, error: fetchError } = await supabase
+      .from("geofence_locations")
+      .select("id, name, latitude, longitude")
+      .eq("id", params.id)
+      .single()
+
+    if (fetchError || !currentLocation) {
+      console.error("[v0] Location not found:", fetchError)
+      return NextResponse.json({ error: "Location not found" }, { status: 404 })
+    }
+
+    const coordsChanged =
+      Math.abs(currentLocation.latitude - newLat) > 0.00001 || Math.abs(currentLocation.longitude - newLng) > 0.00001
+
+    if (coordsChanged) {
+      // Check for coordinate conflicts with other locations
+      const { data: otherLocations, error: conflictError } = await supabase
+        .from("geofence_locations")
+        .select("id, name, latitude, longitude")
+        .neq("id", params.id)
+
+      if (conflictError) {
+        console.error("[v0] Error checking for conflicts:", conflictError)
+        return NextResponse.json({ error: "Failed to validate coordinates" }, { status: 500 })
+      }
+
+      // Check if new coordinates are too close to any other location (within 50 meters)
+      const conflicts = otherLocations?.filter((loc) => {
+        const distance = calculateDistance(newLat, newLng, loc.latitude, loc.longitude)
+        return distance < 50 // Too close if within 50 meters
+      })
+
+      if (conflicts && conflicts.length > 0) {
+        const conflictNames = conflicts.map((c) => c.name).join(", ")
+        console.log("[v0] Coordinate conflict detected:", conflictNames)
+        return NextResponse.json(
+          {
+            error: `Warning: The new coordinates are very close (within 50m) to: ${conflictNames}. This may cause check-in conflicts. Please verify the coordinates are correct.`,
+            conflictingLocations: conflicts.map((c) => c.name),
+          },
+          { status: 409 },
+        )
+      }
+
+      console.log("[v0] Coordinates changed for location:", currentLocation.name)
+    }
+
     const { data: updatedLocation, error } = await supabase
       .from("geofence_locations")
       .update({
         name,
         address,
-        latitude: Number(latitude),
-        longitude: Number(longitude),
+        latitude: newLat,
+        longitude: newLng,
         radius_meters: Number(radius_meters),
         is_active: is_active ?? true,
         updated_at: new Date().toISOString(),
@@ -51,7 +118,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Failed to update location" }, { status: 500 })
     }
 
-    console.log("[v0] Location updated successfully:", updatedLocation)
+    console.log("[v0] Location updated successfully:", updatedLocation.name)
 
     // Log the action
     await supabase.from("audit_logs").insert({
@@ -59,14 +126,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       action: "update_location",
       table_name: "geofence_locations",
       record_id: params.id,
-      new_values: { name, address, latitude, longitude, radius_meters, is_active },
+      old_values: {
+        name: currentLocation.name,
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+      },
+      new_values: { name, address, latitude: newLat, longitude: newLng, radius_meters, is_active },
       ip_address: request.headers.get("x-forwarded-for") || null,
     })
 
     return NextResponse.json({
       success: true,
       data: updatedLocation,
-      message: "Location updated successfully",
+      message: `Location "${updatedLocation.name}" updated successfully. Only this location was modified.`,
     })
   } catch (error) {
     console.error("[v0] Location update API error:", error)

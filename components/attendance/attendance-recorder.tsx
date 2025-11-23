@@ -636,9 +636,10 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
 
       // const result = await response.json() // Result not used in this block
 
-      setSuccessDialogMessage(
-        `Checked in successfully at ${nearest.location.name}!\n\nBrowser: ${proximityCheck.browser}\nDistance: ${proximityCheck.distance}m (within ${proximityCheck.tolerance}m tolerance)`,
-      )
+      const message = nearest.location.name
+        ? `Checked in successfully at ${nearest.location.name}!`
+        : "Checked in successfully!"
+      setSuccessDialogMessage(message)
       setShowSuccessDialog(true)
 
       // Reload attendance status
