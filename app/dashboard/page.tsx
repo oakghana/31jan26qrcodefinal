@@ -1,3 +1,5 @@
+"use client"
+
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
@@ -9,6 +11,7 @@ import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Activity } 
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { MobileAppDownload } from "@/components/ui/mobile-app-download"
+import { DepartmentHeadAttendanceModal } from "@/components/dashboard/department-head-attendance-modal"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -241,6 +244,15 @@ export default async function DashboardPage() {
         </Card>
       </div>
       <MobileAppDownload variant="dashboard" />
+
+      {profile?.role === "department_head" && profile.department_id && todayAttendance?.check_out_time && (
+        <DepartmentHeadAttendanceModal
+          open={true}
+          onClose={() => {}}
+          departmentId={profile.department_id}
+          departmentName={profile.departments?.name || "Your Department"}
+        />
+      )}
     </DashboardLayout>
   )
 }
