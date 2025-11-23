@@ -15,10 +15,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if user has admin or department_head role
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || !["admin", "department_head", "staff"].includes(profile.role)) {
+    if (!profile || !["admin", "it-admin", "department_head"].includes(profile.role)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
@@ -43,6 +42,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      departments: departments || [],
       data: departments || [],
     })
   } catch (error) {

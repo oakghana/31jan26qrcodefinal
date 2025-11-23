@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const supabase = createServerClient()
+    const supabase = await createServerClient()
 
     // Get current user
     const {
