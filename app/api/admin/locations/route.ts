@@ -24,12 +24,17 @@ export async function GET() {
       return NextResponse.json({ error: "Insufficient permissions to view locations" }, { status: 403 })
     }
 
+    console.log("[v0] Locations API - Role check passed for:", profile.role)
+
     const { data: locations, error } = await supabase.from("geofence_locations").select("*").order("name")
 
     if (error) throw error
 
+    console.log("[v0] Locations API - Fetched", locations?.length, "locations")
+
     return NextResponse.json(locations)
   } catch (error) {
+    console.error("[v0] Locations API - Error:", error)
     return NextResponse.json({ error: "Failed to fetch locations" }, { status: 500 })
   }
 }
