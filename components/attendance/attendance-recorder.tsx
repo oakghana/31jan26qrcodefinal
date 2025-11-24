@@ -384,8 +384,9 @@ export function AttendanceRecorder({
     }
   }
 
+  // Update assigned location info when user location or realTimeLocations changes
   useEffect(() => {
-    if (userLocation && realTimeLocations.length > 0 && userProfile?.assigned_location_id) {
+    if (userLocation && realTimeLocations && realTimeLocations.length > 0 && userProfile?.assigned_location_id) {
       // Use realTimeLocations here
       const assignedLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id) // Use realTimeLocations here
       if (assignedLocation) {
@@ -417,7 +418,7 @@ export function AttendanceRecorder({
   // Simplified location validation logic as per new update.
   // This effect is now primarily for logging and potentially updating `locationValidation` based on fetched `userLocation`.
   useEffect(() => {
-    if (userLocation && realTimeLocations.length > 0) {
+    if (userLocation && realTimeLocations && realTimeLocations.length > 0) {
       // Use realTimeLocations here
       console.log(
         "[v0] All available locations:",
@@ -1043,7 +1044,7 @@ export function AttendanceRecorder({
 
   // Calculate distance to assigned location for display
   const assignedLocationDistance =
-    userLocation && userProfile?.assigned_location_id && locations.length > 0
+    userLocation && userProfile?.assigned_location_id && locations && locations.length > 0
       ? (() => {
           const assignedLoc = locations.find((loc) => loc.id === userProfile.assigned_location_id)
           if (assignedLoc) {
@@ -1257,7 +1258,7 @@ export function AttendanceRecorder({
                   </Alert>
                 )}
 
-              {userProfile?.assigned_location_id && locations.length > 0 && (
+              {userProfile?.assigned_location_id && locations && locations.length > 0 && (
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
                   <div className="text-sm font-medium text-primary mb-1">Your Assigned Location</div>
                   <div className="text-sm">
@@ -1286,7 +1287,7 @@ export function AttendanceRecorder({
             </div>
           )}
 
-          {locations.length > 0 && (
+          {locations && locations.length > 0 && (
             <div className="space-y-2">
               <div className="text-sm font-medium">All QCC Locations</div>
               <div className="space-y-1.5">
