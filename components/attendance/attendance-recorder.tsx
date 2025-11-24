@@ -603,7 +603,17 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         isWithin: proximityCheck.isWithin,
       })
 
+      // Check if the distance is within the required 100m
+      if (proximityCheck.distance > 100) {
+        setError(
+          `Too far from location (${proximityCheck.distance}m away). You must be within 100m to check in. Please move closer or use QR code.`,
+        )
+        setIsLoading(false)
+        return
+      }
+
       if (!proximityCheck.isWithin) {
+        // This condition might be redundant if the above check covers it, but kept for safety.
         setError(
           `Too far from location (${proximityCheck.distance}m away, ${proximityCheck.browser} requires ${proximityCheck.tolerance}m). Please move closer or use QR code.`,
         )
@@ -1042,6 +1052,19 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-start gap-3">
+          <MapPin className="h-5 w-5 text-blue-600 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-blue-900 mb-1">Location Requirement</h3>
+            <p className="text-sm text-blue-800">
+              You must be within <strong>100 meters</strong> of your assigned location to check in or out. If GPS is not
+              accurate, you can use the QR code scanner option for instant check-in.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {showSuccessPopup && (
         <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
           <CheckCircle2 className="h-4 w-4 text-green-600" />

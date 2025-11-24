@@ -65,12 +65,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const coordsChanged =
       Math.abs(currentLocation.latitude - newLat) > 0.00001 || Math.abs(currentLocation.longitude - newLng) > 0.00001
 
+    let conflicts: any[] = []
+
     if (coordsChanged) {
-      // Check for coordinate conflicts with other locations
       const { data: otherLocations, error: conflictError } = await supabase
         .from("geofence_locations")
         .select("id, name, latitude, longitude")
         .neq("id", params.id)
+        .eq("is_active", true) // Only check active locations
 
       if (conflictError) {
         console.error("[v0] Error checking for conflicts:", conflictError)
@@ -78,21 +80,15 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
 
       // Check if new coordinates are too close to any other location (within 50 meters)
-      const conflicts = otherLocations?.filter((loc) => {
+      conflicts = otherLocations?.filter((loc) => {
         const distance = calculateDistance(newLat, newLng, loc.latitude, loc.longitude)
         return distance < 50 // Too close if within 50 meters
       })
 
       if (conflicts && conflicts.length > 0) {
         const conflictNames = conflicts.map((c) => c.name).join(", ")
-        console.log("[v0] Coordinate conflict detected:", conflictNames)
-        return NextResponse.json(
-          {
-            error: `Warning: The new coordinates are very close (within 50m) to: ${conflictNames}. This may cause check-in conflicts. Please verify the coordinates are correct.`,
-            conflictingLocations: conflicts.map((c) => c.name),
-          },
-          { status: 409 },
-        )
+        console.log("[v0] Coordinate conflict warning (non-blocking):", conflictNames)
+        // Continue with the update anyway - conflict is just a warning
       }
 
       console.log("[v0] Coordinates changed for location:", currentLocation.name)
@@ -120,6 +116,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     console.log("[v0] Location updated successfully:", updatedLocation.name)
 
+    const conflictWarning =
+      coordsChanged && conflicts && conflicts.length > 0
+        ? `Note: This location is within 50m of: ${conflicts.map((c) => c.name).join(", ")}. This may cause check-in conflicts.`
+        : null
+
     // Log the action
     await supabase.from("audit_logs").insert({
       user_id: user.id,
@@ -139,6 +140,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       success: true,
       data: updatedLocation,
       message: `Location "${updatedLocation.name}" updated successfully. Only this location was modified.`,
+      warning: conflictWarning,
     })
   } catch (error) {
     console.error("[v0] Location update API error:", error)

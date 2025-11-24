@@ -154,13 +154,13 @@ export async function getBrowserTolerance(geoSettings?: GeoSettings): Promise<nu
     case "edge":
       return 100
     case "firefox":
-      return 500
+      return 100
     case "safari":
-      return 500
+      return 100
     case "opera":
-      return 500
+      return 100
     default:
-      return 100 // Default for unknown browsers
+      return 100
   }
 }
 
@@ -453,8 +453,8 @@ export function validateAttendanceLocation(
   availableLocations?: Array<{ location: GeofenceLocation; distance: number }>
 } {
   const deviceInfo = detectDevice()
-  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 50
-  const displayDistance = 50 // What we show to users in UI messages
+  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 100
+  const displayDistance = 100 // What we show to users in UI messages
 
   const nearest = findNearestLocation(userLocation, qccLocations)
 
@@ -553,8 +553,8 @@ export function validateCheckoutLocation(
   accuracyWarning?: string
 } {
   const deviceInfo = detectDevice()
-  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 50
-  const displayDistance = 50 // What we show to users in UI messages
+  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 100
+  const displayDistance = 100 // What we show to users in UI messages
 
   const nearest = findNearestLocation(userLocation, qccLocations)
 

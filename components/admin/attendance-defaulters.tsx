@@ -60,6 +60,8 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
 
   const fetchDefaulters = async () => {
     setLoading(true)
+    setError(null) // Clear previous errors
+    console.log("[v0] Fetching defaulters with params:", { timeframe, departmentFilter, locationFilter })
     try {
       const params = new URLSearchParams({
         timeframe,
@@ -67,12 +69,21 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
         ...(locationFilter !== "all" && { location_id: locationFilter }),
       })
 
+      console.log("[v0] Fetching URL:", `/api/admin/attendance-defaulters?${params}`)
       const response = await fetch(`/api/admin/attendance-defaulters?${params}`)
-      if (!response.ok) throw new Error("Failed to fetch defaulters")
+      console.log("[v0] Response status:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("[v0] Error response:", errorText)
+        throw new Error(`Failed to fetch defaulters: ${errorText}`)
+      }
 
       const data = await response.json()
+      console.log("[v0] Defaulters data:", data)
       setDefaulters(data.defaulters || [])
     } catch (err) {
+      console.error("[v0] Fetch error:", err)
       setError(err instanceof Error ? err.message : "Failed to load defaulters")
     } finally {
       setLoading(false)
@@ -80,20 +91,30 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
   }
 
   const fetchFilters = async () => {
+    console.log("[v0] Fetching filters (departments and locations)")
     try {
       const [deptRes, locRes] = await Promise.all([fetch("/api/admin/departments"), fetch("/api/admin/locations")])
 
+      console.log("[v0] Departments API status:", deptRes.status)
+      console.log("[v0] Locations API status:", locRes.status)
+
       if (deptRes.ok) {
         const deptData = await deptRes.json()
-        setDepartments(Array.isArray(deptData) ? deptData : deptData.data || [])
+        console.log("[v0] Departments data:", deptData)
+        setDepartments(Array.isArray(deptData) ? deptData : deptData.data || deptData.departments || [])
+      } else {
+        console.error("[v0] Departments API error:", await deptRes.text())
       }
 
       if (locRes.ok) {
         const locData = await locRes.json()
-        setLocations(Array.isArray(locData) ? locData : locData.data || [])
+        console.log("[v0] Locations data:", locData)
+        setLocations(Array.isArray(locData) ? locData : locData.data || locData.locations || [])
+      } else {
+        console.error("[v0] Locations API error:", await locRes.text())
       }
     } catch (err) {
-      console.error("Error fetching filters:", err)
+      console.error("[v0] Error fetching filters:", err)
     }
   }
 
@@ -107,6 +128,9 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
       setError("Please enter a warning message")
       return
     }
+
+    console.log("[v0] Sending warnings to:", selectedStaff.length, "staff members")
+    console.log("[v0] Warning message length:", warningMessage.length)
 
     setSendingWarning(true)
     setError(null)
@@ -122,15 +146,23 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
         }),
       })
 
-      if (!response.ok) throw new Error("Failed to send warnings")
+      console.log("[v0] Send warnings response status:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("[v0] Send warnings error:", errorText)
+        throw new Error(`Failed to send warnings: ${errorText}`)
+      }
 
       const data = await response.json()
+      console.log("[v0] Warnings sent successfully:", data)
       setSuccess(`Successfully sent warning to ${data.sent} staff member(s)`)
       setSelectedStaff([])
       setWarningMessage("")
       setShowWarningDialog(false)
       fetchDefaulters()
     } catch (err) {
+      console.error("[v0] Send warning error:", err)
       setError(err instanceof Error ? err.message : "Failed to send warnings")
     } finally {
       setSendingWarning(false)
