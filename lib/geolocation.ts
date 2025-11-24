@@ -154,11 +154,11 @@ export async function getBrowserTolerance(geoSettings?: GeoSettings): Promise<nu
     case "chrome":
       return 2000 // Increased from 500 to 2000 meters for PC Chrome users
     case "edge":
-      return 100
+      return 100 // Edge remains at 100 meters
     case "firefox":
       return 2000 // Increased from 500 to 2000 meters for PC Firefox users
     case "safari":
-      return 100
+      return 2000 // Increased from 100 to 2000 meters for PC Safari users
     case "opera":
       return 2000 // Increased from 100 to 2000 meters for PC Opera users
     default:

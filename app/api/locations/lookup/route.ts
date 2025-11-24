@@ -12,11 +12,10 @@ export async function GET(request: Request) {
 
     const supabase = await createClient()
 
-    // Search for location by QR code
     const { data: location, error } = await supabase
       .from("geofence_locations")
       .select("*")
-      .eq("qr_code", code.toUpperCase())
+      .eq("location_code", code.toUpperCase())
       .eq("is_active", true)
       .maybeSingle()
 
@@ -38,7 +37,7 @@ export async function GET(request: Request) {
       location: {
         id: location.id,
         name: location.name,
-        code: location.qr_code,
+        code: location.location_code,
         latitude: location.latitude,
         longitude: location.longitude,
       },
