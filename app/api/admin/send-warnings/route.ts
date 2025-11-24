@@ -30,19 +30,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 })
     }
 
+    const { data: recipients } = await supabase.from("user_profiles").select("id, full_name").in("id", recipient_ids)
+
+    if (!recipients || recipients.length === 0) {
+      return NextResponse.json({ error: "No valid recipients found" }, { status: 400 })
+    }
+
     const senderLabel = profile.role === "admin" ? "Management of QCC" : "Department Head"
-    const warnings = recipient_ids.map((recipientId: string) => ({
-      recipient_id: recipientId,
-      sender_id: user.id,
-      sender_role: profile.role,
-      sender_label: senderLabel,
-      subject: `Attendance Notice - ${warning_type === "daily_absence" ? "Daily" : "Weekly"} Check-in Issue`,
-      message: message.trim(),
-      warning_type: warning_type || "attendance_issue",
-      is_read: false,
-      attendance_date: new Date().toISOString().split("T")[0],
-      department_id: profile.department_id,
-    }))
+
+    const warnings = recipients.map((recipient) => {
+      const firstName = recipient.full_name.split(" ")[0]
+      const personalizedMessage = message.trim().replace(/\[STAFF_NAME\]/g, `Dear ${firstName}`)
+
+      return {
+        recipient_id: recipient.id,
+        sender_id: user.id,
+        sender_role: profile.role,
+        sender_label: senderLabel,
+        subject: `Attendance Notice - ${warning_type === "daily_absence" ? "Daily" : "Weekly"} Check-in Issue`,
+        message: personalizedMessage,
+        warning_type: warning_type || "attendance_issue",
+        is_read: false,
+        attendance_date: new Date().toISOString().split("T")[0],
+        department_id: profile.department_id,
+      }
+    })
 
     const { data, error } = await supabase.from("staff_warnings").insert(warnings).select()
 

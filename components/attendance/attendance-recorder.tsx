@@ -400,7 +400,7 @@ export function AttendanceRecorder({
   }
 
   useEffect(() => {
-    if (userLocation && realTimeLocations.length > 0 && userProfile?.assigned_location_id) {
+    if (userLocation && realTimeLocations?.length > 0 && userProfile?.assigned_location_id) {
       // Use realTimeLocations here
       const assignedLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id) // Use realTimeLocations here
       if (assignedLocation) {
@@ -432,7 +432,7 @@ export function AttendanceRecorder({
   // Simplified location validation logic as per new update.
   // This effect is now primarily for logging and potentially updating `locationValidation` based on fetched `userLocation`.
   useEffect(() => {
-    if (userLocation && realTimeLocations.length > 0) {
+    if (userLocation && realTimeLocations?.length > 0) {
       // Use realTimeLocations here
       console.log(
         "[v0] All available locations:",
@@ -797,7 +797,8 @@ export function AttendanceRecorder({
 
       let nearestLocation = null
 
-      if (locations.length > 1) {
+      // CHECK: Added null/undefined checks for locations
+      if (locations && locations.length > 1) {
         const locationDistances = locations
           .map((loc) => {
             const distance = calculateDistance(location.latitude, location.longitude, loc.latitude, loc.longitude)
@@ -820,7 +821,8 @@ export function AttendanceRecorder({
           nearestLocation = locationDistances[0]?.location
           console.log("[v0] Automatically using nearest location for check-out:", nearestLocation?.name)
         }
-      } else {
+      } else if (locations && locations.length > 0) {
+        // CHECK: Added null/undefined checks for locations
         const nearest = findNearestLocation(location, locations)
         nearestLocation = nearest?.location || locations[0]
       }
@@ -1064,7 +1066,8 @@ export function AttendanceRecorder({
 
   const defaultMode = canCheckIn ? "checkin" : canCheckOut ? "checkout" : "completed"
 
-  const findNearestLocation = (userLocation: LocationData, locations: GeofenceLocation[]) => {
+  // CHECK: Added null/undefined checks for locations
+  const findNearestLocation = (location: LocationData, locations: GeofenceLocation[]) => {
     // This function seems to be a placeholder and might need more robust implementation
     // based on actual requirements, but for now, it returns the first location.
     if (!locations || locations.length === 0) return undefined
