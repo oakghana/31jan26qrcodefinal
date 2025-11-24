@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Camera, X, CheckCircle, KeyRound } from "lucide-react"
+import { Camera, X, CheckCircle, KeyRound, Upload } from "lucide-react"
 import { parseQRCode, validateQRCode, type QRCodeData } from "@/lib/qr-code"
 import { useToast } from "@/hooks/use-toast"
 
@@ -459,6 +459,72 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
     }
   }
 
+  const startMobileCamera = async () => {
+    try {
+      setError(null)
+      setIsScanning(true)
+
+      console.log("[v0] Starting mobile camera for QR scanning")
+
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: { exact: "environment" }, // Force back camera on mobile
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log("[v0] Mobile camera stream obtained successfully")
+
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.setAttribute("playsinline", "true")
+        videoRef.current.setAttribute("webkit-playsinline", "true")
+        videoRef.current.setAttribute("muted", "true")
+        videoRef.current.setAttribute("autoplay", "true")
+        videoRef.current.muted = true
+
+        await videoRef.current.play()
+        console.log("[v0] Mobile camera started, beginning QR scan")
+
+        // Start scanning for QR codes
+        scanIntervalRef.current = setInterval(scanForQRCode, 500)
+
+        toast({
+          title: "Camera Active",
+          description: "Point your camera at the QR code to scan",
+          duration: 3000,
+        })
+      }
+    } catch (error: any) {
+      console.error("[v0] Mobile camera error:", error)
+      let errorMessage = "Failed to access camera. "
+
+      if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+        errorMessage += "Please allow camera access in your browser settings."
+      } else if (error.name === "NotFoundError") {
+        errorMessage += "No camera found on your device."
+      } else if (error.name === "NotReadableError") {
+        errorMessage += "Camera is being used by another app."
+      } else {
+        errorMessage += "Please try using manual code entry instead."
+      }
+
+      setError(errorMessage)
+      setIsScanning(false)
+
+      toast({
+        title: "Camera Error",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 8000,
+      })
+    }
+  }
+
   useEffect(() => {
     if (autoStart && !isScanning && !isMobile) {
       startScanning()
@@ -496,39 +562,74 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
 
         {isMobile ? (
           <div className="space-y-4">
-            <div className="text-center space-y-4">
-              {/* Native camera button for mobile */}
-              <label htmlFor="qr-camera-input">
-                <div className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-semibold ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-20 px-8 py-6 w-full cursor-pointer">
-                  <Camera className="h-8 w-8" />
-                  <span className="text-lg">Open Camera to Scan QR Code</span>
+            {!isScanning ? (
+              <div className="text-center space-y-4">
+                <Button onClick={startMobileCamera} size="lg" className="w-full h-20 text-lg">
+                  <Camera className="h-8 w-8 mr-3" />
+                  Start Camera to Scan QR Code
+                </Button>
+
+                <p className="text-sm text-muted-foreground">
+                  Tap above to activate your camera and scan the QR code in real-time
+                </p>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or upload photo</span>
+                  </div>
                 </div>
-              </label>
-              <input
-                id="qr-camera-input"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
 
-              <p className="text-sm text-muted-foreground">Tap above to open your camera and scan the QR code</p>
-
+                <label htmlFor="qr-camera-input">
+                  <div className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-16 px-6 w-full cursor-pointer">
+                    <Upload className="h-6 w-6" />
+                    <span>Upload QR Code Photo</span>
+                  </div>
+                </label>
+                <input
+                  id="qr-camera-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </div>
+            ) : (
               <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+                <video ref={videoRef} className="w-full rounded-lg" playsInline muted autoPlay />
+                <canvas ref={canvasRef} className="hidden" />
+
+                {/* Scanning indicator */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="border-4 border-primary w-64 h-64 rounded-lg relative">
+                    <div className="absolute w-full h-1 bg-primary/70 animate-scan" />
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+
+                <div className="mt-4 flex gap-2">
+                  <Button onClick={stopScanning} variant="outline" className="flex-1 bg-transparent">
+                    Stop Camera
+                  </Button>
                 </div>
               </div>
+            )}
 
-              <Button variant="outline" onClick={() => setShowManualInput(!showManualInput)} className="w-full h-16">
-                <KeyRound className="mr-2 h-4 w-4" />
-                <span className="text-base">Enter Location Code Manually</span>
-              </Button>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or enter code manually</span>
+              </div>
             </div>
+
+            <Button variant="outline" onClick={() => setShowManualInput(!showManualInput)} className="w-full">
+              <KeyRound className="mr-2 h-4 w-4" />
+              Enter Location Code Manually
+            </Button>
           </div>
         ) : (
           // Desktop camera interface
