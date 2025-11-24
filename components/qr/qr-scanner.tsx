@@ -35,6 +35,10 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
     setIsMobile(checkMobile)
     console.log("[v0] Mobile device detected:", checkMobile)
+
+    if (autoStart && !checkMobile) {
+      startScanning()
+    }
   }, [])
 
   const startScanning = async () => {
@@ -341,7 +345,7 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
     reader.readAsDataURL(file)
   }
 
-  const handleManualCodeSubmit = () => {
+  const handleManualCodeSubmit = async () => {
     if (!manualCode.trim()) {
       setError("Please enter a location code")
       return
@@ -354,7 +358,46 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
         if (validation.isValid) {
           setSuccess("Location code validated successfully!")
           console.log("[v0] Valid manual code, calling onScanSuccess")
-          onScanSuccess(qrData)
+
+          try {
+            console.log("[v0] Attempting to get GPS for manual entry (optional, 3 second timeout)...")
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error("GPS timeout")), 3000) // Shorter timeout
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  clearTimeout(timeout)
+                  resolve(pos)
+                },
+                (err) => {
+                  clearTimeout(timeout)
+                  reject(err)
+                },
+                { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }, // Less strict requirements
+              )
+            })
+
+            // GPS available - add to QR data
+            console.log("[v0] GPS location obtained for manual code entry, distance will be verified")
+            toast({
+              title: "GPS Obtained",
+              description: "Your location will be verified (must be within 40m)",
+              duration: 3000,
+            })
+            onScanSuccess({
+              ...qrData,
+              userLatitude: position.coords.latitude,
+              userLongitude: position.coords.longitude,
+            })
+          } catch (gpsError) {
+            console.log("[v0] GPS not available for manual code entry, proceeding WITHOUT GPS verification")
+            toast({
+              title: "GPS Unavailable",
+              description: "Checking in without GPS verification. Location verified by code only.",
+              duration: 4000,
+            })
+            // Proceed without GPS - no distance check will be performed
+            onScanSuccess(qrData)
+          }
         } else {
           setError(validation.reason || "Invalid location code")
         }
@@ -368,7 +411,7 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
   }
 
   useEffect(() => {
-    if (autoStart && !isScanning) {
+    if (autoStart && !isScanning && !isMobile) {
       startScanning()
     }
 
@@ -378,185 +421,143 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
   }, [autoStart])
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-lg sm:text-xl">
-              {showManualInput ? "Enter Location Code" : "Scan QR Code"}
-            </CardTitle>
-            <CardDescription className="text-sm">
-              {showManualInput ? "Enter your location code manually" : "Scan the location QR code to check in"}
-            </CardDescription>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose} className="touch-manipulation h-10 w-10 p-0">
-            <X className="h-5 w-5" />
+          <CardTitle>QR Code Scanner</CardTitle>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-4 w-4" />
           </Button>
         </div>
+        <CardDescription>Scan location QR code or enter code manually</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
           <Alert variant="destructive">
-            <AlertDescription className="text-sm">{error}</AlertDescription>
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
         {success && (
-          <Alert>
+          <Alert className="bg-green-50 text-green-900 border-green-200">
             <CheckCircle className="h-4 w-4" />
-            <AlertDescription className="text-sm">{success}</AlertDescription>
+            <AlertDescription>{success}</AlertDescription>
           </Alert>
         )}
 
-        {showManualInput ? (
-          <div className="space-y-4 p-4">
-            <div className="space-y-2">
-              <Label htmlFor="location-code" className="text-base font-semibold">
-                Location Code
-              </Label>
-              <Input
-                id="location-code"
-                placeholder="e.g., HO-SWZ-001"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                className="h-16 text-lg font-mono touch-manipulation"
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    handleManualCodeSubmit()
-                  }
-                }}
+        {isMobile ? (
+          <div className="space-y-4">
+            <div className="text-center space-y-4">
+              {/* Native camera button for mobile */}
+              <label htmlFor="qr-camera-input">
+                <div className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-semibold ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-20 px-8 py-6 w-full cursor-pointer">
+                  <Camera className="h-8 w-8" />
+                  <span className="text-lg">Open Camera to Scan QR Code</span>
+                </div>
+              </label>
+              <input
+                id="qr-camera-input"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileUpload}
               />
-              <p className="text-sm text-muted-foreground">Enter the location code found on the QCC location sign</p>
-            </div>
 
-            <Button
-              onClick={handleManualCodeSubmit}
-              className="w-full touch-manipulation h-16 text-lg font-semibold"
-              disabled={!manualCode.trim()}
-            >
-              <KeyRound className="h-5 w-5 mr-2" />
-              Submit Location Code
-            </Button>
+              <p className="text-sm text-muted-foreground">Tap above to open your camera and scan the QR code</p>
 
-            <Button
-              onClick={() => {
-                setShowManualInput(false)
-                setError(null)
-                setManualCode("")
-              }}
-              variant="outline"
-              className="w-full touch-manipulation h-14"
-            >
-              Back to Camera Scan
-            </Button>
-          </div>
-        ) : !isScanning ? (
-          <div className="space-y-4 p-4">
-            <Button
-              onClick={startScanning}
-              className="w-full touch-manipulation h-20 text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-            >
-              <Camera className="h-8 w-8 mr-3" />
-              Start Camera Scanner
-            </Button>
-
-            {isMobile && (
-              <div>
-                <label htmlFor="qr-capture" className="block">
-                  <Button
-                    variant="outline"
-                    className="w-full touch-manipulation h-20 text-xl font-bold bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-2 border-green-500"
-                    asChild
-                  >
-                    <span>
-                      <Camera className="h-8 w-8 mr-3" />
-                      Take Photo of QR Code
-                    </span>
-                  </Button>
-                </label>
-                <input
-                  id="qr-capture"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-              </div>
-            )}
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Or</span>
-              </div>
-            </div>
-
-            <Button
-              onClick={() => setShowManualInput(true)}
-              variant="outline"
-              className="w-full touch-manipulation h-16 text-lg font-semibold bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700"
-            >
-              <KeyRound className="h-5 w-5 mr-2" />
-              Enter Location Code
-            </Button>
-
-            {!isMobile && (
-              <div>
-                <label htmlFor="qr-upload" className="block">
-                  <Button
-                    variant="outline"
-                    className="w-full touch-manipulation h-14 text-base font-semibold bg-transparent"
-                    asChild
-                  >
-                    <span>Upload QR Image</span>
-                  </Button>
-                </label>
-                <input id="qr-upload" type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-              </div>
-            )}
-
-            <p className="text-sm text-center text-muted-foreground mt-4 leading-relaxed">
-              {isMobile
-                ? "Use your camera to scan or take a photo of the QCC location QR code. You must be within 40 meters of the location."
-                : "Point your camera at the QCC location QR code, or enter the location code manually."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4 p-4">
-            <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: "4/3" }}>
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              <canvas ref={canvasRef} className="hidden" />
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-64 h-64 border-4 border-white rounded-2xl relative">
-                  <div className="absolute -top-2 -left-2 w-12 h-12 border-t-8 border-l-8 border-blue-500 rounded-tl-lg"></div>
-                  <div className="absolute -top-2 -right-2 w-12 h-12 border-t-8 border-r-8 border-blue-500 rounded-tr-lg"></div>
-                  <div className="absolute -bottom-2 -left-2 w-12 h-12 border-b-8 border-l-8 border-blue-500 rounded-bl-lg"></div>
-                  <div className="absolute -bottom-2 -right-2 w-12 h-12 border-b-8 border-r-8 border-blue-500 rounded-br-lg"></div>
-
-                  <div className="absolute inset-0 overflow-hidden">
-                    <div className="w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-scan"></div>
-                  </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
                 </div>
               </div>
 
-              <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 w-11/12">
-                <p className="text-white text-base sm:text-lg bg-black/80 px-6 py-3 rounded-full text-center font-semibold backdrop-blur-sm">
-                  📷 Align QR code within frame
-                </p>
-              </div>
+              <Button variant="outline" onClick={() => setShowManualInput(!showManualInput)} className="w-full h-16">
+                <KeyRound className="mr-2 h-4 w-4" />
+                <span className="text-base">Enter Location Code Manually</span>
+              </Button>
             </div>
+          </div>
+        ) : (
+          // Desktop camera interface
+          <div className="space-y-4">
+            {!isScanning ? (
+              <div className="space-y-4">
+                <Button onClick={startScanning} className="w-full h-16" size="lg">
+                  <Camera className="mr-2 h-6 w-6" />
+                  <span className="text-lg">Start Camera Scanner</span>
+                </Button>
 
-            <Button
-              onClick={stopScanning}
-              variant="destructive"
-              className="w-full touch-manipulation h-16 text-lg font-bold"
-            >
-              <X className="h-6 w-6 mr-2" />
-              Stop Camera
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="qr-upload">Upload QR Code Image</Label>
+                  <Input id="qr-upload" type="file" accept="image/*" onChange={handleFileUpload} />
+                </div>
+
+                <Button variant="outline" onClick={() => setShowManualInput(!showManualInput)} className="w-full">
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Enter Location Code Manually
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "16/9" }}>
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    playsInline
+                    muted
+                    autoPlay
+                    style={{ transform: "scaleX(-1)" }}
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+
+                  {/* Scanning animation overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-64 h-64 border-4 border-white rounded-lg relative">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-green-500 animate-scan-line" />
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={stopScanning} variant="destructive" className="w-full">
+                  Stop Scanning
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Manual code input */}
+        {showManualInput && (
+          <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+            <div className="space-y-2">
+              <Label htmlFor="manual-code">Location Code</Label>
+              <Input
+                id="manual-code"
+                type="text"
+                placeholder="Enter the location code from QR"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the code shown below the QR code on the location sign
+              </p>
+            </div>
+            <Button onClick={handleManualCodeSubmit} className="w-full" size="lg">
+              Submit Location Code
             </Button>
           </div>
         )}
