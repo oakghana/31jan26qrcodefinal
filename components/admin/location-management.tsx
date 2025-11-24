@@ -430,6 +430,175 @@ export function LocationManagement() {
     </div>
   )
 
+  const downloadQRCodeAsPDF = async () => {
+    if (!qrCodeUrl || !selectedLocation) return
+
+    try {
+      // Create a printable HTML page
+      const printWindow = window.open("", "_blank")
+      if (!printWindow) {
+        setError("Please allow pop-ups to download the QR code")
+        return
+      }
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>${selectedLocation.name} - QR Code Instructions</title>
+            <style>
+              @page {
+                size: A4;
+                margin: 20mm;
+              }
+              body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                max-width: 800px;
+                margin: 0 auto;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+              }
+              .logo {
+                width: 80px;
+                height: 80px;
+                margin: 0 auto 20px;
+              }
+              h1 {
+                color: #1a5f3f;
+                font-size: 24px;
+                margin-bottom: 10px;
+              }
+              .qr-container {
+                text-align: center;
+                margin: 30px 0;
+                padding: 20px;
+                border: 2px solid #1a5f3f;
+                border-radius: 8px;
+              }
+              .qr-code {
+                width: 300px;
+                height: 300px;
+                margin: 0 auto;
+              }
+              .location-name {
+                font-size: 20px;
+                font-weight: bold;
+                color: #1a5f3f;
+                margin-top: 20px;
+              }
+              .instructions {
+                margin: 30px 0;
+              }
+              .instructions h2 {
+                color: #1a5f3f;
+                font-size: 18px;
+                margin-bottom: 15px;
+              }
+              .instructions ol {
+                line-height: 1.8;
+                font-size: 14px;
+              }
+              .instructions li {
+                margin-bottom: 10px;
+              }
+              .note {
+                background-color: #fff3cd;
+                border-left: 4px solid #ffc107;
+                padding: 15px;
+                margin: 20px 0;
+                font-size: 13px;
+              }
+              .note strong {
+                display: block;
+                margin-bottom: 8px;
+                color: #856404;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #ddd;
+                font-size: 12px;
+                color: #666;
+              }
+              @media print {
+                .no-print {
+                  display: none;
+                }
+              }
+              .print-button {
+                background-color: #1a5f3f;
+                color: white;
+                border: none;
+                padding: 12px 30px;
+                font-size: 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                margin: 20px auto;
+                display: block;
+              }
+              .print-button:hover {
+                background-color: #145032;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="logo">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="50" cy="50" r="45" fill="#1a5f3f"/>
+                  <text x="50" y="60" fontSize="40" fontWeight="bold" fill="white" textAnchor="middle">QCC</text>
+                </svg>
+              </div>
+              <h1>QCC Attendance System</h1>
+            </div>
+
+            <div class="qr-container">
+              <img src="${qrCodeUrl}" alt="QR Code" class="qr-code" />
+              <div class="location-name">${selectedLocation.name}</div>
+            </div>
+
+            <div class="instructions">
+              <h2>How to Use QR Code Check-In/Out</h2>
+              <ol>
+                <li>Go to the <strong>Attendance</strong> page in your dashboard</li>
+                <li>Click on the <strong>"Scan QR Code"</strong> button</li>
+                <li>Allow camera access when prompted</li>
+                <li>Point your camera at this QR code</li>
+                <li>The system will verify you're within <strong>40 meters</strong> of the location</li>
+                <li>If verified, you'll be checked in/out automatically</li>
+              </ol>
+            </div>
+
+            <div class="note">
+              <strong>⚠️ Important Note:</strong>
+              You must be within <strong>40 meters</strong> of ${selectedLocation.name} to use this QR code.
+              Location services must be enabled on your device.
+            </div>
+
+            <button class="print-button no-print" onclick="window.print()">
+              🖨️ Print or Save as PDF
+            </button>
+
+            <div class="footer">
+              <p>Quality Control Company (QCC) - Attendance Management System</p>
+              <p>For support, contact your IT administrator</p>
+            </div>
+          </body>
+        </html>
+      `)
+
+      printWindow.document.close()
+    } catch (error) {
+      console.error("[v0] Error generating printable page:", error)
+      setError("Failed to generate printable QR code")
+    }
+  }
+
   if (loading && locations.length === 0) {
     return (
       <div className="space-y-6">
@@ -850,6 +1019,7 @@ export function LocationManagement() {
                 >
                   Download QR Code
                 </Button>
+                <Button onClick={downloadQRCodeAsPDF}>Download QR Code with Instructions (PDF)</Button>
               </div>
             )}
           </DialogContent>

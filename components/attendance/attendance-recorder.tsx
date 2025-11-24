@@ -1632,7 +1632,7 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
       )}
 
       <Dialog open={showQRScanner} onOpenChange={setShowQRScanner}>
-        <DialogContent className="max-w-[95vw] sm:max-w-md p-0 max-h-[90vh] overflow-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-md p-0 max-h-[95vh] overflow-y-auto">
           <QRScanner onScanSuccess={handleQRScanSuccess} onClose={() => setShowQRScanner(false)} autoStart={true} />
         </DialogContent>
       </Dialog>

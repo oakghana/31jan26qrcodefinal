@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Camera, X, CheckCircle, KeyRound } from "lucide-react"
 import { parseQRCode, validateQRCode, type QRCodeData } from "@/lib/qr-code"
+import { useToast } from "@/hooks/use-toast"
 
 interface QRScannerProps {
   onScanSuccess: (data: QRCodeData) => void
@@ -27,30 +28,50 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const { toast } = useToast()
 
   const startScanning = async () => {
     try {
       setError(null)
       setIsScanning(true)
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: {
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
         },
-      })
+      }
+
+      console.log("[v0] Requesting camera access with constraints:", constraints)
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
+
+        videoRef.current.setAttribute("playsinline", "true")
+        videoRef.current.setAttribute("webkit-playsinline", "true")
+
         await videoRef.current.play()
+        console.log("[v0] Camera stream started successfully")
 
         scanIntervalRef.current = setInterval(scanForQRCode, 200)
       }
     } catch (err) {
       console.error("[v0] Camera access error:", err)
-      setError("Camera access denied or not available")
+      const errorMessage =
+        "Camera access denied or not available. Please enable camera permissions in your device settings."
+      setError(errorMessage)
+
+      toast({
+        title: "Camera Error",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 5000,
+      })
+
       setIsScanning(false)
     }
   }
@@ -88,6 +109,7 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
   const processQRCode = async (qrDataString: string) => {
     try {
       stopScanning()
+      console.log("[v0] Processing manual code:", qrDataString)
 
       const qrData = parseQRCode(qrDataString)
       if (qrData) {
@@ -97,7 +119,7 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
             const position = await new Promise<GeolocationPosition>((resolve, reject) => {
               navigator.geolocation.getCurrentPosition(resolve, reject, {
                 enableHighAccuracy: true,
-                timeout: 10000,
+                timeout: 15000, // Increased timeout for mobile
                 maximumAge: 0,
               })
             })
@@ -108,6 +130,7 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
             }
 
             console.log("[v0] User GPS location obtained for QR check-in:", userLocation)
+            console.log("[v0] Distance to location:", qrData.location_id)
 
             const response = await fetch("/api/attendance/qr-checkin", {
               method: "POST",
@@ -127,35 +150,81 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
             const result = await response.json()
 
             if (!response.ok) {
+              let errorMsg = result.error || "Failed to process QR code check-in"
+
               if (response.status === 403 && result.distance) {
-                setError(
-                  result.message ||
-                    `You must be within 40 meters to use QR code check-in. You are ${result.distance}m away from ${result.locationName}.`,
-                )
-              } else {
-                setError(result.error || "Failed to process QR code check-in")
+                errorMsg = `You are too far from ${result.locationName} (${result.distance}m away). You must be within 40 meters to check in.`
               }
+
+              console.error("[v0] QR check-in failed:", errorMsg)
+              setError(errorMsg)
+
+              toast({
+                title: "Check-In Failed",
+                description: errorMsg,
+                variant: "destructive",
+                duration: 8000,
+              })
               return
             }
 
-            setSuccess("QR code scanned successfully!")
+            const successMsg = "QR code scanned successfully!"
+            setSuccess(successMsg)
+
+            toast({
+              title: "Success",
+              description: successMsg,
+              duration: 3000,
+            })
+
             console.log("[v0] Valid QR code with GPS validation, calling onScanSuccess")
             onScanSuccess(result.data || qrData)
           } catch (gpsError) {
             console.error("[v0] Failed to get GPS location:", gpsError)
-            setError(
-              "Location access required for QR code check-in. Please enable location services. You must be within 40 meters of the location to check in.",
-            )
+            const errorMsg =
+              "Location access required for QR code check-in. Please enable location services. You must be within 40 meters of the location to check in."
+            setError(errorMsg)
+
+            toast({
+              title: "Location Required",
+              description: errorMsg,
+              variant: "destructive",
+              duration: 8000,
+            })
           }
         } else {
-          setError(validation.reason || "Invalid QR code")
+          const errorMsg = validation.reason || "Invalid QR code"
+          setError(errorMsg)
+
+          toast({
+            title: "Invalid QR Code",
+            description: errorMsg,
+            variant: "destructive",
+            duration: 5000,
+          })
         }
       } else {
-        setError("Invalid QR code format")
+        const errorMsg = "Invalid QR code format"
+        setError(errorMsg)
+
+        toast({
+          title: "Invalid QR Code",
+          description: errorMsg,
+          variant: "destructive",
+          duration: 5000,
+        })
       }
     } catch (error) {
       console.error("[v0] QR processing error:", error)
-      setError("Failed to process QR code")
+      const errorMsg = "Failed to process QR code"
+      setError(errorMsg)
+
+      toast({
+        title: "Error",
+        description: errorMsg,
+        variant: "destructive",
+        duration: 5000,
+      })
     }
   }
 
