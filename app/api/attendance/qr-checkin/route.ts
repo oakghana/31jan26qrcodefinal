@@ -37,7 +37,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid or inactive location" }, { status: 400 })
     }
 
-    // If no GPS provided, skip proximity check (for devices with GPS issues)
     let distance = 0
     let proximityVerified = false
     let gpsAvailable = false
@@ -133,8 +132,8 @@ export async function POST(request: Request) {
         check_in_location_name: location.name,
         check_in_time: now.toISOString(),
         check_in_method: "qr_code",
-        check_in_accuracy: Math.round(distance),
-        check_in_browser: device_info?.browser || "qr_scanner",
+        check_in_latitude: userLatitude || location.latitude,
+        check_in_longitude: userLongitude || location.longitude,
         status: "present",
         notes: gpsAvailable
           ? `QR code scanned - ${Math.round(distance)}m from location (GPS verified within 40m)`
@@ -145,7 +144,7 @@ export async function POST(request: Request) {
 
     if (insertError) {
       console.error("[v0] Failed to create attendance record:", insertError)
-      return NextResponse.json({ error: "Failed to record attendance" }, { status: 500 })
+      return NextResponse.json({ error: "Failed to record attendance", details: insertError.message }, { status: 500 })
     }
 
     console.log("[v0] Attendance record created via QR code (within 40m):", attendance.id)

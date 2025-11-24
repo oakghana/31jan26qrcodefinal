@@ -35,6 +35,7 @@ import { MapPin, Clock, Loader2, AlertTriangle, Navigation, QrCode, CheckCircle2
 import { useRealTimeLocations } from "@/hooks/use-real-time-locations"
 import { createClient } from "@/lib/supabase/client"
 import { QRScanner } from "@/components/qr/qr-scanner"
+import { toast } from "@/components/ui/use-toast" // Imported toast
 
 interface GeofenceLocation {
   id: string
@@ -177,15 +178,20 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          qrData,
-          deviceInfo: getDeviceInfo(),
+          location_id: qrData.locationId,
+          qr_timestamp: qrData.timestamp,
+          userLatitude: qrData.userLatitude,
+          userLongitude: qrData.userLongitude,
+          device_info: getDeviceInfo(),
         }),
       })
 
       const result = await response.json()
+      console.log("[v0] QR check-in API response:", result)
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to check in with QR code")
+        const errorMsg = result.message || result.error || "Failed to check in with QR code"
+        throw new Error(errorMsg)
       }
 
       setSuccess("✓ Checked in successfully with QR code!")
@@ -200,6 +206,13 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     } catch (error: any) {
       console.error("[v0] QR check-in error:", error)
       setError(error.message || "Failed to check in with QR code")
+
+      toast({
+        title: "Check-in Failed",
+        description: error.message || "Failed to check in with QR code",
+        variant: "destructive",
+        duration: 8000,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -217,15 +230,20 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          qrData,
-          deviceInfo: getDeviceInfo(),
+          location_id: qrData.locationId,
+          qr_timestamp: qrData.timestamp,
+          userLatitude: qrData.userLatitude,
+          userLongitude: qrData.userLongitude,
+          device_info: getDeviceInfo(),
         }),
       })
 
       const result = await response.json()
+      console.log("[v0] QR check-out API response:", result)
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to check out with QR code")
+        const errorMsg = result.message || result.error || "Failed to check out with QR code"
+        throw new Error(errorMsg)
       }
 
       setSuccess("✓ Checked out successfully with QR code!")
@@ -240,6 +258,13 @@ export function AttendanceRecorder({ todayAttendance }: AttendanceRecorderProps)
     } catch (error: any) {
       console.error("[v0] QR check-out error:", error)
       setError(error.message || "Failed to check out with QR code")
+
+      toast({
+        title: "Check-out Failed",
+        description: error.message || "Failed to check out with QR code",
+        variant: "destructive",
+        duration: 8000,
+      })
     } finally {
       setIsLoading(false)
     }

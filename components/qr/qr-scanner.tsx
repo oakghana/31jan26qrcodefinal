@@ -8,14 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Camera, X, CheckCircle, KeyRound, Upload } from "lucide-react"
-import { parseQRCode, validateQRCode, type QRCodeData } from "@/lib/qr-code"
+import { Camera, X, CheckCircle, KeyRound, Upload, Copy, MapPin, Info } from "lucide-react"
+import { parseQRCode, parseLocationCode, validateQRCode, type QRCodeData } from "@/lib/qr-code"
 import { useToast } from "@/hooks/use-toast"
 
 interface QRScannerProps {
   onScanSuccess: (data: QRCodeData) => void
   onClose: () => void
   autoStart?: boolean
+}
+
+interface Location {
+  id: string
+  name: string
+  address: string
+  location_code: string
 }
 
 export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScannerProps) {
@@ -25,6 +32,9 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
   const [showManualInput, setShowManualInput] = useState(false)
   const [manualCode, setManualCode] = useState("")
   const [isMobile, setIsMobile] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [availableLocations, setAvailableLocations] = useState<Location[]>([])
+  const [loadingLocations, setLoadingLocations] = useState(true)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -36,10 +46,26 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
     setIsMobile(checkMobile)
     console.log("[v0] Mobile device detected:", checkMobile)
 
+    fetchAvailableLocations()
+
     if (autoStart && !checkMobile) {
       startScanning()
     }
   }, [])
+
+  const fetchAvailableLocations = async () => {
+    try {
+      const response = await fetch("/api/locations/active")
+      if (response.ok) {
+        const { locations } = await response.json()
+        setAvailableLocations(locations || [])
+      }
+    } catch (error) {
+      console.error("[v0] Failed to fetch locations:", error)
+    } finally {
+      setLoadingLocations(false)
+    }
+  }
 
   const startScanning = async () => {
     try {
@@ -397,65 +423,130 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
   const handleManualCodeSubmit = async () => {
     if (!manualCode.trim()) {
       setError("Please enter a location code")
+      toast({
+        title: "Error",
+        description: "Please enter a location code",
+        variant: "destructive",
+        duration: 5000,
+      })
       return
     }
 
+    setIsLoading(true)
+    setError(null)
+
     try {
+      console.log("[v0] Processing manual code entry:", manualCode)
+
       const qrData = parseQRCode(manualCode)
+
       if (qrData) {
+        // It's a full JSON QR code (from scanning)
+        console.log("[v0] Parsed as JSON QR code")
         const validation = validateQRCode(qrData)
-        if (validation.isValid) {
-          setSuccess("Location code validated successfully!")
-          console.log("[v0] Valid manual code, calling onScanSuccess")
-
-          try {
-            console.log("[v0] Attempting to get GPS for manual entry (optional, 3 second timeout)...")
-            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-              const timeout = setTimeout(() => reject(new Error("GPS timeout")), 3000) // Shorter timeout
-              navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                  clearTimeout(timeout)
-                  resolve(pos)
-                },
-                (err) => {
-                  clearTimeout(timeout)
-                  reject(err)
-                },
-                { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }, // Less strict requirements
-              )
-            })
-
-            // GPS available - add to QR data
-            console.log("[v0] GPS location obtained for manual code entry, distance will be verified")
-            toast({
-              title: "GPS Obtained",
-              description: "Your location will be verified (must be within 40m)",
-              duration: 3000,
-            })
-            onScanSuccess({
-              ...qrData,
-              userLatitude: position.coords.latitude,
-              userLongitude: position.coords.longitude,
-            })
-          } catch (gpsError) {
-            console.log("[v0] GPS not available for manual code entry, proceeding WITHOUT GPS verification")
-            toast({
-              title: "GPS Unavailable",
-              description: "Checking in without GPS verification. Location verified by code only.",
-              duration: 4000,
-            })
-            // Proceed without GPS - no distance check will be performed
-            onScanSuccess(qrData)
-          }
-        } else {
-          setError(validation.reason || "Invalid location code")
+        if (!validation.isValid) {
+          throw new Error(validation.reason || "Invalid or expired QR code")
         }
+
+        // Process with GPS check
+        await attemptGPSAndSubmit(qrData)
       } else {
-        setError("Invalid location code format. Expected format: HO-SWZ-001")
+        const locationCode = parseLocationCode(manualCode)
+
+        if (!locationCode) {
+          throw new Error("Invalid location code format. Please enter a valid code like 'SWANZY', 'ACCRA', or 'NSAWAM'")
+        }
+
+        console.log("[v0] Parsed as simple location code:", locationCode.locationCode)
+
+        // Lookup location by code
+        const response = await fetch(`/api/locations/lookup?code=${encodeURIComponent(locationCode.locationCode)}`)
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.message || "Location code not found")
+        }
+
+        const { location } = await response.json()
+        console.log("[v0] Found location:", location)
+
+        // Create QR data structure from location
+        const manualQRData: QRCodeData = {
+          type: "location",
+          locationId: location.id,
+          timestamp: Date.now(),
+          signature: "manual-entry", // Special signature for manual entries
+        }
+
+        // Process with optional GPS
+        await attemptGPSAndSubmit(manualQRData)
       }
-    } catch (error) {
+
+      setSuccess("Check-in successful!")
+      toast({
+        title: "Success",
+        description: "Location code validated and check-in initiated",
+        duration: 5000,
+      })
+
+      // Close scanner after short delay
+      setTimeout(() => {
+        onClose()
+      }, 1500)
+    } catch (error: any) {
       console.error("[v0] Manual code processing error:", error)
-      setError("Failed to process location code")
+      const errorMsg = error.message || "Failed to process location code"
+      setError(errorMsg)
+      toast({
+        title: "Check-in Failed",
+        description: errorMsg,
+        variant: "destructive",
+        duration: 8000,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const attemptGPSAndSubmit = async (qrData: QRCodeData) => {
+    try {
+      console.log("[v0] Attempting to get GPS for manual entry (optional, 3 second timeout)...")
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("GPS timeout")), 3000)
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            clearTimeout(timeout)
+            resolve(pos)
+          },
+          (err) => {
+            clearTimeout(timeout)
+            reject(err)
+          },
+          { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 },
+        )
+      })
+
+      console.log("[v0] GPS location obtained, distance will be verified")
+      toast({
+        title: "GPS Obtained",
+        description: "Your location will be verified (must be within 40m)",
+        duration: 3000,
+      })
+
+      onScanSuccess({
+        ...qrData,
+        userLatitude: position.coords.latitude,
+        userLongitude: position.coords.longitude,
+      })
+    } catch (gpsError) {
+      console.log("[v0] GPS not available, proceeding WITHOUT GPS verification")
+      toast({
+        title: "GPS Unavailable",
+        description: "Checking in without distance verification. Location verified by code only.",
+        duration: 4000,
+      })
+
+      onScanSuccess(qrData)
     }
   }
 
@@ -539,12 +630,16 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>QR Code Scanner</CardTitle>
+          <CardTitle>QR Code Check-In</CardTitle>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <CardDescription>Scan location QR code or enter code manually</CardDescription>
+        <CardDescription>
+          {isMobile
+            ? "Use your phone's camera to scan, then enter the code below"
+            : "Scan location QR code or enter code manually"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
@@ -561,156 +656,219 @@ export function QRScanner({ onScanSuccess, onClose, autoStart = false }: QRScann
         )}
 
         {isMobile ? (
-          <div className="space-y-4">
-            {!isScanning ? (
-              <div className="text-center space-y-4">
-                <Button onClick={startMobileCamera} size="lg" className="w-full h-20 text-lg">
-                  <Camera className="h-8 w-8 mr-3" />
-                  Start Camera to Scan QR Code
-                </Button>
-
-                <p className="text-sm text-muted-foreground">
-                  Tap above to activate your camera and scan the QR code in real-time
-                </p>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or upload photo</span>
-                  </div>
+          <div className="space-y-6">
+            {/* Native QR Scanner Instructions */}
+            <Card className="border-2 border-primary/20 bg-primary/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  Use Your Phone's Built-In QR Scanner
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-2 text-sm">
+                  <p className="font-semibold">Quick Steps:</p>
+                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                    <li>Open your phone's Camera app</li>
+                    <li>Point camera at the QR code</li>
+                    <li>The code will appear automatically (e.g., "SWANZY", "ACCRA")</li>
+                    <li>Copy or remember the code</li>
+                    <li>Come back here and enter it below</li>
+                  </ol>
                 </div>
 
-                <label htmlFor="qr-camera-input">
-                  <div className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-16 px-6 w-full cursor-pointer">
-                    <Upload className="h-6 w-6" />
-                    <span>Upload QR Code Photo</span>
-                  </div>
-                </label>
-                <input
-                  id="qr-camera-input"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handleFileUpload}
+                <Alert className="bg-blue-50 border-blue-200">
+                  <AlertDescription className="text-xs text-blue-900">
+                    <strong>iOS:</strong> Use Camera app - QR scanner is built-in
+                    <br />
+                    <strong>Android:</strong> Use Camera or Google Lens app
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+
+            {/* Manual Code Entry - Primary option on mobile */}
+            <div className="space-y-3">
+              <Label htmlFor="manual-code" className="text-base font-semibold">
+                <KeyRound className="h-4 w-4 inline mr-2" />
+                Enter Location Code
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Enter the code you scanned from the QR code (e.g., SWANZY, ACCRA, NSAWAM)
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  id="manual-code"
+                  placeholder="Enter location code"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleManualCodeSubmit()
+                    }
+                  }}
+                  className="text-lg h-12"
                 />
+                <Button onClick={handleManualCodeSubmit} size="lg" className="px-8">
+                  Submit Code
+                </Button>
               </div>
-            ) : (
-              <div className="relative">
-                <video ref={videoRef} className="w-full rounded-lg" playsInline muted autoPlay />
-                <canvas ref={canvasRef} className="hidden" />
+            </div>
 
-                {/* Scanning indicator */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="border-4 border-primary w-64 h-64 rounded-lg relative">
-                    <div className="absolute w-full h-1 bg-primary/70 animate-scan" />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex gap-2">
-                  <Button onClick={stopScanning} variant="outline" className="flex-1 bg-transparent">
-                    Stop Camera
-                  </Button>
-                </div>
-              </div>
-            )}
-
+            {/* Alternative: File Upload */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Or enter code manually</span>
+                <span className="bg-background px-2 text-muted-foreground">Or take a photo</span>
               </div>
             </div>
 
-            <Button variant="outline" onClick={() => setShowManualInput(!showManualInput)} className="w-full">
-              <KeyRound className="mr-2 h-4 w-4" />
-              Enter Location Code Manually
-            </Button>
+            <label htmlFor="qr-camera-input" className="block">
+              <Input
+                id="qr-camera-input"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button variant="outline" size="lg" className="w-full h-16 bg-transparent" asChild>
+                <div>
+                  <Upload className="h-6 w-6 mr-3" />
+                  Take Photo of QR Code
+                </div>
+              </Button>
+            </label>
+            <p className="text-xs text-center text-muted-foreground">
+              Opens your camera to capture a photo of the QR code
+            </p>
           </div>
         ) : (
-          // Desktop camera interface
+          // Desktop Experience - Keep existing functionality
           <div className="space-y-4">
-            {!isScanning ? (
+            {!showManualInput ? (
               <div className="space-y-4">
-                <Button onClick={startScanning} className="w-full h-16" size="lg">
-                  <Camera className="mr-2 h-6 w-6" />
-                  <span className="text-lg">Start Camera Scanner</span>
-                </Button>
+                {/* Desktop camera streaming */}
+                {!isScanning && (
+                  <Button onClick={startScanning} className="w-full" size="lg">
+                    <Camera className="mr-2 h-4 w-4" />
+                    Start Camera Scanner
+                  </Button>
+                )}
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
+                {isScanning && (
+                  <div className="space-y-4">
+                    <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+                      <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
+                      <canvas ref={canvasRef} className="hidden" />
+                      {/* Scanning indicator */}
+                      <div className="absolute inset-0 pointer-events-none">
+                        <div className="absolute inset-0 border-4 border-primary/30 rounded-lg" />
+                        <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-primary animate-scan" />
+                      </div>
+                    </div>
+                    <Button onClick={stopScanning} variant="destructive" className="w-full">
+                      Stop Scanner
+                    </Button>
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
+                )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="qr-upload">Upload QR Code Image</Label>
-                  <Input id="qr-upload" type="file" accept="image/*" onChange={handleFileUpload} />
-                </div>
-
-                <Button variant="outline" onClick={() => setShowManualInput(!showManualInput)} className="w-full">
+                <Button onClick={() => setShowManualInput(true)} variant="outline" className="w-full">
                   <KeyRound className="mr-2 h-4 w-4" />
                   Enter Location Code Manually
                 </Button>
               </div>
             ) : (
+              // Desktop manual entry
               <div className="space-y-4">
-                <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "16/9" }}>
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover"
-                    playsInline
-                    muted
-                    autoPlay
-                    style={{ transform: "scaleX(-1)" }}
+                <div className="space-y-2">
+                  <Label htmlFor="desktop-manual-code">Location Code</Label>
+                  <Input
+                    id="desktop-manual-code"
+                    placeholder="Enter location code (e.g., SWANZY)"
+                    value={manualCode}
+                    onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleManualCodeSubmit()
+                      }
+                    }}
                   />
-                  <canvas ref={canvasRef} className="hidden" />
-
-                  {/* Scanning animation overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-64 h-64 border-4 border-white rounded-lg relative">
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-green-500 animate-scan-line" />
-                    </div>
-                  </div>
                 </div>
-
-                <Button onClick={stopScanning} variant="destructive" className="w-full">
-                  Stop Scanning
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleManualCodeSubmit} className="flex-1">
+                    Submit Code
+                  </Button>
+                  <Button onClick={() => setShowManualInput(false)} variant="outline">
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Manual code input */}
-        {showManualInput && (
-          <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-            <div className="space-y-2">
-              <Label htmlFor="manual-code">Location Code</Label>
-              <Input
-                id="manual-code"
-                type="text"
-                placeholder="Enter the location code from QR"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter the code shown below the QR code on the location sign
-              </p>
-            </div>
-            <Button onClick={handleManualCodeSubmit} className="w-full" size="lg">
-              Submit Location Code
-            </Button>
-          </div>
-        )}
+        <Card className="bg-muted/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Available Location Codes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {isMobile
+                ? "Tap any code below to copy it, then use 'Enter Location Code' above and paste or type the code to check in/out."
+                : "Click any code below to copy it, then use manual entry to check in/out."}
+            </p>
+
+            {loadingLocations ? (
+              <div className="text-xs text-muted-foreground">Loading available locations...</div>
+            ) : availableLocations.length > 0 ? (
+              <div className="grid gap-2">
+                {availableLocations.map((location) => (
+                  <div
+                    key={location.id}
+                    className="flex items-center justify-between p-3 bg-background rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{location.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">{location.address}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const code = location.location_code || location.name.substring(0, 10).toUpperCase()
+                        navigator.clipboard.writeText(code)
+                        setManualCode(code)
+                        toast({
+                          title: "Code Copied!",
+                          description: `${code} copied and filled. Tap "Submit Code" to check in.`,
+                          duration: 5000,
+                        })
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-mono text-xs font-bold ml-2 flex-shrink-0"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {location.location_code || location.name.substring(0, 10).toUpperCase()}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">No locations available</div>
+            )}
+
+            <Alert className="bg-blue-50 dark:bg-blue-950/50 border-blue-200">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>How to use:</strong> Tap a code to copy and auto-fill it, then click "Submit Code" button above
+                to check in/out.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
       </CardContent>
     </Card>
   )

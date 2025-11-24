@@ -39,6 +39,14 @@ export function parseQRCode(qrData: string): QRCodeData | null {
   }
 }
 
+export function parseLocationCode(code: string): { locationCode: string } | null {
+  const cleanCode = code.trim().toUpperCase()
+  if (cleanCode.length >= 2 && /^[A-Z0-9]+$/.test(cleanCode)) {
+    return { locationCode: cleanCode }
+  }
+  return null
+}
+
 export function generateSignature(locationId: string, timestamp: number): string {
   // Simple signature generation - in production, use proper cryptographic signing
   const data = `${locationId}-${timestamp}-QCC-ATTENDANCE`
