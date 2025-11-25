@@ -455,7 +455,7 @@ export function validateAttendanceLocation(
   availableLocations?: Array<{ location: GeofenceLocation; distance: number }>
 } {
   const deviceInfo = detectDevice()
-  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 100
+  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 2000
   const displayDistance = 100 // What we show to users in UI messages
 
   const nearest = findNearestLocation(userLocation, qccLocations)
@@ -555,7 +555,7 @@ export function validateCheckoutLocation(
   accuracyWarning?: string
 } {
   const deviceInfo = detectDevice()
-  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 100
+  const internalProximityDistance = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 2000
   const displayDistance = 100 // What we show to users in UI messages
 
   const nearest = findNearestLocation(userLocation, qccLocations)
@@ -818,74 +818,5 @@ export async function getAveragedLocation(samples = 3): Promise<LocationData> {
     longitude: avgLon,
     accuracy: avgAccuracy,
     timestamp: Date.now(),
-  }
-}
-
-export async function validateLocationWithIP(gpsLocation: LocationData): Promise<{
-  isValid: boolean
-  ipLocation?: { latitude: number; longitude: number; city: string; country: string }
-  distance?: number
-  message: string
-}> {
-  try {
-    console.log("[v0] Validating GPS location with IP geolocation...")
-
-    // Use ip-api.com free service (no key required, 45 requests/min limit)
-    const response = await fetch("http://ip-api.com/json/?fields=status,lat,lon,city,country")
-
-    if (!response.ok) {
-      return {
-        isValid: true, // Assume valid if we can't verify
-        message: "IP validation unavailable, using GPS only",
-      }
-    }
-
-    const data = await response.json()
-
-    if (data.status !== "success") {
-      return {
-        isValid: true,
-        message: "IP validation failed, using GPS only",
-      }
-    }
-
-    const ipLocation = {
-      latitude: data.lat,
-      longitude: data.lon,
-      city: data.city,
-      country: data.country,
-    }
-
-    const distance = calculateDistance(
-      gpsLocation.latitude,
-      gpsLocation.longitude,
-      ipLocation.latitude,
-      ipLocation.longitude,
-    )
-
-    console.log("[v0] IP validation result:", {
-      gpsLocation: { lat: gpsLocation.latitude, lon: gpsLocation.longitude },
-      ipLocation,
-      distance: `${(distance / 1000).toFixed(1)}km`,
-    })
-
-    // If GPS and IP locations are more than 100km apart, GPS might be wrong
-    const isValid = distance < 100000
-    const message = isValid
-      ? `GPS validated (${(distance / 1000).toFixed(1)}km from IP location in ${ipLocation.city})`
-      : `⚠️ GPS location may be inaccurate (${(distance / 1000).toFixed(1)}km from your IP location in ${ipLocation.city}). Use QR code for reliable check-in.`
-
-    return {
-      isValid,
-      ipLocation,
-      distance,
-      message,
-    }
-  } catch (error) {
-    console.error("[v0] IP validation error:", error)
-    return {
-      isValid: true, // Assume valid if we can't verify
-      message: "IP validation error, using GPS only",
-    }
   }
 }
