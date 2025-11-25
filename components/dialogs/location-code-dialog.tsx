@@ -45,6 +45,13 @@ export function LocationCodeDialog({
   const [locationCode, setLocationCode] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null)
+
+  const handleLocationSelect = (location: GeofenceLocation) => {
+    setLocationCode(location.location_code || "")
+    setSelectedLocationId(location.id)
+    setError(null)
+  }
 
   const handleSubmitCode = async () => {
     if (!locationCode.trim()) {
@@ -56,22 +63,26 @@ export function LocationCodeDialog({
     setError(null)
 
     try {
-      // Find location by code
-      const location = locations.find((loc) => loc.location_code?.toUpperCase() === locationCode.trim().toUpperCase())
+      const response = await fetch(`/api/locations/lookup?code=${encodeURIComponent(locationCode.trim())}`)
+      const data = await response.json()
 
-      if (!location) {
-        setError("No active location found with this code. Please check the code and try again.")
+      if (!response.ok || data.error) {
+        setError(data.message || "No active location found with this code. Please check the code and try again.")
         setIsProcessing(false)
         return
       }
 
-      // Call the appropriate action
+      setSelectedLocationId(data.location.id)
+
       if (canCheckIn && !isCheckedIn) {
-        await onCheckIn()
+        await handleManualCheckIn(data.location)
       } else if (canCheckOut && isCheckedIn) {
-        await onCheckOut()
+        await handleManualCheckOut(data.location)
       }
 
+      setLocationCode("")
+      setError(null)
+      setSelectedLocationId(null)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process location code")
@@ -80,26 +91,57 @@ export function LocationCodeDialog({
     }
   }
 
-  const handleLocationSelect = async (location: GeofenceLocation) => {
-    setIsProcessing(true)
-    setError(null)
-
+  const handleManualCheckIn = async (location: { id: string; name: string; latitude: number; longitude: number }) => {
     try {
-      // Set the location code and trigger submission
-      setLocationCode(location.location_code || location.name)
+      const locationData = userLocation || { latitude: location.latitude, longitude: location.longitude, accuracy: 0 }
 
-      // Call the appropriate action
-      if (canCheckIn && !isCheckedIn) {
-        await onCheckIn()
-      } else if (canCheckOut && isCheckedIn) {
-        await onCheckOut()
+      const response = await fetch("/api/attendance/check-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location_id: location.id,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy || 0,
+          check_in_method: "manual_code",
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Check-in failed")
       }
 
-      onClose()
+      await onCheckIn()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to process location")
-    } finally {
-      setIsProcessing(false)
+      throw err
+    }
+  }
+
+  const handleManualCheckOut = async (location: { id: string; name: string; latitude: number; longitude: number }) => {
+    try {
+      const locationData = userLocation || { latitude: location.latitude, longitude: location.longitude, accuracy: 0 }
+
+      const response = await fetch("/api/attendance/check-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location_id: location.id,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy || 0,
+          check_out_method: "manual_code",
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Check-out failed")
+      }
+
+      await onCheckOut()
+    } catch (err) {
+      throw err
     }
   }
 
@@ -107,8 +149,8 @@ export function LocationCodeDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Location Code Check-In</DialogTitle>
-          <DialogDescription>Enter location code from your work site or scan QR code</DialogDescription>
+          <DialogTitle>Manual Location Code Entry</DialogTitle>
+          <DialogDescription>Enter your location code or select from the list below</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -118,43 +160,38 @@ export function LocationCodeDialog({
             </div>
           )}
 
-          {/* Recommended Method */}
-          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="text-xs font-bold text-primary">✓</span>
-              </div>
-              <p className="text-sm font-semibold">RECOMMENDED: Enter Location Code (Fastest Method)</p>
-            </div>
-          </div>
-
-          {/* Manual Code Entry */}
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium mb-2 block">Location Code</label>
+              <label className="text-sm font-medium mb-2 block">Enter Location Code</label>
               <div className="flex gap-2">
                 <Input
                   value={locationCode}
-                  onChange={(e) => setLocationCode(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setLocationCode(e.target.value.toUpperCase())
+                    setSelectedLocationId(null)
+                  }}
                   placeholder="Enter code (e.g., ACCRA, NSAWAM)"
                   className="uppercase"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && locationCode.trim()) {
                       handleSubmitCode()
                     }
                   }}
+                  disabled={isProcessing}
                 />
                 <Button onClick={handleSubmitCode} disabled={isProcessing || !locationCode.trim()}>
-                  {isProcessing ? "Processing..." : "Submit Code"}
+                  {isProcessing ? "Submitting..." : "Submit Code"}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Code is printed on your location QR poster or ask your supervisor
+              </p>
             </div>
           </div>
 
-          {/* Quick Select Location */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">Quick Select Location</p>
+              <p className="text-sm font-semibold">Or Select from Nearby Locations</p>
               <MapPin className="h-4 w-4 text-muted-foreground" />
             </div>
 
@@ -179,10 +216,12 @@ export function LocationCodeDialog({
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <p className="font-medium text-sm">{location.name}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{location.location_code || "No code"}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {location.location_code ? `Code: ${location.location_code}` : "No code set"}
+                        </p>
                       </div>
                       {distance !== null && (
-                        <Badge variant="outline" className="ml-2">
+                        <Badge variant={distance < location.radius_meters ? "default" : "outline"} className="ml-2">
                           {distance < 1000 ? `${distance.toFixed(0)}m` : `${(distance / 1000).toFixed(1)}km`}
                         </Badge>
                       )}

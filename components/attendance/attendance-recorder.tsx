@@ -22,10 +22,24 @@ import { toast } from "@/hooks/use-toast"
 import { findNearestLocation } from "@/lib/geolocation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { MapPin, LogIn, LogOut, QrCode, RefreshCw, Loader2, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
+import {
+  MapPin,
+  LogIn,
+  LogOut,
+  QrCode,
+  RefreshCw,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Info,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { LocationCodeDialog } from "@/components/dialogs/location-code-dialog"
 import { QRScannerDialog } from "@/components/dialogs/qr-scanner-dialog"
+import { FlashMessage } from "@/components/notifications/flash-message"
+import { Spinner } from "@/components/ui/spinner"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface GeofenceLocation {
   id: string
@@ -71,35 +85,41 @@ interface AttendanceRecorderProps {
   locations: GeofenceLocation[]
   canCheckIn?: boolean
   canCheckOut?: boolean
+  className?: string // Added className prop
 }
 
 // Placeholder for WindowsCapabilities, assuming it's defined elsewhere or inferred
 type WindowsCapabilities = ReturnType<typeof detectWindowsLocationCapabilities>
 
+const REFRESH_PAUSE_DURATION = 50000 // 50 seconds instead of 120000 (2 minutes)
+
 export function AttendanceRecorder({
   todayAttendance: initialTodayAttendance,
   geoSettings,
-  locations,
+  locations: propLocations, // Renamed to avoid conflict with realTimeLocations
   canCheckIn: initialCanCheckIn,
   canCheckOut: initialCanCheckOut,
+  className, // Added className prop
 }: AttendanceRecorderProps) {
+  const [isCheckingIn, setIsCheckingIn] = useState(false)
+  const [checkingMessage, setCheckingMessage] = useState("")
+
   const [isLoading, setIsLoading] = useState(false)
   const [userLocation, setUserLocation] = useState<LocationData | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [assignedLocationInfo, setAssignedLocationInfo] = useState<AssignedLocationInfo | null>(null)
   const {
-    locations: realTimeLocations,
+    locations: realTimeLocations, // Renamed from `locations` to avoid conflict with propLocations
     loading: locationsLoading,
     error: locationsError,
     isConnected,
-  } = useRealTimeLocations() // Renamed locations to avoid conflict
+  } = useRealTimeLocations()
   const [proximitySettings, setProximitySettings] = useState<ProximitySettings>({
     checkInProximityRange: 50,
     defaultRadius: 20,
     requireHighAccuracy: true,
     allowManualOverride: false,
   })
-  // const [geoSettings, setGeoSettings] = useState<GeoSettings | null>(null) // This is now a prop
   const [locationValidation, setLocationValidation] = useState<{
     canCheckIn: boolean
     canCheckOut?: boolean
@@ -137,16 +157,9 @@ export function AttendanceRecorder({
   const [isProcessing, setIsProcessing] = useState(false)
   const [showLocationCodeDialog, setShowLocationCodeDialog] = useState(false) // Added
 
-  // Redundant state, managed by `todayAttendance` prop.
-  // const [canCheckIn, setCanCheckIn] = useState(false)
-  // const [canCheckOut, setCanCheckOut] = useState(false)
-  // const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null)
-
-  // Renamed for clarity and to avoid conflict with dialog state.
   const [showSuccessPopup, setShowSuccessPopup] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
 
-  // Simplified locationPermissionStatus state
   const [locationPermissionStatusSimplified, setLocationPermissionStatusSimplified] = useState<{
     granted: boolean
     message: string
@@ -158,6 +171,50 @@ export function AttendanceRecorder({
   const [recentCheckIn, setRecentCheckIn] = useState(false)
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
+
+  const [flashMessage, setFlashMessage] = useState<{
+    message: string
+    type: "success" | "error" | "info" | "warning"
+  } | null>(null)
+
+  const [refreshTimer, setRefreshTimer] = useState<number | null>(null)
+
+  const [minutesUntilCheckout, setMinutesUntilCheckout] = useState<number | null>(null)
+
+  const fetchTodayAttendance = async () => {
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const today = new Date().toISOString().split("T")[0]
+
+      const { data, error } = await supabase
+        .from("attendance_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("check_in_time", `${today}T00:00:00`)
+        .lte("check_in_time", `${today}T23:59:59`)
+        .order("check_in_time", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (error && error.code !== "PGRST116") {
+        // PGRST116 is "no rows returned"
+        console.error("[v0] Error fetching today's attendance:", error)
+        return
+      }
+
+      if (data) {
+        setLocalTodayAttendance(data)
+      }
+    } catch (error) {
+      console.error("[v0] Error in fetchTodayAttendance:", error)
+    }
+  }
 
   const canCheckIn = initialCanCheckIn && !recentCheckIn && !localTodayAttendance?.check_in_time
   const canCheckOut =
@@ -289,7 +346,6 @@ export function AttendanceRecorder({
   useEffect(() => {
     fetchUserProfile()
     loadProximitySettings()
-    // loadGeoSettings() // This is now a prop, no need to load it
     const capabilities = detectWindowsLocationCapabilities()
     setWindowsCapabilities(capabilities)
     console.log("[v0] Windows location capabilities detected:", capabilities)
@@ -310,7 +366,6 @@ export function AttendanceRecorder({
         }
       } catch (error) {
         console.log("[v0] Auto-load location failed, user can try manual check-in or QR code:", error)
-        // Don't show error - user can still use check-in button or QR code
       }
     }
 
@@ -321,37 +376,54 @@ export function AttendanceRecorder({
     loadProximitySettings()
   }, [])
 
-  // const loadGeoSettings = async () => { // This is now a prop
-  //   try {
-  //     const response = await fetch("/api/settings")
-  //     if (response.ok) {
-  //       const data = await response.json()
-  //       if (data.systemSettings?.geo_settings) {
-  //         setGeoSettings(data.systemSettings.geo_settings)
-  //         console.log("[v0] Loaded geo settings with browser tolerances:", data.systemSettings.geo_settings)
-  //       }
-  //     }
-  //   } catch (error) {
-  //     console.error("[v0] Failed to load geo settings:", error)
-  //   }
-  // }
-
   useEffect(() => {
     const checkDateChange = () => {
       const newDate = new Date().toISOString().split("T")[0]
       if (newDate !== currentDate) {
         console.log("[v0] Date changed from", currentDate, "to", newDate)
         setCurrentDate(newDate)
-        // Force re-render to update button state
         window.location.reload()
       }
     }
 
-    // Check every minute for date changes
     const interval = setInterval(checkDateChange, 60000)
 
     return () => clearInterval(interval)
   }, [currentDate])
+
+  useEffect(() => {
+    if (localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time) {
+      const checkInTime = new Date(localTodayAttendance.check_in_time)
+      const now = new Date()
+      const hoursSinceCheckIn = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+
+      if (hoursSinceCheckIn < 1) {
+        // Calculate minutes until 1 hour has passed
+        const minutesLeft = Math.ceil((1 - hoursSinceCheckIn) * 60)
+        setMinutesUntilCheckout(minutesLeft)
+
+        // Update every minute
+        const interval = setInterval(() => {
+          const currentNow = new Date()
+          const currentHoursSinceCheckIn = (currentNow.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+
+          if (currentHoursSinceCheckIn >= 1) {
+            setMinutesUntilCheckout(null)
+            clearInterval(interval)
+          } else {
+            const currentMinutesLeft = Math.ceil((1 - currentHoursSinceCheckIn) * 60)
+            setMinutesUntilCheckout(currentMinutesLeft)
+          }
+        }, 60000) // Update every minute
+
+        return () => clearInterval(interval)
+      } else {
+        setMinutesUntilCheckout(null)
+      }
+    } else {
+      setMinutesUntilCheckout(null)
+    }
+  }, [localTodayAttendance?.check_in_time, localTodayAttendance?.check_out_time])
 
   const loadProximitySettings = async () => {
     try {
@@ -374,15 +446,12 @@ export function AttendanceRecorder({
       }
     } catch (error) {
       console.error("[v0] Failed to load proximity settings:", error)
-      // Keep default settings if loading fails
     }
   }
 
-  // Update assigned location info when user location or realTimeLocations changes
   useEffect(() => {
     if (userLocation && realTimeLocations && realTimeLocations.length > 0 && userProfile?.assigned_location_id) {
-      // Use realTimeLocations here
-      const assignedLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id) // Use realTimeLocations here
+      const assignedLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
       if (assignedLocation) {
         const distance = calculateDistance(
           userLocation.latitude,
@@ -396,7 +465,7 @@ export function AttendanceRecorder({
           location: assignedLocation,
           distance: Math.round(distance),
           isAtAssignedLocation,
-          name: assignedLocation.name, // Assign name here
+          name: assignedLocation.name,
         })
 
         console.log("[v0] Assigned location info:", {
@@ -407,17 +476,13 @@ export function AttendanceRecorder({
         })
       }
     }
-  }, [userLocation, realTimeLocations, userProfile]) // Use realTimeLocations here
+  }, [userLocation, realTimeLocations, userProfile])
 
-  // Simplified location validation logic as per new update.
-  // This effect is now primarily for logging and potentially updating `locationValidation` based on fetched `userLocation`.
   useEffect(() => {
     if (userLocation && realTimeLocations && realTimeLocations.length > 0) {
-      // Use realTimeLocations here
       console.log(
         "[v0] All available locations:",
         realTimeLocations.map((l) => ({
-          // Use realTimeLocations here
           name: l.name,
           address: l.address,
           lat: l.latitude,
@@ -432,7 +497,7 @@ export function AttendanceRecorder({
         accuracy: userLocation.accuracy,
       })
 
-      const locationDistances = realTimeLocations // Use realTimeLocations here
+      const locationDistances = realTimeLocations
         .map((location) => {
           const distance = calculateDistance(
             userLocation.latitude,
@@ -449,14 +514,14 @@ export function AttendanceRecorder({
 
       console.log("[v0] Distance to each location:", locationDistances)
 
-      const validation = validateAttendanceLocation(userLocation, realTimeLocations, proximitySettings) // Use realTimeLocations here
-      const checkoutValidation = validateCheckoutLocation(userLocation, realTimeLocations, proximitySettings) // Use realTimeLocations here
+      const validation = validateAttendanceLocation(userLocation, realTimeLocations, proximitySettings)
+      const checkoutValidation = validateCheckoutLocation(userLocation, realTimeLocations, proximitySettings)
 
       console.log("[v0] Location validation result:", validation)
       console.log("[v0] Check-out validation result:", checkoutValidation)
       console.log(
         "[v0] Locations data:",
-        realTimeLocations.map((l) => ({ name: l.name, radius: l.radius_meters })), // Use realTimeLocations here
+        realTimeLocations.map((l) => ({ name: l.name, radius: l.radius_meters })),
       )
       console.log("[v0] Validation message:", validation.message)
       console.log("[v0] Can check in:", validation.canCheckIn)
@@ -465,7 +530,6 @@ export function AttendanceRecorder({
       console.log("[v0] Nearest location being checked:", validation.nearestLocation?.name)
       console.log("[v0] Using proximity range:", proximitySettings.checkInProximityRange)
 
-      // Check for critical accuracy issues
       const criticalAccuracyIssue =
         userLocation.accuracy > 1000 || (windowsCapabilities?.isWindows && userLocation.accuracy > 100)
       let accuracyWarning = ""
@@ -483,7 +547,7 @@ export function AttendanceRecorder({
         accuracyWarning,
       })
     }
-  }, [userLocation, realTimeLocations, proximitySettings, windowsCapabilities]) // Use realTimeLocations here
+  }, [userLocation, realTimeLocations, proximitySettings, windowsCapabilities])
 
   const fetchUserProfile = async () => {
     try {
@@ -532,14 +596,12 @@ export function AttendanceRecorder({
         })
       } catch (authError) {
         console.error("[v0] Supabase auth error:", authError)
-        // Don't set error state for auth issues in preview environment
         if (!window.location.hostname.includes("vusercontent.net")) {
           setError("Authentication error. Please refresh the page.")
         }
       }
     } catch (error) {
       console.error("[v0] Error fetching user profile:", error)
-      // Only show error in production environment
       if (!window.location.hostname.includes("vusercontent.net")) {
         setError("Failed to load user profile. Please refresh the page.")
       }
@@ -554,15 +616,12 @@ export function AttendanceRecorder({
       const capabilities = detectWindowsLocationCapabilities()
       console.log("[v0] Browser:", capabilities.browserName)
 
-      // For Opera and poor GPS browsers, use averaged readings
       const useSampling = capabilities.browserName === "Opera" || capabilities.hasKnownIssues
 
       console.log(`[v0] Using ${useSampling ? "multi-sample" : "single"} GPS reading...`)
       const location = useSampling ? await getAveragedLocation(3) : await getCurrentLocation()
 
       setUserLocation(location)
-
-      // The IP validation was causing fetch errors and is not essential for functionality
 
       setLocationPermissionStatus({ granted: true, message: "Location access granted" })
       return location
@@ -582,26 +641,38 @@ export function AttendanceRecorder({
     }
   }
 
-  // Cleaned up unused useEffect for location watch.
-  // useEffect(() => {
-  //   return () => {
-  //     if (locationWatchId && navigator.geolocation) {
-  //       navigator.geolocation.clearWatch(locationWatchId)
-  //     }
-  //   }
-  // }, [locationWatchId])
-
   const handleCheckIn = async () => {
+    console.log("[v0] Check-in initiated")
+
+    if (localTodayAttendance?.check_in_time) {
+      console.log("[v0] Duplicate check-in attempt blocked - already checked in today")
+
+      if (!localTodayAttendance?.check_out_time) {
+        // Already checked in, not checked out yet
+        setFlashMessage({
+          message: `You have already checked in today at ${new Date(localTodayAttendance.check_in_time).toLocaleTimeString()}! You're currently on duty. Please check out when you finish your shift.`,
+          type: "warning",
+        })
+      } else {
+        // Already completed check-in and check-out for today
+        setFlashMessage({
+          message: `You have already completed your attendance for today. Check-in: ${new Date(localTodayAttendance.check_in_time).toLocaleTimeString()}, Check-out: ${new Date(localTodayAttendance.check_out_time).toLocaleTimeString()}`,
+          type: "info",
+        })
+      }
+      return
+    }
+
     setIsLoading(true)
     setError(null)
-    setSuccess(null)
 
     try {
-      console.log("[v0] Getting optimized location for check-in...")
+      if (!realTimeLocations || realTimeLocations.length === 0) {
+        throw new Error("No QCC locations found")
+      }
 
-      // Use browser-optimized location fetching
-      const location = await getCurrentLocationData()
-      if (!location) {
+      const locationData = await getCurrentLocationData()
+      if (!locationData) {
         setIsLoading(false)
         return
       }
@@ -609,16 +680,9 @@ export function AttendanceRecorder({
       const browserInfo = detectBrowser()
       console.log("[v0] Browser detected:", browserInfo.name)
 
-      if (!realTimeLocations || realTimeLocations.length === 0) {
-        setError("No QCC locations found")
-        setIsLoading(false)
-        return
-      }
-
-      // Find nearest location
       const nearest = realTimeLocations.reduce(
         (closest, loc) => {
-          const dist = calculateDistance(location.latitude, location.longitude, loc.latitude, loc.longitude)
+          const dist = calculateDistance(locationData.latitude, locationData.longitude, loc.latitude, loc.longitude)
           if (!closest || dist < closest.distance) {
             return { location: loc, distance: dist }
           }
@@ -628,13 +692,11 @@ export function AttendanceRecorder({
       )
 
       if (!nearest) {
-        setError("No QCC locations found")
-        setIsLoading(false)
-        return
+        throw new Error("No QCC locations found")
       }
 
       const proximityCheck = await isWithinBrowserProximity(
-        location,
+        locationData,
         nearest.location.latitude,
         nearest.location.longitude,
         geoSettings || undefined,
@@ -646,236 +708,205 @@ export function AttendanceRecorder({
       })
 
       if (!proximityCheck.isWithin) {
-        setError(
+        throw new Error(
           `You must be within 100 meters of your assigned location to check in. You are currently ${Math.round(proximityCheck.distance)}m away. Please use manual location code entry or move closer.`,
         )
-        setIsLoading(false)
-        return
       }
-
-      const deviceInfo = getDeviceInfo()
-
-      console.log("[v0] Performing automatic check-in at:", nearest.location.name)
 
       const response = await fetch("/api/attendance/check-in", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          latitude: location.latitude,
-          longitude: location.longitude,
           location_id: nearest.location.id,
-          location_name: nearest.location.name,
-          device_info: navigator.userAgent,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy,
+          reverse_geocoded_location: locationData.reverseGeocodedLocation,
+          device_info: locationData.device_info,
         }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to check in")
+        throw new Error(errorData.error || "Check-in failed")
       }
 
       const result = await response.json()
 
-      setLocalTodayAttendance({
-        ...result.attendance,
-        check_in_time: new Date().toISOString(),
-        check_in_location_name: nearest.location.name,
+      const locationName = result.attendance?.check_in_location_name || result.location?.name || nearest.location.name
+
+      setFlashMessage({
+        message: `Successfully checked in at ${locationName}! Your attendance has been recorded.`,
+        type: "success",
       })
+
+      setRefreshTimer(REFRESH_PAUSE_DURATION / 1000) // Set timer in seconds
+      const timerInterval = setInterval(() => {
+        setRefreshTimer((prev) => {
+          if (prev === null || prev <= 1) {
+            clearInterval(timerInterval)
+            fetchTodayAttendance?.()
+            return null
+          }
+          return prev - 1
+        })
+      }, 1000)
+
+      setLocalTodayAttendance(result.attendance)
+
+      await fetchTodayAttendance?.()
+
       setRecentCheckIn(true)
-
-      const checkInTime = new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      })
-
-      const detailedMessage = `Check-in successful at ${checkInTime}\nLocation: ${nearest.location.name}\nGPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}\nDistance: ${Math.round(proximityCheck.distance)}m`
-
-      setSuccessDialogMessage(detailedMessage)
-      setShowSuccessDialog(true)
-
-      toast({
-        title: "Check-in successful!",
-        description: `${checkInTime} at ${nearest.location.name}`,
-        duration: 5000,
-      })
-
-      // Update the GPS location badge to show check-in status
-      setSuccessMessage(detailedMessage.replace(/\n/g, " • "))
-      // </CHANGE>
+      setCheckingMessage("Check-in successful! Status will refresh in 50 seconds...")
 
       setTimeout(() => {
         setRecentCheckIn(false)
-      }, 120000)
-
-      setTimeout(() => {
-        window.location.reload()
-      }, 3000)
-
-      setIsLoading(false)
-    } catch (error) {
-      console.error("[v0] Check-in error:", error)
-
-      if (error instanceof Error && error.message.includes("timeout")) {
-        setError(
-          "Location request timed out. For instant check-in, use the manual location code entry option or ensure your device location services are enabled.",
-        )
-        setShowLocationHelp(true)
-      } else {
-        setError(error instanceof Error ? error.message : "An error occurred during check-in")
-      }
-
-      toast({
-        title: "Check-in Failed",
-        description: error instanceof Error ? error.message : "An error occurred during check-in",
-        variant: "destructive",
-        duration: 8000,
+        setIsCheckingIn(false)
+        setCheckingMessage("")
+        fetchTodayAttendance()
+      }, REFRESH_PAUSE_DURATION)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Check-in failed"
+      setError(errorMessage)
+      setFlashMessage({
+        message: errorMessage,
+        type: "error",
       })
+      setIsCheckingIn(false)
+      setCheckingMessage("")
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleCheckOut = async () => {
+    console.log("[v0] Check-out initiated")
+
+    if (!localTodayAttendance?.check_in_time || localTodayAttendance?.check_out_time) {
+      setFlashMessage({
+        message:
+          "You need to check in first before you can check out. Please complete your check-in to start your shift.",
+        type: "info",
+      })
+      return
+    }
+
+    if (minutesUntilCheckout !== null && minutesUntilCheckout > 0) {
+      setFlashMessage({
+        message: `You must wait ${minutesUntilCheckout} more minute${minutesUntilCheckout !== 1 ? "s" : ""} before checking out. A minimum of 1 hour is required between check-in and check-out.`,
+        type: "info",
+      })
+      return
+    }
+
     setIsLoading(true)
     setError(null)
-    setSuccess(null)
 
     try {
-      console.log("[v0] Getting location for check-out...")
-      const location = await getCurrentLocation()
-      setUserLocation(location)
-
       if (!realTimeLocations || realTimeLocations.length === 0) {
-        setError("No QCC locations found")
+        throw new Error("No QCC locations found")
+      }
+
+      const locationData = await getCurrentLocationData()
+      if (!locationData) {
         setIsLoading(false)
         return
       }
 
-      const checkoutValidation = validateCheckoutLocation(location, realTimeLocations, proximitySettings)
+      const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations, proximitySettings)
 
       if (!checkoutValidation.canCheckOut) {
-        setError(checkoutValidation.message)
-        setIsLoading(false)
-
-        toast({
-          title: "Check-out Failed",
-          description: checkoutValidation.message,
-          variant: "destructive",
-          duration: 8000,
-        })
-        return
+        throw new Error(checkoutValidation.message)
       }
 
       let nearestLocation = null
 
       if (realTimeLocations.length > 1) {
-        // Use realTimeLocations here
-        const locationDistances = realTimeLocations // Use realTimeLocations here
+        const locationDistances = realTimeLocations
           .map((loc) => {
-            const distance = calculateDistance(location.latitude, location.longitude, loc.latitude, loc.longitude)
+            const distance = calculateDistance(
+              locationData.latitude,
+              locationData.longitude,
+              loc.latitude,
+              loc.longitude,
+            )
             return { location: loc, distance: Math.round(distance) }
           })
           .sort((a, b) => a.distance - b.distance)
           .filter(({ distance }) => distance <= proximitySettings.checkInProximityRange)
 
         if (locationDistances.length === 0) {
-          setError(`You must be within 100 meters of a QCC location to check out`)
-          setIsLoading(false)
-
-          toast({
-            title: "Check-out Failed",
-            description: `You must be within 100 meters of a QCC location to check out`,
-            variant: "destructive",
-            duration: 8000,
-          })
-          return
+          throw new Error(`You must be within 100 meters of a QCC location to check out`)
         }
 
-        // Automatically select the best location for check-out
         if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
-          nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id) // Use realTimeLocations here
+          nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
           console.log("[v0] Automatically using assigned location for check-out:", nearestLocation?.name)
         } else {
           nearestLocation = locationDistances[0]?.location
           console.log("[v0] Automatically using nearest location for check-out:", nearestLocation?.name)
         }
       } else {
-        const nearest = findNearestLocation(location, realTimeLocations) // Use realTimeLocations here
-        nearestLocation = nearest?.location || realTimeLocations[0] // Use realTimeLocations here
+        const nearest = findNearestLocation(locationData, realTimeLocations)
+        nearestLocation = nearest?.location || realTimeLocations[0]
       }
 
-      const deviceInfo = getDeviceInfo()
-      const now = new Date()
-      const currentHour = now.getHours()
-      const currentMinute = now.getMinutes()
-
-      // Check for early checkout only if it's before 5 PM
-      if (currentHour < 17 || (currentHour === 17 && currentMinute < 0)) {
-        setPendingCheckoutData({ location, nearestLocation })
-        setShowEarlyCheckoutDialog(true)
-        setIsLoading(false)
-        return
-      }
-
-      console.log("[v0] Performing checkout at:", nearestLocation?.name)
+      // The 1-hour minimum is now enforced above
 
       const response = await fetch("/api/attendance/check-out", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          location_id: nearestLocation?.id,
-          device_info: deviceInfo,
+          location_id: nearestLocation.id,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy,
+          reverse_geocoded_location: locationData.reverseGeocodedLocation,
+          device_info: locationData.device_info,
           early_checkout_reason: earlyCheckoutReason || undefined,
         }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to check out")
+        throw new Error(errorData.error || "Check-out failed")
       }
 
       const result = await response.json()
 
-      setLocalTodayAttendance({
-        ...localTodayAttendance!,
-        check_out_time: new Date().toISOString(),
-        check_out_location_name: nearestLocation?.name,
+      setFlashMessage({
+        message: `Successfully checked out from ${result.attendance.check_out_location_name || nearestLocation.name}! Your work session has been recorded.`,
+        type: "success",
       })
+
+      setLocalTodayAttendance(result.attendance)
       setRecentCheckOut(true)
+      setIsCheckingIn(true)
+      setCheckingMessage("Check-out successful! Status will refresh in 50 seconds...")
 
-      const message = `Checked out successfully${nearestLocation?.name ? ` at ${nearestLocation.name}` : ""}!`
-      setSuccessDialogMessage(message)
-      setShowSuccessDialog(true)
+      setRefreshTimer(REFRESH_PAUSE_DURATION / 1000) // Set timer in seconds
 
-      toast({
-        title: "Check-out successful!",
-        description: message,
-      })
+      const interval = setInterval(() => {
+        setRefreshTimer((prev) => {
+          if (prev === null || prev <= 1) {
+            clearInterval(interval)
+            setRecentCheckOut(false)
+            setIsCheckingIn(false)
+            setCheckingMessage("")
+            fetchTodayAttendance?.()
+            return null
+          }
+          return prev - 1
+        })
+      }, 1000)
 
-      setTimeout(() => {
-        setRecentCheckOut(false)
-      }, 120000) // 2 minutes
+      await fetchTodayAttendance?.()
+    } catch (err) {
+      console.error("[v0] Check-out error:", err instanceof Error ? err.message : "Unknown error")
 
-      setTimeout(() => {
-        window.location.reload()
-      }, 3000)
-    } catch (error) {
-      console.error("[v0] Check-out error:", error)
-      setError(error instanceof Error ? error.message : "An error occurred during check-out")
-
-      toast({
-        title: "Check-out Failed",
-        description: error instanceof Error ? error.message : "An error occurred during check-out",
-        variant: "destructive",
-        duration: 8000,
+      setFlashMessage({
+        message: err instanceof Error ? err.message : "Failed to check out. Please try again.",
+        type: "error",
       })
     } finally {
       setIsLoading(false)
@@ -913,7 +944,6 @@ export function AttendanceRecorder({
       try {
         result = JSON.parse(responseText)
       } catch {
-        // If not JSON, treat as error message
         result = { error: responseText || `Server error (${response.status})` }
       }
 
@@ -974,7 +1004,6 @@ export function AttendanceRecorder({
       )
     }
 
-    // Reset state
     setEarlyCheckoutReason("")
     setPendingCheckoutData(null)
   }
@@ -1019,116 +1048,164 @@ export function AttendanceRecorder({
     }
   }
 
-  const checkInDate = localTodayAttendance?.check_in_time // Use localTodayAttendance
+  const checkInDate = localTodayAttendance?.check_in_time
     ? new Date(localTodayAttendance.check_in_time).toISOString().split("T")[0]
     : null
 
-  // If check-in was from a previous day, treat as if no check-in exists (allow new check-in)
   const isFromPreviousDay = checkInDate && checkInDate !== currentDate
 
   const isCheckedIn = localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && !isFromPreviousDay
   const isCheckedOut = localTodayAttendance?.check_out_time
+  const isCompletedForDay =
+    localTodayAttendance?.check_in_time && localTodayAttendance?.check_out_time && !isFromPreviousDay
 
   const defaultMode = canCheckIn ? "checkin" : canCheckOut ? "checkout" : null
 
   const handleLocationSelect = (location: GeofenceLocation) => {
     console.log("Location selected:", location.name)
-    // For now, just log it. Could potentially trigger a check-in/out flow or show details.
-    // For the purpose of fixing the undeclared variable, this function is now defined.
   }
 
-  // JSX return statement with UI for attendance recording
   return (
-    <div className="space-y-6">
-      {/* GPS Status Banner */}
+    <div className={`space-y-6 ${className}`}>
+      {flashMessage && (
+        <FlashMessage
+          message={flashMessage.message}
+          type={flashMessage.type}
+          duration={50000}
+          onClose={() => setFlashMessage(null)}
+        />
+      )}
+
+      {/* Add checking status display in the UI */}
+      {isCheckingIn && checkingMessage && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-center gap-3">
+            <Spinner className="h-5 w-5 text-blue-600" />
+            <div>
+              <p className="font-medium text-blue-900">{checkingMessage}</p>
+              {(recentCheckIn || recentCheckOut) && (
+                <p className="text-sm text-blue-700 mt-1">
+                  Status will automatically update in{" "}
+                  {Math.ceil((REFRESH_PAUSE_DURATION - (Date.now() % REFRESH_PAUSE_DURATION)) / 1000)} seconds
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {userLocation && (
         <div
-          className={`border-2 rounded-lg p-4 ${
+          className={`border-2 rounded-lg p-4 transition-all ${
             localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time
-              ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+              ? "bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-300 dark:border-green-700"
               : "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
           }`}
         >
           <div className="flex items-start gap-3">
             {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time ? (
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-            ) : (
-              <MapPin className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            )}
-            <div className="flex-1 space-y-2">
-              {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time ? (
-                <div>
-                  <p className="text-sm font-bold text-green-900 dark:text-green-100">✓ Checked In Successfully</p>
-                  <p className="text-sm font-semibold text-green-700 dark:text-green-300 mt-1">
-                    {localTodayAttendance.check_in_location_name}
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    Time:{" "}
-                    {new Date(localTodayAttendance.check_in_time).toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: true,
-                    })}
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-400">
-                    GPS: {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-400">
-                    Accuracy: {userLocation.accuracy?.toFixed(0)}m
-                  </p>
-                  <p className="text-xs text-green-700 dark:text-green-300 mt-2 font-medium">
-                    Remember to check out when you leave!
-                  </p>
+              <>
+                <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="h-7 w-7 text-green-600 dark:text-green-400" />
                 </div>
-              ) : (
-                <div>
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Your Current Location</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                    GPS: {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    Accuracy: {userLocation.accuracy?.toFixed(0)}m
-                  </p>
-                </div>
-              )}
-
-              {/* Show nearest location */}
-              {(() => {
-                if (!realTimeLocations || realTimeLocations.length === 0) return null
-
-                const locationsWithDistance = realTimeLocations.map((loc) => ({
-                  location: loc,
-                  distance: calculateDistance(
-                    userLocation.latitude,
-                    userLocation.longitude,
-                    loc.latitude,
-                    loc.longitude,
-                  ),
-                }))
-
-                // Handle case where locationsWithDistance might be empty if realTimeLocations is empty
-                if (locationsWithDistance.length === 0) return null
-
-                const nearest = locationsWithDistance.reduce((min, curr) => (curr.distance < min.distance ? curr : min))
-
-                const isNearby = nearest.distance <= 2000 // 2000m for PC browsers
-
-                return (
-                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
-                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                      {isNearby ? "✓ At Location" : "Nearest Location"}
-                    </p>
-                    <p className="text-base font-bold text-blue-700 dark:text-blue-200 mt-1">{nearest.location.name}</p>
-                    <p className="text-xs text-blue-600 dark:text-blue-400">
-                      {nearest.distance < 1000
-                        ? `${nearest.distance.toFixed(0)}m away`
-                        : `${(nearest.distance / 1000).toFixed(2)}km away`}
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <p className="text-lg font-bold text-green-900 dark:text-green-100">✓ Checked In Successfully</p>
+                    <p className="text-base font-semibold text-green-700 dark:text-green-300 mt-1">
+                      📍 {localTodayAttendance.check_in_location_name}
                     </p>
                   </div>
-                )
-              })()}
-            </div>
+
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-white/50 dark:bg-black/20 rounded-lg border border-green-200 dark:border-green-800">
+                    <div>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">Check-in Time</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {new Date(localTodayAttendance.check_in_time).toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                          hour12: true,
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">Date</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {new Date(localTodayAttendance.check_in_time).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">GPS Coordinates</p>
+                      <p className="text-xs font-mono text-green-900 dark:text-green-100">
+                        {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">GPS Accuracy</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {userLocation.accuracy?.toFixed(0)}m
+                      </p>
+                    </div>
+                  </div>
+
+                  {refreshTimer !== null && (
+                    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
+                      <Info className="h-3 w-3" />
+                      <span>Updating status in {refreshTimer} seconds...</span>
+                    </div>
+                  )}
+
+                  <p className="text-sm text-green-700 dark:text-green-300 font-medium">
+                    ⚠️ Remember to check out when you leave!
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <MapPin className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Your Current Location</p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                      GPS: {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      Accuracy: {userLocation.accuracy?.toFixed(0)}m
+                    </p>
+                  </div>
+
+                  {(() => {
+                    if (!realTimeLocations || realTimeLocations.length === 0) return null
+
+                    const locationsWithDistance = realTimeLocations.map((loc) => ({
+                      ...loc,
+                      distance: calculateDistance(
+                        userLocation.latitude,
+                        userLocation.longitude,
+                        loc.latitude,
+                        loc.longitude,
+                      ),
+                    }))
+
+                    const nearest = locationsWithDistance.sort((a, b) => a.distance - b.distance)[0]
+
+                    return (
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        Nearest: {nearest.name} (
+                        {nearest.distance < 1000
+                          ? `${nearest.distance.toFixed(0)}m`
+                          : `${(nearest.distance / 1000).toFixed(1)}km`}
+                        )
+                      </p>
+                    )
+                  })()}
+                </div>
+              </>
+            )}
             <Button
               onClick={getCurrentLocationData}
               variant="ghost"
@@ -1142,7 +1219,6 @@ export function AttendanceRecorder({
         </div>
       )}
 
-      {/* Warning Messages */}
       {error && (
         <Card className="bg-destructive/10 border-destructive/20 dark:bg-destructive/50 dark:border-destructive/60">
           <CardContent className="p-4">
@@ -1159,7 +1235,6 @@ export function AttendanceRecorder({
         </Card>
       )}
 
-      {/* Success Messages */}
       {successMessage && (
         <Card className="bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800">
           <CardContent className="p-4">
@@ -1176,108 +1251,182 @@ export function AttendanceRecorder({
         </Card>
       )}
 
-      {/* Actions Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl md:text-2xl">
-            <Clock className="h-5 w-5 md:h-6 md:w-6" />
-            Actions
-          </CardTitle>
-          <CardDescription className="text-base md:text-lg">Check in or out of your work location</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* ADDED: current GPS location display above check-in buttons */}
-          {/* This section is now handled by the enhanced GPS Status Banner above */}
-
-          {/* Actions Section Buttons */}
-          {!isCheckedIn && (
-            <Button
-              onClick={handleCheckIn}
-              disabled={isLoading || isProcessing}
-              size="lg"
-              className="w-full h-14 md:h-16 text-base md:text-lg font-semibold bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 md:h-6 md:w-6 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <LogIn className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                  Check In Now
-                </>
-              )}
-            </Button>
-          )}
-
-          {isCheckedIn && !isCheckedOut && (
-            <Button
-              onClick={handleCheckOut}
-              disabled={isLoading || isProcessing}
-              size="lg"
-              className="w-full h-14 md:h-16 text-base md:text-lg font-semibold bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 md:h-6 md:w-6 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <LogOut className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                  Check Out Now
-                </>
-              )}
-            </Button>
-          )}
-
-          <div className="pt-4 border-t border-border">
-            <p className="text-sm text-muted-foreground text-center mb-3">Alternative Method</p>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => setShowLocationCodeDialog(true)}
-              className="w-full h-12 md:h-14 text-sm md:text-base"
-            >
-              <MapPin className="mr-2 h-4 w-4 md:h-5 md:w-5" />
-              Enter Location Code Manually
-            </Button>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Tap your location below for instant check-in - no camera needed!
-            </p>
+      {isCompletedForDay && (
+        <div className="border-2 rounded-lg p-6 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-300 dark:border-emerald-700">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-emerald-900 dark:text-emerald-100">
+                Attendance Completed for Today
+              </h3>
+              <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                Your work session has been successfully recorded
+              </p>
+            </div>
           </div>
 
-          {/* QR Scanner Options */}
-          <Button onClick={() => setShowScanner(true)} variant="outline" size="lg" className="w-full h-12 md:h-14">
-            <QrCode className="h-5 w-5 md:h-6 md:w-6 mr-2" />
-            Use QR Code Scanner
-          </Button>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="bg-white/50 dark:bg-gray-900/50 rounded-lg p-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Check-In Time</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                {new Date(localTodayAttendance.check_in_time).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })}
+              </p>
+            </div>
 
-          {/* Refresh Status Button */}
-          <Button
-            onClick={handleRefreshLocations}
-            variant="secondary"
-            size="lg"
-            className="w-full h-12 md:h-14"
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-5 w-5 md:h-6 md:w-6 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh Attendance Status
-          </Button>
-          <p className="text-xs md:text-sm text-muted-foreground text-center">
-            Click to manually update your attendance status if the buttons don't change after check-in/check-out
-          </p>
-        </CardContent>
-      </Card>
+            <div className="bg-white/50 dark:bg-gray-900/50 rounded-lg p-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Check-Out Time</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                {new Date(localTodayAttendance.check_out_time).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })}
+              </p>
+            </div>
+          </div>
 
-      {/* Location Status */}
+          {refreshTimer !== null && refreshTimer > 0 && (
+            <div className="mt-4 text-center text-sm text-emerald-700 dark:text-emerald-300">
+              Status will refresh in {Math.floor(refreshTimer / 60)}:{(refreshTimer % 60).toString().padStart(2, "0")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {minutesUntilCheckout !== null && minutesUntilCheckout > 0 && isCheckedIn && !isCheckedOut && (
+        <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+          <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+          <AlertTitle className="text-yellow-800 dark:text-yellow-200">Check-Out Available Soon</AlertTitle>
+          <AlertDescription className="text-yellow-700 dark:text-yellow-300">
+            You can check out in {minutesUntilCheckout} minute{minutesUntilCheckout !== 1 ? "s" : ""}. A minimum of 1
+            hour is required between check-in and check-out.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Actions Section */}
+      {!isCompletedForDay && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl md:text-2xl">
+              <Clock className="h-5 w-5 md:h-6 md:w-6" />
+              Actions
+            </CardTitle>
+            <CardDescription className="text-base md:text-lg">Check in or out of your work location</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!isCheckedIn && (
+              <Button
+                onClick={handleCheckIn}
+                disabled={isLoading || isProcessing || recentCheckIn || isCheckingIn}
+                size="lg"
+                className="w-full h-14 md:h-16 text-base md:text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 dark:from-green-700 dark:to-emerald-700 dark:hover:from-green-800 dark:hover:to-emerald-800"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 md:h-6 md:w-6 animate-spin" />
+                    Processing...
+                  </>
+                ) : recentCheckIn ? (
+                  <>
+                    <Clock className="mr-2 h-5 w-5 md:h-6 md:w-6" />
+                    Updating Status...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="mr-2 h-5 w-5 md:h-6 md:w-6" />
+                    Check In Now
+                  </>
+                )}
+              </Button>
+            )}
+
+            {isCheckedIn && !isCheckedOut && (
+              <Button
+                onClick={handleCheckOut}
+                disabled={
+                  isLoading ||
+                  isProcessing ||
+                  recentCheckOut ||
+                  isCheckingIn ||
+                  (minutesUntilCheckout !== null && minutesUntilCheckout > 0)
+                }
+                size="lg"
+                className="w-full h-14 md:h-16 text-base md:text-lg font-semibold bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 md:h-6 md:w-6 animate-spin" />
+                    Processing...
+                  </>
+                ) : recentCheckOut || isCheckingIn ? (
+                  <>
+                    <Clock className="mr-2 h-5 w-5 md:h-6 md:w-6" />
+                    Updating Status...
+                  </>
+                ) : minutesUntilCheckout !== null && minutesUntilCheckout > 0 ? (
+                  <>
+                    <Clock className="mr-2 h-5 w-5 md:h-6 md:w-6" />
+                    Check Out Available in {minutesUntilCheckout}m
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="mr-2 h-5 w-5 md:h-6 md:w-6" />
+                    Check Out Now
+                  </>
+                )}
+              </Button>
+            )}
+
+            <div className="pt-4 border-t border-border">
+              <p className="text-sm text-muted-foreground text-center mb-3">Alternative Method</p>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setShowLocationCodeDialog(true)}
+                className="w-full h-12 md:h-14 text-sm md:text-base"
+              >
+                <MapPin className="mr-2 h-4 w-4 md:h-5 md:w-5" />
+                Enter Location Code Manually
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Tap your location below for instant check-in - no camera needed!
+              </p>
+            </div>
+
+            <Button onClick={() => setShowScanner(true)} variant="outline" size="lg" className="w-full h-12 md:h-14">
+              <QrCode className="h-5 w-5 md:h-6 md:w-6 mr-2" />
+              Use QR Code Scanner
+            </Button>
+
+            <Button
+              onClick={handleRefreshLocations}
+              variant="secondary"
+              size="lg"
+              className="w-full h-12 md:h-14"
+              disabled={isLoading || isCheckingIn}
+            >
+              <RefreshCw className={`h-5 w-5 md:h-6 md:w-6 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh Attendance Status
+            </Button>
+            <p className="text-xs md:text-sm text-muted-foreground text-center">
+              Click to manually update your attendance status if the buttons don't change after check-in/check-out
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-xl md:text-2xl">Location Status</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Your Assigned Location */}
           <div className="rounded-lg border p-4 md:p-6">
             <div className="flex items-start justify-between">
               <div className="space-y-1 flex-1">
@@ -1298,7 +1447,6 @@ export function AttendanceRecorder({
             </div>
           </div>
 
-          {/* Quick Select Location */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-foreground">Quick Select Location</p>
@@ -1328,7 +1476,7 @@ export function AttendanceRecorder({
                         <p className="font-semibold text-base">{location.name}</p>
                         {distance !== null && (
                           <p className="text-sm text-muted-foreground mt-1">
-                            {distance < 1000 ? `${distance.toFixed(0)}m` : `${(distance / 1000).toFixed(2)}km`} away
+                            {distance < 1000 ? `${distance.toFixed(0)}m` : `${(distance / 1000).toFixed(2)}km`}
                           </p>
                         )}
                       </div>
@@ -1344,7 +1492,6 @@ export function AttendanceRecorder({
             </div>
           </div>
 
-          {/* All QCC Locations */}
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">All QCC Locations</p>
             <div className="space-y-2">
@@ -1384,7 +1531,6 @@ export function AttendanceRecorder({
         </CardContent>
       </Card>
 
-      {/* Location Code Entry Dialog */}
       {showCodeEntry && (
         <LocationCodeDialog
           open={showCodeEntry}
@@ -1399,7 +1545,6 @@ export function AttendanceRecorder({
         />
       )}
 
-      {/* Location Code Dialog for manual entry */}
       {showLocationCodeDialog && (
         <LocationCodeDialog
           open={showLocationCodeDialog}
@@ -1414,7 +1559,6 @@ export function AttendanceRecorder({
         />
       )}
 
-      {/* QR Scanner Dialog */}
       {showScanner && (
         <QRScannerDialog
           open={showScanner}

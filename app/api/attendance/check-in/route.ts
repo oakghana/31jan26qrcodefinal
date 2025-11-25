@@ -78,14 +78,32 @@ export async function POST(request: NextRequest) {
     const today = new Date().toISOString().split("T")[0]
     const { data: existingRecord } = await supabase
       .from("attendance_records")
-      .select("*")
+      .select("check_in_time, check_out_time")
       .eq("user_id", user.id)
       .gte("check_in_time", `${today}T00:00:00`)
       .lt("check_in_time", `${today}T23:59:59`)
       .maybeSingle()
 
     if (existingRecord && existingRecord.check_in_time) {
-      return NextResponse.json({ error: "Already checked in today" }, { status: 400 })
+      const checkInTime = new Date(existingRecord.check_in_time).toLocaleTimeString()
+
+      if (existingRecord.check_out_time) {
+        // Already completed for today
+        return NextResponse.json(
+          {
+            error: `You have already completed your attendance for today. You checked in at ${checkInTime} and checked out at ${new Date(existingRecord.check_out_time).toLocaleTimeString()}.`,
+          },
+          { status: 400 },
+        )
+      } else {
+        // Already checked in but not checked out
+        return NextResponse.json(
+          {
+            error: `You have already checked in today at ${checkInTime}. You are currently on duty. Please check out when you finish your shift.`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     const { data: locationData, error: locationError } = await supabase

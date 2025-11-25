@@ -17,12 +17,24 @@ export async function GET(request: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    const { data: location, error } = await supabase
+    let { data: location, error } = await supabase
       .from("geofence_locations")
       .select("*")
       .eq("location_code", code.toUpperCase())
       .eq("is_active", true)
       .maybeSingle()
+
+    if (!location && !error) {
+      const { data: nameMatch } = await supabase
+        .from("geofence_locations")
+        .select("*")
+        .ilike("name", `%${code}%`)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle()
+
+      location = nameMatch
+    }
 
     if (error || !location) {
       console.log("[v0] Location not found for code:", code)

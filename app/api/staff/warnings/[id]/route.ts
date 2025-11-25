@@ -13,7 +13,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 
     const { id } = params
-    const body = await request.json()
 
     // Update warning - mark as read
     const { error } = await supabase
@@ -32,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error("[v0] Exception in warning update API:", error)
+    console.error("[v0] Exception in warning update API:", error.message)
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 })
   }
 }
