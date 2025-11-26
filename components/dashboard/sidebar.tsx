@@ -38,6 +38,7 @@ import {
   HelpCircle,
   RefreshCw,
   AlertCircle,
+  Archive,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -126,6 +127,13 @@ const navigationItems = [
     title: "Defaulters",
     href: "/dashboard/defaulters",
     icon: AlertCircle,
+    roles: ["admin", "department_head"],
+    category: "admin",
+  },
+  {
+    title: "Warnings Archive",
+    href: "/dashboard/warnings-archive",
+    icon: Archive,
     roles: ["admin", "department_head"],
     category: "admin",
   },

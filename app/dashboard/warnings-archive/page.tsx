@@ -1,11 +1,11 @@
-import { AttendanceDefaulters } from "@/components/admin/attendance-defaulters"
+import { WarningsArchive } from "@/components/admin/warnings-archive"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 
-export default async function DefaultersPage() {
+export default async function WarningsArchivePage() {
   const supabase = await createClient()
 
   const {
@@ -37,12 +37,12 @@ export default async function DefaultersPage() {
         </Link>
       </div>
       <div>
-        <h1 className="text-3xl font-bold">Attendance Defaulters</h1>
+        <h1 className="text-3xl font-bold">Warnings Archive</h1>
         <p className="text-muted-foreground mt-2">
-          Monitor staff attendance and send formal warnings for non-compliance
+          View all formal warnings sent to staff for attendance non-compliance
         </p>
       </div>
-      <AttendanceDefaulters userRole={profile.role} departmentId={profile.department_id} />
+      <WarningsArchive userRole={profile.role} departmentId={profile.department_id} userId={user.id} />
     </div>
   )
 }
