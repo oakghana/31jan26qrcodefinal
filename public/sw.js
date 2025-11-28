@@ -2,7 +2,7 @@ const CACHE_NAME = "qcc-attendance-v1"
 const STATIC_CACHE = "qcc-static-v1"
 const DYNAMIC_CACHE = "qcc-dynamic-v1"
 
-const APP_VERSION = "1.8. 14/10/25"
+const APP_VERSION = "1.9.0"
 
 const CACHE_EXPIRATION_TIME = 5 * 60 * 1000 // 5 minutes in milliseconds
 
@@ -20,6 +20,7 @@ const NO_CACHE_ENDPOINTS = [
   "/api/attendance/check-in",
   "/api/attendance/check-out",
   "/api/attendance/personal",
+  "/api/attendance/today", // Added to ensure fresh attendance data
   "/api/admin/users",
   "/api/admin/reports",
   "/api/admin/analytics",

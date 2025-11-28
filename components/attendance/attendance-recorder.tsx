@@ -20,7 +20,6 @@ import type { QRCodeData } from "@/lib/qr-code"
 import { useRealTimeLocations } from "@/hooks/use-real-time-locations"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/hooks/use-toast"
-import { findNearestLocation } from "@/lib/geolocation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -247,10 +246,9 @@ export function AttendanceRecorder({
         .lte("check_in_time", `${today}T23:59:59`)
         .order("check_in_time", { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== "PGRST116") {
-        // PGRST116 is "no rows returned"
+      if (error) {
         console.error("[v0] Error fetching today's attendance:", error)
         return
       }
@@ -797,38 +795,27 @@ export function AttendanceRecorder({
 
       const result = await response.json()
 
-      const locationName = result.attendance?.check_in_location_name || result.location?.name || nearest.location.name
+      if (result.success && result.data) {
+        console.log("[v0] Check-in successful:", result.data)
 
-      setFlashMessage({
-        message: `Successfully checked in at ${locationName}! Your attendance has been recorded.`,
-        type: "success",
-      })
+        setLocalTodayAttendance(result.data)
 
-      setRefreshTimer(REFRESH_PAUSE_DURATION / 1000) // Set timer in seconds
-      const timerInterval = setInterval(() => {
-        setRefreshTimer((prev) => {
-          if (prev === null || prev <= 1) {
-            clearInterval(timerInterval)
-            fetchTodayAttendance?.()
-            return null
-          }
-          return prev - 1
+        clearAttendanceCache()
+
+        setRecentCheckIn(true)
+        setTimeout(() => setRecentCheckIn(false), 3000)
+
+        setFlashMessage({
+          message: `Successfully checked in at ${result.data.check_in_location_name}! Welcome to work. Remember to check out at the end of your shift.`,
+          type: "success",
         })
-      }, 1000)
 
-      setLocalTodayAttendance(result.attendance)
-
-      await fetchTodayAttendance?.()
-
-      setRecentCheckIn(true)
-      setCheckingMessage("Check-in successful! Status will refresh in 50 seconds...")
-
-      setTimeout(() => {
-        setRecentCheckIn(false)
-        setIsCheckingIn(false)
-        setCheckingMessage("")
-        fetchTodayAttendance()
-      }, REFRESH_PAUSE_DURATION)
+        setTimeout(() => {
+          fetchTodayAttendance()
+        }, 1000)
+      } else {
+        throw new Error(result.error || "Failed to record check-in")
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Check-in failed"
       setError(errorMessage)
@@ -922,6 +909,7 @@ export function AttendanceRecorder({
     }
     // End of early checkout check
 
+    // Proceed with normal checkout
     setIsLoading(true)
     setError(null)
 
@@ -936,15 +924,16 @@ export function AttendanceRecorder({
         return
       }
 
-      const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations, proximitySettings)
+      const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], proximitySettings)
 
       if (!checkoutValidation.canCheckOut) {
         throw new Error(checkoutValidation.message)
       }
 
       let nearestLocation = null
-
-      if (realTimeLocations.length > 1) {
+      if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
+        nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
+      } else {
         const locationDistances = realTimeLocations
           .map((loc) => {
             const distance = calculateDistance(
@@ -958,82 +947,57 @@ export function AttendanceRecorder({
           .sort((a, b) => a.distance - b.distance)
           .filter(({ distance }) => distance <= proximitySettings.checkInProximityRange)
 
-        if (locationDistances.length === 0) {
-          throw new Error(`You must be within 100 meters of a QCC location to check out`)
-        }
-
-        if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
-          nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
-          console.log("[v0] Automatically using assigned location for check-out:", nearestLocation?.name)
-        } else {
-          nearestLocation = locationDistances[0]?.location
-          console.log("[v0] Automatically using nearest location for check-out:", nearestLocation?.name)
-        }
-      } else {
-        const nearest = findNearestLocation(locationData, realTimeLocations)
-        nearestLocation = nearest?.location || realTimeLocations[0]
+        nearestLocation = locationDistances[0]?.location
       }
 
       const response = await fetch("/api/attendance/check-out", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          location_id: nearestLocation.id,
           latitude: locationData.latitude,
           longitude: locationData.longitude,
           accuracy: locationData.accuracy,
-          reverse_geocoded_location: locationData.reverseGeocodedLocation,
-          device_info: locationData.device_info,
-          early_checkout_reason: earlyCheckoutReason || undefined,
+          location_source: locationData.source,
+          location_name: nearestLocation?.name || "Unknown Location",
+          early_checkout_reason: earlyCheckoutReason || null,
         }),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Check-out failed")
-      }
-
       const result = await response.json()
 
-      const warningNote = result.earlyCheckoutWarning
-        ? " Note: Early checkout recorded and visible to your supervisor, department head, and HR."
-        : ""
+      if (result.success && result.data) {
+        console.log("[v0] Checkout successful:", result.data)
 
-      setFlashMessage({
-        message: `✅ Successfully checked out from ${result.data?.check_out_location_name || nearestLocation.name}! Your work session has been recorded. Work Hours: ${result.data?.work_hours?.toFixed(2) || "N/A"} hours.${warningNote}`,
-        type: result.earlyCheckoutWarning ? "warning" : "success",
-      })
+        setLocalTodayAttendance(result.data)
 
-      setLocalTodayAttendance(result.data)
+        clearAttendanceCache()
 
-      setEarlyCheckoutReason("")
+        setRecentCheckOut(true)
+        setTimeout(() => setRecentCheckOut(false), 3000)
 
-      setRecentCheckOut(true)
-      setIsCheckingIn(true)
-      setCheckingMessage("Check-out successful! Status will refresh in 50 seconds...")
+        const checkInTime = new Date(result.data.check_in_time)
+        const checkOutTime = new Date(result.data.check_out_time)
+        const workHours = ((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2)
 
-      setRefreshTimer(REFRESH_PAUSE_DURATION / 1000)
-
-      const interval = setInterval(() => {
-        setRefreshTimer((prev) => {
-          if (prev === null || prev <= 1) {
-            clearInterval(interval)
-            setRecentCheckOut(false)
-            setIsCheckingIn(false)
-            setCheckingMessage("")
-            fetchTodayAttendance?.()
-            return null
-          }
-          return prev - 1
+        setFlashMessage({
+          message: `Successfully checked out from ${result.data.check_out_location_name}! Great work today. Total work hours: ${workHours} hours. See you tomorrow!`,
+          type: "success",
         })
-      }, 1000)
 
-      await fetchTodayAttendance?.()
+        setEarlyCheckoutReason("")
+
+        setTimeout(() => {
+          fetchTodayAttendance()
+        }, 1000)
+      } else {
+        throw new Error(result.error || "Failed to record checkout")
+      }
     } catch (err) {
-      console.error("[v0] Check-out error:", err instanceof Error ? err.message : "Unknown error")
-
+      console.error("[v0] Checkout error:", err)
       setFlashMessage({
-        message: err instanceof Error ? err.message : "Failed to check out. Please try again.",
+        message: err instanceof Error ? err.message : "Failed to record checkout. Please try again.",
         type: "error",
       })
     } finally {
@@ -1126,72 +1090,65 @@ export function AttendanceRecorder({
     }
 
     setShowEarlyCheckoutDialog(false)
+    setIsLoading(true)
 
-    if (pendingCheckoutData) {
-      setIsLoading(true)
-      try {
-        const { location, nearestLocation } = pendingCheckoutData
+    try {
+      const { location, nearestLocation } = pendingCheckoutData
 
-        const response = await fetch("/api/attendance/check-out", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location_id: nearestLocation.id,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            accuracy: location.accuracy,
-            reverse_geocoded_location: location.reverseGeocodedLocation,
-            device_info: location.device_info,
-            early_checkout_reason: earlyCheckoutReason.trim(),
-          }),
-        })
+      const response = await fetch("/api/attendance/check-out", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: location.accuracy,
+          location_source: location.source,
+          location_name: nearestLocation?.name || "Unknown Location",
+          early_checkout_reason: earlyCheckoutReason,
+        }),
+      })
 
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Check-out failed")
-        }
+      const result = await response.json()
 
-        const result = await response.json()
+      if (result.success && result.data) {
+        console.log("[v0] Early checkout successful with reason")
+
+        setLocalTodayAttendance(result.data)
+
+        clearAttendanceCache()
+
+        setRecentCheckOut(true)
+        setTimeout(() => setRecentCheckOut(false), 3000)
+
+        const checkInTime = new Date(result.data.check_in_time)
+        const checkOutTime = new Date(result.data.check_out_time)
+        const workHours = ((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2)
 
         setFlashMessage({
-          message: `✅ Successfully checked out from ${result.data?.check_out_location_name || nearestLocation.name}! Your work session has been recorded. Work Hours: ${result.data?.work_hours?.toFixed(2) || "N/A"} hours. Note: Early checkout recorded and visible to your supervisor, department head, and HR.`,
+          message: `Successfully checked out early from ${result.data.check_out_location_name}. Work hours: ${workHours} hours. Your reason has been recorded and is visible to department heads, supervisors, and HR.`,
           type: "warning",
         })
 
-        setLocalTodayAttendance(result.data)
         setEarlyCheckoutReason("")
-        setPendingCheckoutData(null)
+        setPendingCheckoutData({ location: null, nearestLocation: null })
 
-        setRecentCheckOut(true)
-        setIsCheckingIn(true)
-        setCheckingMessage("Check-out successful! Status will refresh in 50 seconds...")
-
-        setRefreshTimer(REFRESH_PAUSE_DURATION / 1000)
-
-        const interval = setInterval(() => {
-          setRefreshTimer((prev) => {
-            if (prev === null || prev <= 1) {
-              clearInterval(interval)
-              setRecentCheckOut(false)
-              setIsCheckingIn(false)
-              setCheckingMessage("")
-              fetchTodayAttendance?.()
-              return null
-            }
-            return prev - 1
-          })
+        setTimeout(() => {
+          fetchTodayAttendance()
         }, 1000)
-
-        await fetchTodayAttendance?.()
-      } catch (err) {
-        console.error("[v0] Early checkout error:", err)
-        setFlashMessage({
-          message: err instanceof Error ? err.message : "Failed to check out. Please try again.",
-          type: "error",
-        })
-      } finally {
-        setIsLoading(false)
+      } else {
+        throw new Error(result.error || "Failed to record checkout")
       }
+    } catch (err) {
+      console.error("[v0] Early checkout error:", err)
+      setFlashMessage({
+        message: err instanceof Error ? err.message : "Failed to record checkout. Please try again.",
+        type: "error",
+      })
+      setShowEarlyCheckoutDialog(true)
+    } finally {
+      setIsLoading(false)
     }
   }
 
