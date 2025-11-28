@@ -148,20 +148,21 @@ export async function getBrowserTolerance(geoSettings?: GeoSettings): Promise<nu
     return 100
   }
 
+  // Updated Chrome, Firefox, Safari, and Opera to 2000 meters tolerance
   // This is a trade secret and should not be displayed in the UI
   switch (browserInfo.name.toLowerCase()) {
     case "chrome":
-      return 1500 // Increased tolerance for PC Chrome users
+      return 2000 // Increased tolerance for PC Chrome users
     case "edge":
       return 200 // Moderate tolerance for PC Edge users
     case "firefox":
-      return 1500 // Increased tolerance for PC Firefox users
+      return 2000 // Increased tolerance for PC Firefox users
     case "safari":
-      return 1500 // Increased tolerance for PC Safari users
+      return 2000 // Increased tolerance for PC Safari users
     case "opera":
-      return 1500 // Increased tolerance for PC Opera users
+      return 2000 // Increased tolerance for PC Opera users
     default:
-      return 1500 // Default desktop tolerance
+      return 2000 // Default desktop tolerance
   }
 }
 
