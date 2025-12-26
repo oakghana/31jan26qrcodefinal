@@ -637,7 +637,9 @@ export function AttendanceReports() {
               <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{summary.statusCounts.present || 0}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {records.filter((r) => r.status === "present" || r.check_in_time).length}
+              </div>
               <p className="text-xs text-muted-foreground">On time arrivals</p>
             </CardContent>
           </Card>

@@ -11,6 +11,7 @@ import Link from "next/link"
 import { MobileAppDownload } from "@/components/ui/mobile-app-download"
 import { StaffWarningModal } from "@/components/notifications/staff-warning-modal"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
+import { WeeklySummaryModal } from "@/components/attendance/weekly-summary-modal"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -106,6 +107,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardLayout>
+      <WeeklySummaryModal />
       <StaffWarningModal />
 
       <div className="space-y-8">

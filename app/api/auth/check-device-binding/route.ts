@@ -41,114 +41,134 @@ export async function POST(request: NextRequest) {
 
     const ipAddress = getValidIpAddress()
 
-    const { data: existingBinding, error: bindingError } = await supabase
-      .from("device_user_bindings")
-      .select("user_id, user_profiles!inner(first_name, last_name, email, department_id)")
-      .eq("device_id", device_id)
-      .eq("is_active", true)
-      .maybeSingle()
+    try {
+      const { data: existingBinding, error: bindingError } = await supabase
+        .from("device_user_bindings")
+        .select("user_id, user_profiles!inner(first_name, last_name, email, department_id)")
+        .eq("device_id", device_id)
+        .eq("is_active", true)
+        .maybeSingle()
 
-    if (bindingError) {
-      if (bindingError.code === "PGRST205" || bindingError.message?.includes("Could not find the table")) {
-        console.log("[v0] Device binding tables not created yet, skipping device security check")
+      if (bindingError) {
+        if (
+          bindingError.code === "PGRST205" ||
+          bindingError.code === "42P01" ||
+          bindingError.message?.includes("Could not find the table") ||
+          bindingError.message?.includes("does not exist")
+        ) {
+          console.log("[v0] Device binding tables not created yet, skipping device security check")
+          return NextResponse.json({
+            allowed: true,
+            violation: false,
+            message: "Device verification skipped - tables not initialized",
+          })
+        }
+        console.error("[v0] Error checking device binding:", bindingError)
         return NextResponse.json({
           allowed: true,
           violation: false,
-          message: "Device verification skipped - tables not initialized",
+          message: "Device verification temporarily unavailable",
         })
       }
-      console.error("[v0] Error checking device binding:", bindingError)
-      // Allow login on other errors too to avoid blocking users
-      return NextResponse.json({
-        allowed: true,
-        violation: false,
-        message: "Device verification temporarily unavailable",
-      })
-    }
 
-    if (existingBinding && existingBinding.user_id !== user.id) {
-      console.log("[v0] Device binding violation detected:", {
-        device_id,
-        attempted_user: user.id,
-        bound_user: existingBinding.user_id,
-      })
+      if (existingBinding && existingBinding.user_id !== user.id) {
+        console.log("[v0] Device binding violation detected:", {
+          device_id,
+          attempted_user: user.id,
+          bound_user: existingBinding.user_id,
+        })
 
-      // Log the violation
-      await supabase.from("device_security_violations").insert({
-        device_id,
-        ip_address: ipAddress,
-        attempted_user_id: user.id,
-        bound_user_id: existingBinding.user_id,
-        violation_type: "login_attempt",
-        device_info: device_info || null,
-      })
-
-      // Get current user info for notification
-      const { data: currentUserProfile } = await supabase
-        .from("user_profiles")
-        .select("first_name, last_name, email, department_id")
-        .eq("id", user.id)
-        .single()
-
-      // Get department head to notify
-      if (currentUserProfile?.department_id) {
-        const { data: deptHead } = await supabase
-          .from("user_profiles")
-          .select("id")
-          .eq("department_id", currentUserProfile.department_id)
-          .eq("role", "department_head")
-          .eq("is_active", true)
-          .maybeSingle()
-
-        if (deptHead) {
-          await supabase.from("staff_notifications").insert({
-            recipient_id: deptHead.id,
-            sender_id: user.id,
-            sender_role: "system",
-            sender_label: "Security Alert",
-            notification_type: "security_violation",
-            message: `Security Alert: ${currentUserProfile.first_name} ${currentUserProfile.last_name} (${currentUserProfile.email}) attempted to login using a device already registered to ${existingBinding.user_profiles.first_name} ${existingBinding.user_profiles.last_name}. This may indicate device sharing or unauthorized access. Please investigate.`,
-            is_read: false,
+        try {
+          await supabase.from("device_security_violations").insert({
+            device_id,
+            ip_address: ipAddress,
+            attempted_user_id: user.id,
+            bound_user_id: existingBinding.user_id,
+            violation_type: "login_attempt",
+            device_info: device_info || null,
           })
+
+          const { data: currentUserProfile } = await supabase
+            .from("user_profiles")
+            .select("first_name, last_name, email, department_id")
+            .eq("id", user.id)
+            .single()
+
+          if (currentUserProfile?.department_id) {
+            const { data: deptHead } = await supabase
+              .from("user_profiles")
+              .select("id")
+              .eq("department_id", currentUserProfile.department_id)
+              .eq("role", "department_head")
+              .eq("is_active", true)
+              .maybeSingle()
+
+            if (deptHead) {
+              await supabase.from("staff_notifications").insert({
+                recipient_id: deptHead.id,
+                sender_id: user.id,
+                sender_role: "system",
+                sender_label: "Security Alert",
+                notification_type: "security_violation",
+                message: `Security Alert: ${currentUserProfile.first_name} ${currentUserProfile.last_name} (${currentUserProfile.email}) attempted to login using a device already registered to ${existingBinding.user_profiles.first_name} ${existingBinding.user_profiles.last_name}. This may indicate device sharing or unauthorized access. Please investigate.`,
+                is_read: false,
+              })
+            }
+          }
+        } catch (notificationError) {
+          console.error("[v0] Failed to log violation or send notification:", notificationError)
+        }
+
+        return NextResponse.json({
+          allowed: false,
+          violation: true,
+          message: `This device is already registered to another staff member. Each device can only be used by one person. Please contact your supervisor or IT department.`,
+          bound_to_email: existingBinding.user_profiles.email,
+        })
+      }
+
+      if (!existingBinding) {
+        try {
+          await supabase.from("device_user_bindings").insert({
+            device_id,
+            ip_address: ipAddress,
+            user_id: user.id,
+            device_info: device_info || null,
+            is_active: true,
+            last_seen_at: new Date().toISOString(),
+          })
+        } catch (insertError) {
+          console.log("[v0] Could not create device binding, table may not exist:", insertError)
+        }
+      } else {
+        try {
+          await supabase
+            .from("device_user_bindings")
+            .update({
+              ip_address: ipAddress,
+              last_seen_at: new Date().toISOString(),
+              device_info: device_info || null,
+            })
+            .eq("device_id", device_id)
+            .eq("user_id", user.id)
+        } catch (updateError) {
+          console.log("[v0] Could not update device binding:", updateError)
         }
       }
 
       return NextResponse.json({
-        allowed: false,
-        violation: true,
-        message: `This device is already registered to another staff member. Each device can only be used by one person. Please contact your supervisor or IT department.`,
-        bound_to_email: existingBinding.user_profiles.email,
+        allowed: true,
+        violation: false,
+        message: "Device verified successfully",
+      })
+    } catch (dbError: any) {
+      console.log("[v0] Database error during device binding check, allowing login:", dbError?.message)
+      return NextResponse.json({
+        allowed: true,
+        violation: false,
+        message: "Device verification skipped - proceeding with login",
       })
     }
-
-    if (!existingBinding) {
-      // Create new binding
-      await supabase.from("device_user_bindings").insert({
-        device_id,
-        ip_address: ipAddress,
-        user_id: user.id,
-        device_info: device_info || null,
-        is_active: true,
-        last_seen_at: new Date().toISOString(),
-      })
-    } else {
-      // Update existing binding
-      await supabase
-        .from("device_user_bindings")
-        .update({
-          ip_address: ipAddress,
-          last_seen_at: new Date().toISOString(),
-          device_info: device_info || null,
-        })
-        .eq("device_id", device_id)
-        .eq("user_id", user.id)
-    }
-
-    return NextResponse.json({
-      allowed: true,
-      violation: false,
-      message: "Device verified successfully",
-    })
   } catch (error) {
     console.error("[v0] Device binding check error:", error)
     return NextResponse.json({

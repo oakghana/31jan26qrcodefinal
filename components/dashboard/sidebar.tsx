@@ -40,7 +40,7 @@ import {
   AlertCircle,
   Archive,
   ShieldAlert,
-  Smartphone,
+  TrendingUp,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -140,18 +140,28 @@ const navigationItems = [
     category: "admin",
   },
   {
-    title: "Device Security",
+    title: "Department Summaries",
+    href: "/dashboard/department-summaries",
+    icon: TrendingUp,
+    roles: ["admin", "department_head"],
+    category: "admin",
+  },
+  {
+    title: "Device Monitoring",
     href: "/dashboard/device-violations",
     icon: ShieldAlert,
     roles: ["admin", "it-admin", "department_head"],
     category: "admin",
-  },
-  {
-    title: "Weekly Device Sharing",
-    href: "/dashboard/weekly-device-sharing",
-    icon: Smartphone,
-    roles: ["admin", "department_head"],
-    category: "admin",
+    subItems: [
+      {
+        title: "Security Violations",
+        href: "/dashboard/device-violations",
+      },
+      {
+        title: "Weekly Sharing",
+        href: "/dashboard/weekly-device-sharing",
+      },
+    ],
   },
   {
     title: "Staff Management",
@@ -356,18 +366,11 @@ export function Sidebar({ user, profile }: SidebarProps) {
                 </div>
                 {adminItems.map((item) => {
                   const Icon = item.icon
-                  const isActive = pathname === item.href
+                  const isActive = pathname === item.href || item.subItems?.some((subItem) => pathname === subItem.href)
                   return (
-                    <Link
+                    <div
                       key={item.href}
-                      href={item.href}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={cn(
-                        "group flex items-center gap-3 px-4 py-4 rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px]",
-                        isActive
-                          ? "bg-gradient-to-r from-accent to-accent/90 text-accent-foreground shadow-lg shadow-accent/25 scale-[1.02]"
-                          : "text-sidebar-foreground hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 hover:text-foreground hover:shadow-md hover:scale-[1.01]",
-                      )}
+                      className="group flex items-center gap-3 px-4 py-4 rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px]"
                     >
                       <Icon
                         className={cn(
@@ -380,7 +383,35 @@ export function Sidebar({ user, profile }: SidebarProps) {
                       {isActive && (
                         <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-50" />
                       )}
-                    </Link>
+                      {item.subItems && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start gap-3 h-auto p-4 hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[56px]"
+                            >
+                              <span className="font-medium">{item.title}</span>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-64 shadow-xl border-border/50 bg-background/95 backdrop-blur-xl"
+                          >
+                            {item.subItems.map((subItem) => (
+                              <DropdownMenuItem asChild key={subItem.href}>
+                                <Link
+                                  href={subItem.href}
+                                  className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
+                                >
+                                  <span className="font-medium">{subItem.title}</span>
+                                </Link>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -401,7 +432,7 @@ export function Sidebar({ user, profile }: SidebarProps) {
                     className={cn(
                       "group flex items-center gap-3 px-4 py-4 rounded-xl text-sm font-medium transition-all duration-300 relative overflow-hidden touch-manipulation min-h-[48px]",
                       isActive
-                        ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 scale-[1.02]"
+                        ? "bg-gradient-to-r from-accent to-accent/90 text-accent-foreground shadow-lg shadow-accent/25 scale-[1.02]"
                         : "text-sidebar-foreground hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 hover:text-foreground hover:shadow-md hover:scale-[1.01]",
                     )}
                   >
@@ -447,7 +478,7 @@ export function Sidebar({ user, profile }: SidebarProps) {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-3 h-auto p-4 hover:bg-gradient-to-r hover:from-muted hover:to-muted/50 rounded-xl transition-all duration-300 hover:shadow-lg hover:scale-[1.02] touch-manipulation min-h-[56px]"
+                  className="w-full justify-start gap-3 h-auto p-4 hover:bg-muted/50 rounded-xl transition-all duration-200 touch-manipulation min-h-[56px]"
                 >
                   <div className="relative">
                     <Avatar className="h-10 w-10 ring-2 ring-primary/20 transition-all duration-300 hover:ring-primary/40">

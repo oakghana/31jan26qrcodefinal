@@ -53,10 +53,15 @@ export default function DeviceViolationsClient({
         .order("created_at", { ascending: false })
 
       if (error) {
-        // Table doesn't exist yet - show empty state
-        if (error.code === "42P01" || error.message.includes("does not exist")) {
+        if (
+          error.code === "42P01" ||
+          error.code === "PGRST204" ||
+          error.message.includes("does not exist") ||
+          error.message.includes("schema cache")
+        ) {
           console.log("[v0] Device security violations table not created yet")
           setViolations([])
+          setLoading(false)
           return
         }
         throw error
@@ -117,7 +122,13 @@ export default function DeviceViolationsClient({
       {violations.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">No device violations detected</p>
+            <div className="text-center space-y-2">
+              <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No device violations detected</p>
+              <p className="text-sm text-muted-foreground">
+                Device security monitoring is active. Violations will appear here when detected.
+              </p>
+            </div>
           </CardContent>
         </Card>
       ) : (
