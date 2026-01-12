@@ -188,12 +188,19 @@ export function AttendanceRecorder({
       const response = await fetch("/api/attendance/leave-status")
       if (response.ok) {
         const result = await response.json()
-        if (result.data?.leave_status) {
-          setLeaveStatus(result.data.leave_status)
+        if (result.success && result.data) {
+          setLeaveStatus(result.data.leave_status || "active")
+        } else {
+          // If response is ok but no data, default to active
+          setLeaveStatus("active")
         }
+      } else {
+        console.log("[v0] Leave status fetch failed, defaulting to active")
+        setLeaveStatus("active")
       }
     } catch (error) {
-      console.error("[v0] Error fetching leave status:", error)
+      console.log("[v0] Leave status error, defaulting to active:", error)
+      setLeaveStatus("active")
     }
   }
 

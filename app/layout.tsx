@@ -2,8 +2,21 @@ import type React from "react"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import { NotificationProvider } from "@/components/ui/notification-system"
+import dynamic from "next/dynamic"
 import { TimeBasedThemeProvider } from "@/components/theme/time-based-theme-provider"
-import { PWAClientWrapper } from "@/components/ui/pwa-client-wrapper"
+
+const PWAServiceWorker = dynamic(
+  () => import("@/components/ui/pwa-service-worker").then((mod) => ({ default: mod.PWAServiceWorker })),
+  { ssr: false },
+)
+const PWAUpdateNotification = dynamic(
+  () => import("@/components/ui/pwa-update-notification").then((mod) => ({ default: mod.PWAUpdateNotification })),
+  { ssr: false },
+)
+const MobileInstallPrompt = dynamic(
+  () => import("@/components/ui/install-app-button").then((mod) => ({ default: mod.MobileInstallPrompt })),
+  { ssr: false },
+)
 
 const inter = Inter({
   subsets: ["latin"],
@@ -70,7 +83,9 @@ export default function RootLayout({
       <body className="font-sans">
         <TimeBasedThemeProvider>
           <NotificationProvider>{children}</NotificationProvider>
-          <PWAClientWrapper />
+          <PWAServiceWorker />
+          <MobileInstallPrompt />
+          <PWAUpdateNotification />
         </TimeBasedThemeProvider>
       </body>
     </html>
