@@ -41,7 +41,6 @@ import { FlashMessage } from "@/components/notifications/flash-message"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
-import { LeaveStatusDialog } from "@/components/attendance/leave-status-dialog" // Import LeaveStatusDialog
 import { cn } from "@/lib/utils" // Import cn
 
 interface GeofenceLocation {
@@ -177,33 +176,6 @@ export function AttendanceRecorder({
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
 
-  const [leaveStatus, setLeaveStatus] = useState<string>("active") // Leave status
-
-  useEffect(() => {
-    fetchLeaveStatus()
-  }, [])
-
-  const fetchLeaveStatus = async () => {
-    try {
-      const response = await fetch("/api/attendance/leave-status")
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success && result.data) {
-          setLeaveStatus(result.data.leave_status || "active")
-        } else {
-          // If response is ok but no data, default to active
-          setLeaveStatus("active")
-        }
-      } else {
-        console.log("[v0] Leave status fetch failed, defaulting to active")
-        setLeaveStatus("active")
-      }
-    } catch (error) {
-      console.log("[v0] Leave status error, defaulting to active:", error)
-      setLeaveStatus("active")
-    }
-  }
-
   // Check if cache should be cleared (new day)
   useEffect(() => {
     if (shouldClearCache()) {
@@ -217,7 +189,7 @@ export function AttendanceRecorder({
 
       // Fetch fresh data
       fetchTodayAttendance()
-      fetchLeaveStatus() // Fetch leave status again on new day
+      // fetchLeaveStatus() // Fetch leave status again on new day
 
       // Update cached date
       const today = new Date().toISOString().split("T")[0]
@@ -238,7 +210,7 @@ export function AttendanceRecorder({
 
         // Fetch fresh data
         fetchTodayAttendance()
-        fetchLeaveStatus() // Fetch leave status again on date change
+        // fetchLeaveStatus() // Fetch leave status again on date change
 
         // Update cached date
         const today = new Date().toISOString().split("T")[0]
@@ -292,7 +264,9 @@ export function AttendanceRecorder({
     }
   }
 
-  const isOnLeave = leaveStatus !== "active"
+  // Removed leave status logic
+  // const isOnLeave = leaveStatus !== "active"
+  const isOnLeave = false // Placeholder: Assume not on leave if leave status is removed
   const canCheckInButton = initialCanCheckIn && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave
   const canCheckOutButton =
     initialCanCheckOut &&
@@ -745,7 +719,7 @@ export function AttendanceRecorder({
       if (!localTodayAttendance?.check_out_time) {
         // Already checked in, not checked out yet
         setFlashMessage({
-          message: `You have already checked in today at ${new Date(localTodayAttendance.check_in_time).toLocaleTimeString()}! You're currently on duty. Please check out when you finish your shift.`,
+          message: `You have already checked in today at ${new Date(localTodayAttendance.check_in_time).toLocaleTimeString()}! You're currently on duty. Remember to check out when you finish your shift.`,
           type: "warning",
         })
       } else {
@@ -1279,7 +1253,7 @@ export function AttendanceRecorder({
         </div>
       )}
 
-      {isOnLeave && (
+      {/* {isOnLeave && (
         <Alert className="border-amber-200 bg-amber-50">
           <Info className="h-4 w-4 text-amber-600" />
           <AlertTitle className="text-amber-900">On Leave</AlertTitle>
@@ -1288,7 +1262,7 @@ export function AttendanceRecorder({
             check-out are disabled during your leave period.
           </AlertDescription>
         </Alert>
-      )}
+      )} */}
 
       {userLocation && (
         <div
@@ -1539,59 +1513,68 @@ export function AttendanceRecorder({
 
       {/* Actions Section */}
       {!isCompletedForDay && (
-        <Card>
+        <Card className={cn("w-full", className)}>
           <CardHeader>
-            <div className="flex items-start justify-between">
+            <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-2xl font-bold">Today's Attendance</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time
+                    ? "Today's Attendance"
+                    : localTodayAttendance?.check_out_time
+                      ? "Attendance Complete"
+                      : "Today's Attendance"}
+                </CardTitle>
                 <CardDescription>Record your check-in and check-out for today</CardDescription>
               </div>
-              <LeaveStatusDialog currentStatus={leaveStatus} onStatusChange={fetchLeaveStatus} />
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {!isCheckedIn && (
-              <Button
-                onClick={handleCheckIn}
-                disabled={!canCheckInButton || isLoading || isCheckingIn}
-                className="w-full h-14 text-lg font-semibold"
-                size="lg"
-              >
-                {isCheckingIn ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    {checkingMessage || "Checking In..."}
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="mr-2 h-5 w-5" />
-                    Check In
-                  </>
-                )}
-              </Button>
-            )}
+            {/* Check-in/Check-out Buttons */}
+            <div className="space-y-4">
+              {!localTodayAttendance?.check_in_time && (
+                <Button
+                  onClick={handleCheckIn}
+                  disabled={!locationValidation?.canCheckIn || isCheckingIn || isProcessing || recentCheckIn}
+                  className="w-full"
+                  size="lg"
+                >
+                  {isCheckingIn ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      {checkingMessage || "Checking In..."}
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="mr-2 h-5 w-5" />
+                      Check In
+                    </>
+                  )}
+                </Button>
+              )}
 
-            {isCheckedIn && !isCheckedOut && (
-              <Button
-                onClick={handleCheckOut}
-                disabled={!canCheckOutButton || isLoading}
-                variant="outline"
-                className="w-full h-14 text-lg font-semibold bg-transparent"
-                size="lg"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Checking Out...
-                  </>
-                ) : (
-                  <>
-                    <LogOut className="mr-2 h-5 w-5" />
-                    Check Out
-                  </>
-                )}
-              </Button>
-            )}
+              {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && (
+                <Button
+                  onClick={handleCheckOut}
+                  disabled={!locationValidation?.canCheckOut || isCheckingIn || isProcessing || recentCheckOut}
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  size="lg"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Checking Out...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="mr-2 h-5 w-5" />
+                      Check Out
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
 
             <div className="space-y-3 opacity-40 pointer-events-none">
               <p className="text-sm text-muted-foreground text-center mb-3">Alternative Method</p>
