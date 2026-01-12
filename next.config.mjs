@@ -37,7 +37,7 @@ const nextConfig = {
       'recharts',
       'date-fns',
     ],
-    optimizeCss: true,
+    optimizeCss: false, // Disabled to avoid critters dependency
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
