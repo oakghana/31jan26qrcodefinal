@@ -150,7 +150,7 @@ const navigationItems = [
     title: "Device Monitoring",
     href: "/dashboard/device-violations",
     icon: ShieldAlert,
-    roles: ["admin", "it-admin", "department_head"],
+    roles: ["admin"],
     category: "admin",
     subItems: [
       {
@@ -373,17 +373,16 @@ export function Sidebar({ user, profile }: SidebarProps) {
                     return (
                       <DropdownMenu key={item.href}>
                         <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
+                          <button
                             className={cn(
-                              "w-full justify-start gap-3 h-auto p-4 rounded-xl transition-all duration-300 touch-manipulation min-h-[56px]",
+                              "w-full group flex items-center gap-3 px-4 py-4 rounded-xl text-sm font-medium transition-all duration-300 touch-manipulation min-h-[48px]",
                               isActive ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-muted/50",
                             )}
                           >
                             <Icon className="h-5 w-5 flex-shrink-0" />
                             <span className="flex-1 font-medium text-left">{item.title}</span>
                             <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-300 group-hover:translate-x-1" />
-                          </Button>
+                          </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="end"
@@ -393,6 +392,7 @@ export function Sidebar({ user, profile }: SidebarProps) {
                             <DropdownMenuItem asChild key={subItem.href}>
                               <Link
                                 href={subItem.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
                                 className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-all duration-200 touch-manipulation min-h-[44px]"
                               >
                                 <span className="font-medium">{subItem.title}</span>

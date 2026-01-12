@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Calendar, Clock, Award, AlertTriangle } from "lucide-react"
+import { Calendar, Clock, Award, AlertTriangle, LogIn, LogOut } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface WeeklySummary {
@@ -17,6 +17,8 @@ interface WeeklySummary {
   daysLate: number
   daysAbsent: number
   earlyCheckouts: number
+  totalCheckIns: number
+  totalCheckOuts: number
   performance: string
 }
 
@@ -26,13 +28,14 @@ export function WeeklySummaryModal() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // Check if it's Monday and user hasn't seen summary today
     const today = new Date()
-    const isMonday = today.getDay() === 1
+    const isFriday = today.getDay() === 5
     const lastShown = localStorage.getItem("lastWeeklySummaryShown")
     const todayStr = today.toISOString().split("T")[0]
 
-    if (isMonday && lastShown !== todayStr) {
+    console.log("[v0] Checking weekly summary: isFriday=", isFriday, "lastShown=", lastShown, "today=", todayStr)
+
+    if (isFriday && lastShown !== todayStr) {
       fetchSummary()
     }
   }, [])
@@ -40,15 +43,19 @@ export function WeeklySummaryModal() {
   const fetchSummary = async () => {
     setLoading(true)
     try {
+      console.log("[v0] Fetching weekly summary...")
       const response = await fetch("/api/attendance/weekly-summary")
       if (response.ok) {
         const data = await response.json()
+        console.log("[v0] Weekly summary data:", data)
         setSummary(data)
         setOpen(true)
         localStorage.setItem("lastWeeklySummaryShown", new Date().toISOString().split("T")[0])
+      } else {
+        console.error("[v0] Failed to fetch weekly summary:", response.status)
       }
     } catch (error) {
-      console.error("Error fetching weekly summary:", error)
+      console.error("[v0] Error fetching weekly summary:", error)
     } finally {
       setLoading(false)
     }
@@ -92,7 +99,7 @@ export function WeeklySummaryModal() {
             {getPerformanceBadge(summary.performance)}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="text-center">
@@ -125,6 +132,30 @@ export function WeeklySummaryModal() {
                 <div className="text-center">
                   <div className="text-3xl font-bold text-orange-600">{summary.daysLate}</div>
                   <p className="text-xs text-muted-foreground mt-1">Late Arrivals</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <LogIn className="h-4 w-4 text-primary" />
+                    <div className="text-3xl font-bold text-primary">{summary.totalCheckIns}</div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Check-Ins</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <LogOut className="h-4 w-4 text-purple-600" />
+                    <div className="text-3xl font-bold text-purple-600">{summary.totalCheckOuts}</div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Check-Outs</p>
                 </div>
               </CardContent>
             </Card>

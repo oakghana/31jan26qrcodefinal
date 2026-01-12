@@ -15,6 +15,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("leave_status, leave_end_date")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (userProfile && userProfile.leave_status && userProfile.leave_status !== "active") {
+      const leaveType = userProfile.leave_status === "on_leave" ? "on leave" : "on sick leave"
+      const endDate = userProfile.leave_end_date
+        ? new Date(userProfile.leave_end_date).toLocaleDateString()
+        : "unspecified"
+
+      return NextResponse.json(
+        {
+          error: `You are currently marked as ${leaveType} until ${endDate}. You cannot check out during your leave period.`,
+        },
+        { status: 403 },
+      )
+    }
+
     const body = await request.json()
     const { latitude, longitude, location_id, qr_code_used, qr_timestamp, early_checkout_reason } = body
 

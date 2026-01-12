@@ -41,6 +41,8 @@ import { FlashMessage } from "@/components/notifications/flash-message"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
+import { LeaveStatusDialog } from "@/components/attendance/leave-status-dialog" // Import LeaveStatusDialog
+import { cn } from "@/lib/utils" // Import cn
 
 interface GeofenceLocation {
   id: string
@@ -175,6 +177,26 @@ export function AttendanceRecorder({
   const [recentCheckOut, setRecentCheckOut] = useState(false)
   const [localTodayAttendance, setLocalTodayAttendance] = useState(initialTodayAttendance)
 
+  const [leaveStatus, setLeaveStatus] = useState<string>("active") // Leave status
+
+  useEffect(() => {
+    fetchLeaveStatus()
+  }, [])
+
+  const fetchLeaveStatus = async () => {
+    try {
+      const response = await fetch("/api/attendance/leave-status")
+      if (response.ok) {
+        const result = await response.json()
+        if (result.data?.leave_status) {
+          setLeaveStatus(result.data.leave_status)
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching leave status:", error)
+    }
+  }
+
   // Check if cache should be cleared (new day)
   useEffect(() => {
     if (shouldClearCache()) {
@@ -188,6 +210,7 @@ export function AttendanceRecorder({
 
       // Fetch fresh data
       fetchTodayAttendance()
+      fetchLeaveStatus() // Fetch leave status again on new day
 
       // Update cached date
       const today = new Date().toISOString().split("T")[0]
@@ -208,6 +231,7 @@ export function AttendanceRecorder({
 
         // Fetch fresh data
         fetchTodayAttendance()
+        fetchLeaveStatus() // Fetch leave status again on date change
 
         // Update cached date
         const today = new Date().toISOString().split("T")[0]
@@ -261,12 +285,14 @@ export function AttendanceRecorder({
     }
   }
 
-  const canCheckIn = initialCanCheckIn && !recentCheckIn && !localTodayAttendance?.check_in_time
-  const canCheckOut =
+  const isOnLeave = leaveStatus !== "active"
+  const canCheckInButton = initialCanCheckIn && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave
+  const canCheckOutButton =
     initialCanCheckOut &&
     !recentCheckOut &&
     localTodayAttendance?.check_in_time &&
-    !localTodayAttendance?.check_out_time
+    !localTodayAttendance?.check_out_time &&
+    !isOnLeave
 
   const handleQRScanSuccess = async (qrData: QRCodeData) => {
     console.log("[v0] QR scan successful, mode:", qrScanMode)
@@ -1210,7 +1236,7 @@ export function AttendanceRecorder({
   const isCompletedForDay =
     localTodayAttendance?.check_in_time && localTodayAttendance?.check_out_time && !isFromPreviousDay
 
-  const defaultMode = canCheckIn ? "checkin" : canCheckOut ? "checkout" : null
+  const defaultMode = canCheckInButton ? "checkin" : canCheckOutButton ? "checkout" : null
 
   const handleLocationSelect = (location: GeofenceLocation) => {
     console.log("Location selected:", location.name)
@@ -1218,7 +1244,7 @@ export function AttendanceRecorder({
   }
 
   return (
-    <div className={`space-y-6 ${className}`}>
+    <div className={cn("space-y-6", className)}>
       {flashMessage && (
         <FlashMessage
           message={flashMessage.message}
@@ -1244,6 +1270,17 @@ export function AttendanceRecorder({
             </div>
           </div>
         </div>
+      )}
+
+      {isOnLeave && (
+        <Alert className="border-amber-200 bg-amber-50">
+          <Info className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-900">On Leave</AlertTitle>
+          <AlertDescription className="text-amber-800">
+            You are currently marked as {leaveStatus === "on_leave" ? "on leave" : "on sick leave"}. Check-in and
+            check-out are disabled during your leave period.
+          </AlertDescription>
+        </Alert>
       )}
 
       {userLocation && (
@@ -1497,34 +1534,31 @@ export function AttendanceRecorder({
       {!isCompletedForDay && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl md:text-2xl">
-              <Clock className="h-5 w-5 md:h-6 md:w-6" />
-              Actions
-            </CardTitle>
-            <CardDescription className="text-base md:text-lg">Check in or out of your work location</CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-2xl font-bold">Today's Attendance</CardTitle>
+                <CardDescription>Record your check-in and check-out for today</CardDescription>
+              </div>
+              <LeaveStatusDialog currentStatus={leaveStatus} onStatusChange={fetchLeaveStatus} />
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             {!isCheckedIn && (
               <Button
                 onClick={handleCheckIn}
-                disabled={isLoading || isProcessing || recentCheckIn || isCheckingIn}
+                disabled={!canCheckInButton || isLoading || isCheckingIn}
+                className="w-full h-14 text-lg font-semibold"
                 size="lg"
-                className="w-full h-14 md:h-16 text-base md:text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 dark:from-green-700 dark:to-emerald-700 dark:hover:from-green-800 dark:hover:to-emerald-800"
               >
-                {isLoading ? (
+                {isCheckingIn ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 md:h-6 md:w-6 animate-spin" />
-                    Processing...
-                  </>
-                ) : recentCheckIn ? (
-                  <>
-                    <Clock className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                    Updating Status...
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {checkingMessage || "Checking In..."}
                   </>
                 ) : (
                   <>
-                    <LogIn className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                    Check In Now
+                    <LogIn className="mr-2 h-5 w-5" />
+                    Check In
                   </>
                 )}
               </Button>
@@ -1533,35 +1567,20 @@ export function AttendanceRecorder({
             {isCheckedIn && !isCheckedOut && (
               <Button
                 onClick={handleCheckOut}
-                disabled={
-                  isLoading ||
-                  isProcessing ||
-                  recentCheckOut ||
-                  isCheckingIn ||
-                  (minutesUntilCheckout !== null && minutesUntilCheckout > 0)
-                }
+                disabled={!canCheckOutButton || isLoading}
+                variant="outline"
+                className="w-full h-14 text-lg font-semibold bg-transparent"
                 size="lg"
-                className="w-full h-14 md:h-16 text-base md:text-lg font-semibold bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 md:h-6 md:w-6 animate-spin" />
-                    Processing...
-                  </>
-                ) : recentCheckOut || isCheckingIn ? (
-                  <>
-                    <Clock className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                    Updating Status...
-                  </>
-                ) : minutesUntilCheckout !== null && minutesUntilCheckout > 0 ? (
-                  <>
-                    <Clock className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                    Check Out Available in {minutesUntilCheckout}m
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Checking Out...
                   </>
                 ) : (
                   <>
-                    <LogOut className="mr-2 h-5 w-5 md:h-6 md:w-6" />
-                    Check Out Now
+                    <LogOut className="mr-2 h-5 w-5" />
+                    Check Out
                   </>
                 )}
               </Button>
@@ -1727,8 +1746,8 @@ export function AttendanceRecorder({
           userLocation={userLocation}
           onCheckIn={handleCheckIn}
           onCheckOut={handleCheckOut}
-          canCheckIn={canCheckIn}
-          canCheckOut={canCheckOut}
+          canCheckIn={canCheckInButton}
+          canCheckOut={canCheckOutButton}
           isCheckedIn={isCheckedIn}
         />
       )}
@@ -1741,8 +1760,8 @@ export function AttendanceRecorder({
           userLocation={userLocation}
           onCheckIn={handleCheckIn}
           onCheckOut={handleCheckOut}
-          canCheckIn={canCheckIn}
-          canCheckOut={canCheckOut}
+          canCheckIn={canCheckInButton}
+          canCheckOut={canCheckOutButton}
           isCheckedIn={isCheckedIn}
         />
       )}

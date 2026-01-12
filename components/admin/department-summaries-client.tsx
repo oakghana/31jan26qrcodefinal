@@ -6,7 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Download, TrendingUp, Users, AlertTriangle, ArrowLeft } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  Calendar,
+  Download,
+  TrendingUp,
+  Users,
+  AlertTriangle,
+  ArrowLeft,
+  Clock,
+  LogIn,
+  LogOut,
+  User,
+} from "lucide-react"
 import Link from "next/link"
 
 interface Summary {
@@ -36,6 +48,9 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState({ start: "", end: "" })
   const [totalStaff, setTotalStaff] = useState(0)
+
+  const [selectedStaff, setSelectedStaff] = useState<Summary | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
 
   useEffect(() => {
     fetchSummaries()
@@ -67,6 +82,11 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
       default:
         return <Badge className="bg-orange-500">Needs Attention</Badge>
     }
+  }
+
+  const handleStaffClick = (summary: Summary) => {
+    setSelectedStaff(summary)
+    setShowDetailModal(true)
   }
 
   const exportToCSV = () => {
@@ -205,7 +225,7 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
       <Card>
         <CardHeader>
           <CardTitle>Staff Attendance Details</CardTitle>
-          <CardDescription>Detailed breakdown by employee</CardDescription>
+          <CardDescription>Click on any staff member to view detailed summary</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -230,7 +250,11 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
               </TableHeader>
               <TableBody>
                 {summaries.map((summary) => (
-                  <TableRow key={summary.userId}>
+                  <TableRow
+                    key={summary.userId}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleStaffClick(summary)}
+                  >
                     <TableCell className="font-medium">{summary.name}</TableCell>
                     <TableCell>{summary.employeeId}</TableCell>
                     <TableCell>{summary.department}</TableCell>
@@ -256,6 +280,129 @@ export function DepartmentSummariesClient({ userRole, departmentId }: Department
           )}
         </CardContent>
       </Card>
+
+      {/* Staff Detail Modal */}
+      {selectedStaff && (
+        <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-2xl flex items-center gap-2">
+                <User className="h-6 w-6 text-primary" />
+                Staff Attendance Summary
+              </DialogTitle>
+              <DialogDescription>
+                {dateRange.start &&
+                  `${new Date(dateRange.start).toLocaleDateString()} - ${new Date(dateRange.end).toLocaleDateString()}`}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-primary/10 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Staff Member</p>
+                  <p className="text-2xl font-bold">{selectedStaff.name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedStaff.email}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    <span className="font-medium">Employee ID:</span> {selectedStaff.employeeId}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium">Department:</span> {selectedStaff.department}
+                  </p>
+                </div>
+                {getStatusBadge(selectedStaff.status)}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <Calendar className="h-5 w-5 text-green-600 mx-auto mb-2" />
+                      <div className="text-3xl font-bold text-green-600">{selectedStaff.daysWorked}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Days Worked</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <Clock className="h-5 w-5 text-blue-600 mx-auto mb-2" />
+                      <div className="text-3xl font-bold text-blue-600">{selectedStaff.totalWorkHours}h</div>
+                      <p className="text-xs text-muted-foreground mt-1">Total Hours</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <TrendingUp className="h-5 w-5 text-purple-600 mx-auto mb-2" />
+                      <div className="text-3xl font-bold text-purple-600">{selectedStaff.attendanceRate}%</div>
+                      <p className="text-xs text-muted-foreground mt-1">Attendance Rate</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <LogIn className="h-5 w-5 text-emerald-600 mx-auto mb-2" />
+                      <div className="text-3xl font-bold text-emerald-600">{selectedStaff.daysOnTime}</div>
+                      <p className="text-xs text-muted-foreground mt-1">On Time</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <LogOut className="h-5 w-5 text-orange-600 mx-auto mb-2" />
+                      <div className="text-3xl font-bold text-orange-600">{selectedStaff.daysLate}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Late Arrivals</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <AlertTriangle className="h-5 w-5 text-red-600 mx-auto mb-2" />
+                      <div className="text-3xl font-bold text-red-600">{selectedStaff.daysAbsent}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Days Absent</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {selectedStaff.daysAbsent > 0 && (
+                <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-orange-600" />
+                  <div>
+                    <p className="font-semibold text-orange-900">Attendance Alert</p>
+                    <p className="text-sm text-orange-700">
+                      This staff member was absent {selectedStaff.daysAbsent} day(s) during this period
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedStaff.status === "excellent" && (
+                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <TrendingUp className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="font-semibold text-green-900">Excellent Performance</p>
+                    <p className="text-sm text-green-700">This staff member has maintained excellent attendance</p>
+                  </div>
+                </div>
+              )}
+
+              <Button onClick={() => setShowDetailModal(false)} className="w-full">
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

@@ -15,6 +15,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { data: userProfile } = await supabase
+      .from("user_profiles")
+      .select("leave_status, leave_start_date, leave_end_date, first_name, assigned_location_id")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (userProfile && userProfile.leave_status && userProfile.leave_status !== "active") {
+      const leaveType = userProfile.leave_status === "on_leave" ? "on leave" : "on sick leave"
+      const endDate = userProfile.leave_end_date
+        ? new Date(userProfile.leave_end_date).toLocaleDateString()
+        : "unspecified"
+
+      return NextResponse.json(
+        {
+          error: `You are currently marked as ${leaveType} until ${endDate}. You cannot check in during your leave period. Please update your leave status when you resume work.`,
+        },
+        { status: 403 },
+      )
+    }
+
     const body = await request.json()
     const { latitude, longitude, location_id, device_info, qr_code_used, qr_timestamp } = body
 
@@ -207,7 +227,7 @@ export async function POST(request: NextRequest) {
       } else {
         return NextResponse.json(
           {
-            error: `DUPLICATE CHECK-IN BLOCKED: You have already checked in today at ${checkInTime}. You are currently on duty. Please check out when you finish your shift. This attempt has been logged.`,
+            error: `DUPLICATE CHECK-IN BLOCKED: You have already checked in today at ${checkInTime}. You are currently on duty. Please check out when you finish your work. This attempt has been logged.`,
           },
           { status: 400 },
         )
@@ -312,12 +332,6 @@ export async function POST(request: NextRequest) {
       attendanceData.qr_check_in_timestamp = qr_timestamp
     }
 
-    const { data: userProfile } = await supabase
-      .from("user_profiles")
-      .select("assigned_location_id")
-      .eq("id", user.id)
-      .maybeSingle()
-
     if (userProfile?.assigned_location_id && userProfile.assigned_location_id !== location_id) {
       attendanceData.is_remote_location = true
     }
@@ -372,8 +386,8 @@ export async function POST(request: NextRequest) {
           },
         },
         message: attendanceData.is_remote_location
-          ? `Successfully checked in at ${locationData?.name} (different from your assigned location)`
-          : `Successfully checked in at ${locationData?.name}`,
+          ? `Successfully checked in at ${locationData?.name} (different from your assigned location). Remember to check out at the end of your work today.`
+          : `Successfully checked in at ${locationData?.name}. Remember to check out at the end of your work today.`,
         missedCheckoutWarning,
       },
       {

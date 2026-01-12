@@ -7,7 +7,82 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
+    unoptimized: false, // Enable image optimization
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+  },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
+  swcMinify: true,
+  productionBrowserSourceMaps: false,
+  poweredByHeader: false,
+  reactStrictMode: true,
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-accordion',
+      '@radix-ui/react-alert-dialog',
+      '@radix-ui/react-avatar',
+      '@radix-ui/react-checkbox',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-select',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-toast',
+      'recharts',
+      'date-fns',
+    ],
+    optimizeCss: true,
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            default: false,
+            vendors: false,
+            // Vendor chunk
+            vendor: {
+              name: 'vendor',
+              chunks: 'all',
+              test: /node_modules/,
+              priority: 20,
+            },
+            // UI components chunk
+            ui: {
+              name: 'ui',
+              test: /[\\/]components[\\/]ui[\\/]/,
+              chunks: 'all',
+              priority: 30,
+            },
+            // Admin components chunk (large)
+            admin: {
+              name: 'admin',
+              test: /[\\/]components[\\/]admin[\\/]/,
+              chunks: 'all',
+              priority: 30,
+            },
+            // Common chunk
+            common: {
+              name: 'common',
+              minChunks: 2,
+              chunks: 'async',
+              priority: 10,
+              reuseExistingChunk: true,
+              enforce: true,
+            },
+          },
+        },
+      };
+    }
+    return config;
   },
   async headers() {
     return [
@@ -30,6 +105,24 @@ const nextConfig = {
       },
       {
         source: '/manifest.json',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|avif)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/_next/static/:path*',
         headers: [
           {
             key: 'Cache-Control',
@@ -81,9 +174,6 @@ const nextConfig = {
         ],
       },
     ]
-  },
-  experimental: {
-    optimizePackageImports: ['lucide-react'],
   },
 }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -349,20 +349,54 @@ export function AttendanceReports() {
     }
   }
 
-  const statusChartData = summary
-    ? Object.entries(summary.statusCounts).map(([status, count]) => ({
-        name: status.replace("_", " "),
-        value: count,
-      }))
-    : []
+  const statusChartData = useMemo(
+    () =>
+      summary?.statusCounts
+        ? Object.entries(summary.statusCounts).map(([status, count]) => ({
+            name: status.charAt(0).toUpperCase() + status.slice(1),
+            value: count,
+          }))
+        : [],
+    [summary?.statusCounts],
+  )
 
-  const departmentChartData = summary
-    ? Object.entries(summary.departmentStats).map(([dept, stats]) => ({
-        name: dept,
-        records: stats.count,
-        hours: Math.round(stats.totalHours * 100) / 100,
-      }))
-    : []
+  const departmentChartData = useMemo(
+    () =>
+      summary?.departmentStats
+        ? Object.entries(summary.departmentStats).map(([dept, stats]) => ({
+            name: dept,
+            count: stats.count,
+            hours: stats.totalHours,
+          }))
+        : [],
+    [summary?.departmentStats],
+  )
+
+  const filteredRecords = useMemo(() => {
+    let filtered = records
+
+    if (selectedDepartment !== "all") {
+      filtered = filtered.filter((r) => r.user_profiles?.departments?.name === selectedDepartment)
+    }
+
+    if (selectedUser !== "all") {
+      filtered = filtered.filter((r) => r.user_profiles?.employee_id === selectedUser)
+    }
+
+    if (selectedLocation !== "all") {
+      filtered = filtered.filter(
+        (r) => r.check_in_location?.name === selectedLocation || r.check_out_location?.name === selectedLocation,
+      )
+    }
+
+    if (selectedDistrict !== "all") {
+      filtered = filtered.filter((r) => r.user_profiles?.districts?.name === selectedDistrict)
+    }
+
+    return filtered
+  }, [records, selectedDepartment, selectedUser, selectedLocation, selectedDistrict])
+
+  const presentCount = useMemo(() => records.filter((r) => r.status === "present" || r.check_in_time).length, [records])
 
   const setQuickDate = (preset: "today" | "week" | "month" | "quarter") => {
     const today = new Date()
@@ -637,9 +671,7 @@ export function AttendanceReports() {
               <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {records.filter((r) => r.status === "present" || r.check_in_time).length}
-              </div>
+              <div className="text-2xl font-bold text-green-600">{presentCount}</div>
               <p className="text-xs text-muted-foreground">On time arrivals</p>
             </CardContent>
           </Card>
@@ -701,7 +733,7 @@ export function AttendanceReports() {
                     <XAxis dataKey="name" />
                     <YAxis />
                     <Tooltip />
-                    <Bar dataKey="records" fill="#4B8B3B" />
+                    <Bar dataKey="count" fill="#4B8B3B" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -751,7 +783,7 @@ export function AttendanceReports() {
                     <XAxis dataKey="name" />
                     <YAxis />
                     <Tooltip />
-                    <Line type="monotone" dataKey="records" stroke="#4B8B3B" strokeWidth={2} />
+                    <Line type="monotone" dataKey="count" stroke="#4B8B3B" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -835,14 +867,14 @@ export function AttendanceReports() {
                           Loading records...
                         </TableCell>
                       </TableRow>
-                    ) : records.length === 0 ? (
+                    ) : filteredRecords.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={11} className="text-center py-8">
                           No records found for the selected period
                         </TableCell>
                       </TableRow>
                     ) : (
-                      records.map((record) => (
+                      filteredRecords.map((record) => (
                         <TableRow key={record.id}>
                           <TableCell>{new Date(record.check_in_time).toLocaleDateString()}</TableCell>
                           <TableCell>
