@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
+export const dynamic = "force-dynamic"
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient()
@@ -18,21 +20,24 @@ export async function GET(request: Request) {
     // Get target user ID (defaults to current user)
     const targetUserId = userId || user.id
 
-    // Calculate last week's date range (Monday to Sunday)
     const today = new Date()
     const lastSunday = new Date(today)
-    lastSunday.setDate(today.getDate() - today.getDay()) // Go to last Sunday
+
+    // Go back to last Sunday
+    lastSunday.setDate(today.getDate() - today.getDay())
+    // If today is not Sunday, go back one more week
     if (today.getDay() !== 0) {
-      lastSunday.setDate(lastSunday.getDate() - 7) // Go back one more week if not Sunday
+      lastSunday.setDate(lastSunday.getDate() - 7)
     }
 
     const lastMonday = new Date(lastSunday)
-    lastMonday.setDate(lastSunday.getDate() - 6) // Go back 6 days to Monday
+    lastMonday.setDate(lastSunday.getDate() - 6)
 
     const weekStart = lastMonday.toISOString().split("T")[0]
     const weekEnd = lastSunday.toISOString().split("T")[0]
 
-    // Fetch attendance records for the week
+    console.log("[v0] Fetching weekly summary for week:", weekStart, "to", weekEnd, "for user:", targetUserId)
+
     const { data: records, error: recordsError } = await supabase
       .from("attendance_records")
       .select("*")
@@ -41,29 +46,43 @@ export async function GET(request: Request) {
       .lte("check_in_time", `${weekEnd}T23:59:59`)
       .order("check_in_time", { ascending: true })
 
-    if (recordsError) throw recordsError
+    if (recordsError) {
+      console.error("[v0] Error fetching attendance records:", recordsError)
+      throw recordsError
+    }
 
-    // Calculate statistics
-    const standardCheckInTime = new Date(`2000-01-01T08:00:00`)
-    const standardCheckOutTime = new Date(`2000-01-01T17:00:00`)
+    console.log("[v0] Found", records?.length || 0, "attendance records")
+
+    const standardCheckInTime = 8 * 60 // 8:00 AM in minutes
 
     const daysWorked = new Set(records?.map((r) => r.check_in_time.split("T")[0])).size
-    const totalWorkHours = records?.reduce((sum, r) => sum + (r.work_hours || 0), 0) || 0
+
+    const totalCheckIns = records?.length || 0
+    const totalCheckOuts = records?.filter((r) => r.check_out_time).length || 0
+
+    const totalWorkHours =
+      records?.reduce((sum, r) => {
+        return sum + (Number(r.work_hours) || 0)
+      }, 0) || 0
+
     const daysOnTime =
       records?.filter((r) => {
-        const checkInTime = new Date(`2000-01-01T${new Date(r.check_in_time).toTimeString().split(" ")[0]}`)
-        return checkInTime <= standardCheckInTime
+        const checkInDate = new Date(r.check_in_time)
+        const checkInMinutes = checkInDate.getHours() * 60 + checkInDate.getMinutes()
+        return checkInMinutes <= standardCheckInTime
       }).length || 0
+
     const daysLate =
       records?.filter((r) => {
-        const checkInTime = new Date(`2000-01-01T${new Date(r.check_in_time).toTimeString().split(" ")[0]}`)
-        return checkInTime > standardCheckInTime
+        const checkInDate = new Date(r.check_in_time)
+        const checkInMinutes = checkInDate.getHours() * 60 + checkInDate.getMinutes()
+        return checkInMinutes > standardCheckInTime
       }).length || 0
+
     const earlyCheckouts =
       records?.filter((r) => {
-        if (!r.check_out_time) return false
-        const checkOutTime = new Date(`2000-01-01T${new Date(r.check_out_time).toTimeString().split(" ")[0]}`)
-        return checkOutTime < standardCheckOutTime
+        if (!r.check_out_time || !r.early_checkout_reason) return false
+        return true
       }).length || 0
 
     // Get user profile for name
@@ -73,6 +92,9 @@ export async function GET(request: Request) {
       .eq("id", targetUserId)
       .single()
 
+    const workDaysInWeek = 5
+    const daysAbsent = workDaysInWeek - daysWorked
+
     const summary = {
       weekStart,
       weekEnd,
@@ -80,19 +102,23 @@ export async function GET(request: Request) {
       userEmail: profile?.email,
       department: profile?.departments?.name,
       daysWorked,
+      totalCheckIns, // Added check-in count
+      totalCheckOuts, // Added check-out count
       totalWorkHours: totalWorkHours.toFixed(2),
       daysOnTime,
       daysLate,
-      daysAbsent: 5 - daysWorked, // Assuming 5-day work week
+      daysAbsent,
       earlyCheckouts,
       records: records || [],
       performance:
         daysWorked >= 5 ? "excellent" : daysWorked >= 4 ? "good" : daysWorked >= 3 ? "fair" : "needs improvement",
     }
 
+    console.log("[v0] Calculated summary:", summary)
+
     return NextResponse.json(summary)
   } catch (error: any) {
-    console.error("Error fetching weekly summary:", error)
+    console.error("[v0] Error in weekly summary:", error)
     return NextResponse.json({ error: error.message || "Failed to fetch weekly summary" }, { status: 500 })
   }
 }

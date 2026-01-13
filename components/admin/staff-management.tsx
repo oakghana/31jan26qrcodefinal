@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -88,14 +88,7 @@ export function StaffManagement() {
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("staff")
 
-  useEffect(() => {
-    fetchStaff()
-    fetchDepartments()
-    fetchLocations()
-    fetchCurrentUserRole()
-  }, [])
-
-  const fetchStaff = async () => {
+  const fetchStaff = useCallback(async () => {
     try {
       console.log("[v0] Fetching staff with filters:", { searchTerm, selectedDepartment, selectedRole })
       const params = new URLSearchParams()
@@ -109,7 +102,7 @@ export function StaffManagement() {
 
       if (result.success) {
         setStaff(result.data)
-        setError(null) // Clear error on successful fetch
+        setError(null)
       } else {
         console.error("[v0] Failed to fetch staff:", result.error)
         setError(result.error)
@@ -120,7 +113,24 @@ export function StaffManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchTerm, selectedDepartment, selectedRole])
+
+  useEffect(() => {
+    fetchStaff()
+    fetchDepartments()
+    fetchLocations()
+    fetchCurrentUserRole()
+  }, [fetchStaff])
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      if (searchTerm !== "") {
+        fetchStaff()
+      }
+    }, 300) // Wait 300ms after user stops typing
+
+    return () => clearTimeout(debounceTimer)
+  }, [searchTerm, fetchStaff])
 
   const fetchDepartments = async () => {
     try {
