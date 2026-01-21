@@ -1670,7 +1670,7 @@ export function AttendanceRecorder({
                       <Button
                         onClick={handleCheckOut}
                         disabled={
-                          isCheckingIn || isProcessing || recentCheckOut || isLoading
+                          !locationValidation?.canCheckOut || isCheckingIn || isProcessing || recentCheckOut || isLoading
                         }
                         variant="destructive"
                         className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white"
