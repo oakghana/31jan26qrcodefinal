@@ -1657,27 +1657,43 @@ export function AttendanceRecorder({
               {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && (
                 <>
                   {checkoutTimeReached ? (
-                    <Button
-                      onClick={handleCheckOut}
-                      disabled={
-                        !locationValidation?.canCheckOut || isCheckingIn || isProcessing || recentCheckOut || isLoading
-                      }
-                      variant="destructive"
-                      className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white"
-                      size="lg"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Checking Out...
-                        </>
-                      ) : (
-                        <>
-                          <LogOut className="mr-2 h-5 w-5" />
-                          Check Out Now
-                        </>
+                    <>
+                      {console.log("[v0] Checkout button state:", {
+                        checkoutTimeReached,
+                        canCheckOut: locationValidation?.canCheckOut,
+                        isCheckingIn,
+                        isProcessing,
+                        recentCheckOut,
+                        isLoading,
+                        buttonDisabled: !locationValidation?.canCheckOut || isCheckingIn || isProcessing || recentCheckOut || isLoading
+                      })}
+                      <Button
+                        onClick={handleCheckOut}
+                        disabled={
+                          isCheckingIn || isProcessing || recentCheckOut || isLoading
+                        }
+                        variant="destructive"
+                        className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white"
+                        size="lg"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Checking Out...
+                          </>
+                        ) : (
+                          <>
+                            <LogOut className="mr-2 h-5 w-5" />
+                            Check Out Now
+                          </>
+                        )}
+                      </Button>
+                      {!locationValidation?.canCheckOut && (
+                        <p className="text-xs text-red-500 mt-2 text-center">
+                          Location validation required. Distance: {locationValidation?.distance?.toFixed(0)}m
+                        </p>
                       )}
-                    </Button>
+                    </>
                   ) : (
                     <div className="w-full p-4 bg-muted/50 border-2 border-dashed border-border rounded-lg text-center">
                       <Clock className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
