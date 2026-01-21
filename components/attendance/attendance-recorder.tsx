@@ -948,9 +948,27 @@ export function AttendanceRecorder({
 
     const now = new Date()
     const checkoutHour = now.getHours()
-    const isEarlyCheckout = checkoutHour < 17 // Before 5:00 PM
+    const checkoutMinutes = now.getMinutes()
+    
+    // Check if user is assigned to Tema Port (working hours: 7 AM - 4 PM)
+    const assignedLocationName = assignedLocationInfo?.locationName?.toLowerCase() || ""
+    const isTemaPort = assignedLocationName.includes("tema port")
+    
+    // Tema Port: Allow checkout at/after 4 PM, require reason before 4 PM
+    // Other locations: Allow checkout at/after 5 PM, require reason before 5 PM
+    const earlyCheckoutThreshold = isTemaPort ? 16 : 17 // 4 PM for Tema Port, 5 PM for others
+    const isBeforeCheckoutTime = checkoutHour < earlyCheckoutThreshold || 
+                                  (checkoutHour === earlyCheckoutThreshold && checkoutMinutes === 0)
+    
+    console.log("[v0] Checkout validation:", {
+      location: assignedLocationName,
+      isTemaPort,
+      currentTime: `${checkoutHour}:${checkoutMinutes.toString().padStart(2, '0')}`,
+      threshold: `${earlyCheckoutThreshold}:00`,
+      requiresReason: isBeforeCheckoutTime
+    })
 
-    if (isEarlyCheckout && !earlyCheckoutReason) {
+    if (isBeforeCheckoutTime && !earlyCheckoutReason) {
       setIsLoading(true)
       try {
         // Get location data first to show in dialog
@@ -1909,7 +1927,9 @@ export function AttendanceRecorder({
                 <AlertTriangle className="h-5 w-5" />
                 Early Check-Out Notice
               </CardTitle>
-              <CardDescription>You are checking out before 5:00 PM. Please provide a reason.</CardDescription>
+              <CardDescription>
+                You are checking out before {assignedLocationInfo?.locationName?.toLowerCase().includes("tema port") ? "4:00 PM" : "5:00 PM"}. Please provide a reason.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert className="border-orange-200 bg-orange-50">
