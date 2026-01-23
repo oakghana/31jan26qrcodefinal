@@ -57,9 +57,19 @@ export async function POST(request: NextRequest) {
       const checkInTime = new Date(existingRecord.check_in_time).toLocaleTimeString()
 
       if (existingRecord.check_out_time) {
+        const checkOutTime = new Date(existingRecord.check_out_time).toLocaleTimeString()
+        const workHours = existingRecord.work_hours || 0
+        
         return NextResponse.json(
           {
-            error: `DUPLICATE CHECK-IN BLOCKED: You have already completed your attendance for today. You checked in at ${checkInTime} and checked out at ${new Date(existingRecord.check_out_time).toLocaleTimeString()}. This attempt has been logged as a security violation.`,
+            alreadyCompleted: true,
+            error: `You have already completed your work for today! You checked in at ${checkInTime} and checked out at ${checkOutTime} (${workHours} hours worked). Great job! See you tomorrow.`,
+            details: {
+              checkInTime: checkInTime,
+              checkOutTime: checkOutTime,
+              workHours: workHours,
+              message: "Your attendance for today is complete. No further action needed."
+            }
           },
           { status: 400 },
         )
@@ -103,21 +113,46 @@ export async function POST(request: NextRequest) {
       const ipAddress = getValidIpAddress()
 
       // Check if this device was recently used by another staff member
+      // Enhanced detection using both device fingerprint (MAC-like) and IP address
       if (device_info?.device_id) {
         const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
         
+        console.log("[v0] Checking device sharing with enhanced detection:", {
+          deviceId: device_info.device_id,
+          ipAddress: ipAddress,
+          userId: user.id
+        })
+        
+        // First check: Same device fingerprint (MAC-like ID)
         const { data: recentDeviceSession } = await supabase
           .from("device_sessions")
-          .select("user_id, last_activity, device_sessions!inner(user_profiles(first_name, last_name, employee_id, department_id))")
+          .select("user_id, last_activity, ip_address, device_id")
           .eq("device_id", device_info.device_id)
           .neq("user_id", user.id)
           .gte("last_activity", twoHoursAgo)
           .order("last_activity", { ascending: false })
           .limit(1)
           .maybeSingle()
+        
+        // Second check: Same IP address with different device ID (IP sharing detection)
+        let ipSharingSession = null
+        if (ipAddress) {
+          const { data: ipSession } = await supabase
+            .from("device_sessions")
+            .select("user_id, last_activity, ip_address, device_id")
+            .eq("ip_address", ipAddress)
+            .neq("user_id", user.id)
+            .neq("device_id", device_info.device_id)
+            .gte("last_activity", twoHoursAgo)
+            .order("last_activity", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          
+          ipSharingSession = ipSession
+        }
 
+        // Process device sharing detection (MAC-like fingerprint match)
         if (recentDeviceSession) {
-          // Get previous user's info with proper nested query
           const { data: previousUserProfile } = await supabase
             .from("user_profiles")
             .select("first_name, last_name, employee_id, department_id")
@@ -132,14 +167,14 @@ export async function POST(request: NextRequest) {
               previousUser: previousUserName,
               previousEmployeeId: previousUserProfile.employee_id,
               timeSinceLastUse: timeSinceLastUse,
-              message: `This device was recently used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} minutes ago. Your department head will be notified of this shared device usage.`
+              message: `⚠️ DEVICE SHARING DETECTED: This device (${device_info.device_id}) was recently used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} minutes ago. Your department head will be notified.`,
+              detectionMethod: "device_fingerprint"
             }
 
             console.warn(
-              `[v0] ⚠️ DEVICE SHARING DETECTED: Device ${device_info.device_id} used by ${user.id} after ${previousUserName} (${previousUserProfile.employee_id})`,
+              `[v0] ⚠️ DEVICE SHARING - Fingerprint Match: Device ${device_info.device_id} | IP ${ipAddress} | Current: ${user.id} | Previous: ${previousUserName} (${previousUserProfile.employee_id})`,
             )
 
-            // Log to audit trail
             await supabase.from("audit_logs").insert({
               user_id: user.id,
               action: "device_sharing_detected",
@@ -151,6 +186,54 @@ export async function POST(request: NextRequest) {
                 previous_user_name: previousUserName,
                 time_since_last_use_minutes: timeSinceLastUse,
                 device_id: device_info.device_id,
+                current_ip: ipAddress,
+                previous_ip: recentDeviceSession.ip_address,
+                detection_method: "device_fingerprint"
+              },
+              ip_address: ipAddress || null,
+              user_agent: request.headers.get("user-agent"),
+            })
+          }
+        }
+        
+        // Process IP sharing detection (same IP, different device)
+        if (ipSharingSession && !deviceSharingWarning) {
+          const { data: ipSharerProfile } = await supabase
+            .from("user_profiles")
+            .select("first_name, last_name, employee_id, department_id")
+            .eq("id", ipSharingSession.user_id)
+            .single()
+
+          if (ipSharerProfile) {
+            const sharerName = `${ipSharerProfile.first_name} ${ipSharerProfile.last_name}`
+            const timeSinceLastUse = Math.round((Date.now() - new Date(ipSharingSession.last_activity).getTime()) / (1000 * 60))
+            
+            deviceSharingWarning = {
+              previousUser: sharerName,
+              previousEmployeeId: ipSharerProfile.employee_id,
+              timeSinceLastUse: timeSinceLastUse,
+              message: `⚠️ IP SHARING DETECTED: Same network (${ipAddress}) was used by ${sharerName} (${ipSharerProfile.employee_id}) ${timeSinceLastUse} minutes ago with a different device. This may indicate device switching. Your department head will be notified.`,
+              detectionMethod: "ip_address"
+            }
+
+            console.warn(
+              `[v0] ⚠️ IP SHARING - Network Match: IP ${ipAddress} | Current Device: ${device_info.device_id} | Previous Device: ${ipSharingSession.device_id} | Current: ${user.id} | Previous: ${sharerName} (${ipSharerProfile.employee_id})`,
+            )
+
+            await supabase.from("audit_logs").insert({
+              user_id: user.id,
+              action: "ip_sharing_detected",
+              table_name: "device_sessions",
+              record_id: ipAddress || "unknown",
+              new_values: {
+                current_user: user.id,
+                previous_user: ipSharingSession.user_id,
+                previous_user_name: sharerName,
+                time_since_last_use_minutes: timeSinceLastUse,
+                current_device: device_info.device_id,
+                previous_device: ipSharingSession.device_id,
+                shared_ip: ipAddress,
+                detection_method: "ip_address"
               },
               ip_address: ipAddress || null,
               user_agent: request.headers.get("user-agent"),

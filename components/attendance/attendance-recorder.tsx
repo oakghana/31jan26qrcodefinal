@@ -845,18 +845,34 @@ export function AttendanceRecorder({
       console.log("[v0] Check-in API response:", result)
 
       if (!response.ok) {
-        if (result.error?.includes("DUPLICATE CHECK-IN BLOCKED") || result.error?.includes("already checked in")) {
-          console.log("[v0] Duplicate check-in prevented by server")
+        // Handle completed work for the day with friendly message
+        if (result.alreadyCompleted && result.details) {
+          console.log("[v0] User has already completed work for today")
+          
+          setFlashMessage({
+            message: `Work completed! You worked ${result.details.workHours} hours today.`,
+            type: "success",
+          })
+
+          await fetchTodayAttendance()
+
+          toast({
+            title: "✓ You're Done for Today!",
+            description: `You checked in at ${result.details.checkInTime} and checked out at ${result.details.checkOutTime}. You worked ${result.details.workHours} hours. Great job! See you tomorrow.`,
+            className: "bg-green-50 border-green-400 text-green-900 dark:bg-green-900/20 dark:border-green-700 dark:text-green-200",
+            duration: 10000,
+          })
+        } else if (result.error?.includes("DUPLICATE CHECK-IN BLOCKED") || result.error?.includes("already checked in")) {
+          console.log("[v0] Duplicate check-in prevented by server - still on duty")
           setFlashMessage({
             message: result.error,
             type: "error",
           })
 
-          // Refresh attendance status
           await fetchTodayAttendance()
 
           toast({
-            title: "Duplicate Check-in Prevented",
+            title: "Already Checked In",
             description: result.error,
             variant: "destructive",
             duration: 8000,

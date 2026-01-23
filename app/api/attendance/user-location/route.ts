@@ -33,7 +33,11 @@ export async function GET() {
           latitude,
           longitude,
           radius_meters,
-          district_id
+          district_id,
+          check_in_start_time,
+          check_out_end_time,
+          require_early_checkout_reason,
+          working_hours_description
         )
       `)
       .eq("id", user.id)
@@ -53,7 +57,11 @@ export async function GET() {
         latitude,
         longitude,
         radius_meters,
-        district_id
+        district_id,
+        check_in_start_time,
+        check_out_end_time,
+        require_early_checkout_reason,
+        working_hours_description
       `)
       .eq("is_active", true)
       .order("name")

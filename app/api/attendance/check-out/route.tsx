@@ -96,6 +96,140 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Enhanced device sharing detection for checkout
+    const device_info = body.device_info
+    let deviceSharingWarning = null
+    
+    if (device_info?.device_id) {
+      const getValidIpAddress = () => {
+        const possibleIps = [
+          request.ip,
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          request.headers.get("x-real-ip"),
+        ]
+        for (const ip of possibleIps) {
+          if (ip && ip !== "unknown" && ip !== "::1" && ip !== "127.0.0.1") {
+            return ip
+          }
+        }
+        return null
+      }
+
+      const ipAddress = getValidIpAddress()
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      
+      console.log("[v0] Checkout - Enhanced device sharing check:", {
+        deviceId: device_info.device_id,
+        ipAddress: ipAddress,
+        userId: user.id
+      })
+      
+      // Check device fingerprint sharing
+      const { data: recentDeviceSession } = await supabase
+        .from("device_sessions")
+        .select("user_id, last_activity, ip_address, device_id")
+        .eq("device_id", device_info.device_id)
+        .neq("user_id", user.id)
+        .gte("last_activity", twoHoursAgo)
+        .order("last_activity", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      
+      // Check IP sharing
+      let ipSharingSession = null
+      if (ipAddress) {
+        const { data: ipSession } = await supabase
+          .from("device_sessions")
+          .select("user_id, last_activity, ip_address, device_id")
+          .eq("ip_address", ipAddress)
+          .neq("user_id", user.id)
+          .neq("device_id", device_info.device_id)
+          .gte("last_activity", twoHoursAgo)
+          .order("last_activity", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        
+        ipSharingSession = ipSession
+      }
+      
+      // Process device sharing warnings
+      if (recentDeviceSession) {
+        const { data: previousUserProfile } = await supabase
+          .from("user_profiles")
+          .select("first_name, last_name, employee_id")
+          .eq("id", recentDeviceSession.user_id)
+          .single()
+
+        if (previousUserProfile) {
+          const previousUserName = `${previousUserProfile.first_name} ${previousUserProfile.last_name}`
+          const timeSinceLastUse = Math.round((Date.now() - new Date(recentDeviceSession.last_activity).getTime()) / (1000 * 60))
+          
+          deviceSharingWarning = {
+            type: "device_sharing",
+            message: `Device sharing detected during checkout: ${device_info.device_id} was used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} min ago.`
+          }
+
+          console.warn("[v0] ⚠️ CHECKOUT - Device Sharing:", deviceSharingWarning.message)
+
+          await supabase.from("audit_logs").insert({
+            user_id: user.id,
+            action: "checkout_device_sharing_detected",
+            table_name: "device_sessions",
+            record_id: device_info.device_id,
+            new_values: {
+              current_user: user.id,
+              previous_user: recentDeviceSession.user_id,
+              previous_user_name: previousUserName,
+              time_since_last_use_minutes: timeSinceLastUse,
+              device_id: device_info.device_id,
+              current_ip: ipAddress,
+              previous_ip: recentDeviceSession.ip_address,
+              detection_method: "device_fingerprint"
+            },
+            ip_address: ipAddress || null,
+            user_agent: request.headers.get("user-agent"),
+          })
+        }
+      } else if (ipSharingSession) {
+        const { data: ipSharerProfile } = await supabase
+          .from("user_profiles")
+          .select("first_name, last_name, employee_id")
+          .eq("id", ipSharingSession.user_id)
+          .single()
+
+        if (ipSharerProfile) {
+          const sharerName = `${ipSharerProfile.first_name} ${ipSharerProfile.last_name}`
+          const timeSinceLastUse = Math.round((Date.now() - new Date(ipSharingSession.last_activity).getTime()) / (1000 * 60))
+          
+          deviceSharingWarning = {
+            type: "ip_sharing",
+            message: `IP sharing detected during checkout: Network ${ipAddress} was used by ${sharerName} (${ipSharerProfile.employee_id}) ${timeSinceLastUse} min ago with different device.`
+          }
+
+          console.warn("[v0] ⚠️ CHECKOUT - IP Sharing:", deviceSharingWarning.message)
+
+          await supabase.from("audit_logs").insert({
+            user_id: user.id,
+            action: "checkout_ip_sharing_detected",
+            table_name: "device_sessions",
+            record_id: ipAddress || "unknown",
+            new_values: {
+              current_user: user.id,
+              previous_user: ipSharingSession.user_id,
+              previous_user_name: sharerName,
+              time_since_last_use_minutes: timeSinceLastUse,
+              current_device: device_info.device_id,
+              previous_device: ipSharingSession.device_id,
+              shared_ip: ipAddress,
+              detection_method: "ip_address"
+            },
+            ip_address: ipAddress || null,
+            user_agent: request.headers.get("user-agent"),
+          })
+        }
+      }
+    }
+
     const checkInDate = new Date(attendanceRecord.check_in_time).toISOString().split("T")[0]
     const currentDate = now.toISOString().split("T")[0]
 
@@ -282,6 +416,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       earlyCheckoutWarning,
+      deviceSharingWarning,
       data: updatedRecord,
       message: `Successfully checked out at ${checkoutLocationData?.name}. Work hours: ${workHours.toFixed(2)}`,
     })

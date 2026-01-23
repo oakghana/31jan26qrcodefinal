@@ -12,6 +12,10 @@ interface Location {
   radius_meters: number
   district_id?: string
   is_active: boolean
+  check_in_start_time?: string | null
+  check_out_end_time?: string | null
+  require_early_checkout_reason?: boolean
+  working_hours_description?: string | null
 }
 
 export function useRealTimeLocations() {
