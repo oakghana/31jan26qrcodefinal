@@ -309,7 +309,7 @@ export function AttendanceRecorder({
     !!localTodayAttendance?.check_in_time && // Must have a check-in record
     !localTodayAttendance?.check_out_time &&
     !isOnLeave &&
-    locationValidation.canCheckOut === true // MUST be within proximity range
+    locationValidation?.canCheckOut === true // MUST be within proximity range (with null check)
 
   const handleQRScanSuccess = async (qrData: QRCodeData) => {
     console.log("[v0] QR scan successful, mode:", qrScanMode)
