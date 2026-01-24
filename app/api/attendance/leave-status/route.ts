@@ -15,7 +15,32 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { leave_status, leave_start_date, leave_end_date, leave_reason, leave_document_url } = body
+    const { leave_status, leave_start_date, leave_end_date, leave_reason, leave_document_url, target_user_id } = body
+
+    // Check if user is admin or god-tier user
+    const { data: userProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !userProfile) {
+      return NextResponse.json({ error: "User profile not found" }, { status: 401 })
+    }
+
+    // Only admins and god users can change leave status for others
+    const isAdmin = userProfile.role === "admin" || userProfile.role === "god"
+    const isChangingOwnStatus = !target_user_id || target_user_id === user.id
+    const canChangeStatus = isChangingOwnStatus || isAdmin
+
+    if (!canChangeStatus) {
+      return NextResponse.json(
+        { error: "Only admins and god users can change leave status for other staff members" },
+        { status: 403 },
+      )
+    }
+
+    const userId = target_user_id || user.id
 
     // Validate leave status
     if (!["active", "on_leave", "sick_leave"].includes(leave_status)) {
@@ -47,7 +72,7 @@ export async function POST(request: NextRequest) {
           leave_document_url: leave_status === "active" ? null : leave_document_url,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", user.id)
+        .eq("id", userId)
         .select()
         .single()
 
@@ -74,7 +99,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         action: "update_leave_status",
         table_name: "user_profiles",
-        record_id: user.id,
+        record_id: userId,
         new_values: {
           leave_status,
           leave_start_date,
@@ -89,7 +114,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data,
-        message: leave_status === "active" ? "You are now marked as active" : "Leave status updated successfully",
+        message: leave_status === "active" ? "Staff member marked as active (at post)" : "Leave status updated successfully",
       })
     } catch (queryError: any) {
       // Handle query-level errors (e.g., missing columns)
@@ -125,11 +150,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get query parameter for checking specific user (admin only)
+    const url = new URL(request.url)
+    const targetUserId = url.searchParams.get("user_id")
+
+    // If checking someone else's status, verify user is admin
+    if (targetUserId && targetUserId !== user.id) {
+      const { data: userProfile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError || !userProfile || (userProfile.role !== "admin" && userProfile.role !== "god")) {
+        return NextResponse.json({ error: "Unauthorized to view other users' leave status" }, { status: 403 })
+      }
+    }
+
+    const userId = targetUserId || user.id
+
     try {
       const { data, error } = await supabase
         .from("user_profiles")
         .select("leave_status, leave_start_date, leave_end_date, leave_reason, leave_document_url")
-        .eq("id", user.id)
+        .eq("id", userId)
         .single()
 
       if (error) {
