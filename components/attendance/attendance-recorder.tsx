@@ -291,10 +291,13 @@ export function AttendanceRecorder({
   
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
   const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave
+  
+  // CRITICAL: Checkout button should ONLY be visible if user has actually checked in today
+  // This prevents the error where users without check-in can see the checkout button
   const canCheckOutButton =
     (initialCanCheckOut ?? true) &&
     !recentCheckOut &&
-    localTodayAttendance?.check_in_time &&
+    !!localTodayAttendance?.check_in_time && // Must have a check-in record
     !localTodayAttendance?.check_out_time &&
     !isOnLeave
 
@@ -1724,15 +1727,6 @@ export function AttendanceRecorder({
                 <>
                   {checkoutTimeReached ? (
                     <>
-                      {console.log("[v0] Checkout button state:", {
-                        checkoutTimeReached,
-                        canCheckOut: locationValidation?.canCheckOut,
-                        isCheckingIn,
-                        isProcessing,
-                        recentCheckOut,
-                        isLoading,
-                        buttonDisabled: !locationValidation?.canCheckOut || isCheckingIn || isProcessing || recentCheckOut || isLoading
-                      })}
                       <Button
                         onClick={handleCheckOut}
                         disabled={
