@@ -823,12 +823,24 @@ export function AttendanceRecorder({
           }))
           .sort((a, b) => a.distance - b.distance)
 
-        if (distances.length > 0 && distances[0].distance <= proximitySettings.checkInProximityRange) {
+        // Use device-specific proximity radius: 100m for mobile/tablet, 2000m for desktop/laptop
+        const deviceProximityRadius = deviceInfo.isMobile || deviceInfo.isTablet ? 100 : 2000
+        const displayRadius = 50 // Trade secret - what we show to users
+        
+        console.log("[v0] Check-in proximity validation:", {
+          nearestLocation: distances[0]?.location.name,
+          distance: distances[0]?.distance,
+          deviceProximityRadius,
+          deviceType: deviceInfo.device_type,
+          isWithinRange: distances.length > 0 && distances[0].distance <= deviceProximityRadius
+        })
+
+        if (distances.length > 0 && distances[0].distance <= deviceProximityRadius) {
           resolvedNearestLocation = distances[0].location
           checkInData.location_id = resolvedNearestLocation.id // Update checkInData with resolved nearest location
         } else {
           throw new Error(
-            `You must be within ${proximitySettings.checkInProximityRange}m of a valid location to check in.`,
+            `You must be within ${displayRadius}m of a valid location to check in.`,
           )
         }
       } else {
