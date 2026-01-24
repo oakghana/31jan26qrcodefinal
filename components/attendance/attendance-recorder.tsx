@@ -1043,10 +1043,9 @@ export function AttendanceRecorder({
       return
     }
 
-    // CRITICAL: Validate location FIRST before anything else
-    // This ensures users cannot check out if they are out of range, regardless of time
     setIsLoading(true)
     try {
+      // OPTIMIZATION: Fetch location data ONCE and reuse everywhere
       const locationData = await getCurrentLocationData()
       if (!locationData) {
         setIsLoading(false)
@@ -1067,6 +1066,7 @@ export function AttendanceRecorder({
         }
       }
       
+      // OPTIMIZATION: Validate location ONCE
       const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
 
       if (!checkoutValidation.canCheckOut) {
@@ -1075,137 +1075,77 @@ export function AttendanceRecorder({
       }
 
       console.log("[v0] Location validation passed - user within range")
-    } catch (error) {
-      setIsLoading(false)
-      setFlashMessage({
-        message: error instanceof Error ? error.message : "Location validation failed. Please try again.",
-        type: "error",
+
+      // Check if early checkout is needed
+      const now = new Date()
+      const checkoutHour = now.getHours()
+      const checkoutMinutes = now.getMinutes()
+      
+      // Fetch location-specific working hours configuration
+      const assignedLocation = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
+      const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
+      const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
+      
+      // Parse checkout end time (HH:MM format)
+      const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
+      const checkoutEndTimeMinutes = endHour * 60 + (endMinute || 0)
+      const currentTimeMinutes = checkoutHour * 60 + checkoutMinutes
+      
+      const isBeforeCheckoutTime = currentTimeMinutes < checkoutEndTimeMinutes
+      
+      console.log("[v0] Checkout time check:", {
+        location: assignedLocation?.name || "Unknown",
+        checkOutEndTime,
+        currentTime: `${checkoutHour}:${checkoutMinutes.toString().padStart(2, '0')}`,
+        isBeforeCheckoutTime,
+        requireEarlyCheckoutReason,
       })
-      return
-    }
 
-    const now = new Date()
-    const checkoutHour = now.getHours()
-    const checkoutMinutes = now.getMinutes()
-    
-    // Fetch location-specific working hours configuration
-    const assignedLocation = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
-    const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00" // Default to 5 PM
-    const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
-    
-    // Parse checkout end time (HH:MM format)
-    const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
-    const checkoutEndTimeMinutes = endHour * 60 + (endMinute || 0)
-    const currentTimeMinutes = checkoutHour * 60 + checkoutMinutes
-    
-    const isBeforeCheckoutTime = currentTimeMinutes < checkoutEndTimeMinutes
-    
-    console.log("[v0] Checkout validation:", {
-      location: assignedLocation?.name || "Unknown",
-      checkOutEndTime,
-      currentTime: `${checkoutHour}:${checkoutMinutes.toString().padStart(2, '0')}`,
-      isBeforeCheckoutTime,
-      requireEarlyCheckoutReason,
-    })
+      // If checkout time is NOT reached, show modal for early checkout reason
+      if (isBeforeCheckoutTime && requireEarlyCheckoutReason && !earlyCheckoutReason) {
+        // OPTIMIZATION: Calculate location info ONCE, reuse for modal
+        const effectiveCheckOutRadius = checkOutRadius ?? proximitySettings.checkInProximityRange
 
-    if (isBeforeCheckoutTime && requireEarlyCheckoutReason && !earlyCheckoutReason) {
-      try {
-        // Get location data
-        const locationData = await getCurrentLocationData()
-        if (!locationData) {
-          setIsLoading(false)
-          return
+        let nearestLocation = null
+        if (realTimeLocations && realTimeLocations.length > 0) {
+          if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
+            nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
+          } else {
+            const locationDistances = realTimeLocations
+              .map((loc) => {
+                const distance = calculateDistance(
+                  locationData.latitude,
+                  locationData.longitude,
+                  loc.latitude,
+                  loc.longitude,
+                )
+                return { location: loc, distance: Math.round(distance) }
+              })
+              .sort((a, b) => a.distance - b.distance)
+              .filter(({ distance }) => distance <= effectiveCheckOutRadius)
+
+            nearestLocation = locationDistances[0]?.location
+          }
         }
 
-      // Get device-specific checkout radius
-      let checkOutRadius: number | undefined
-      if (deviceRadiusSettings) {
-        if (deviceInfo.device_type === "mobile") {
-          checkOutRadius = deviceRadiusSettings.mobile.checkOut
-        } else if (deviceInfo.device_type === "tablet") {
-          checkOutRadius = deviceRadiusSettings.tablet.checkOut
-        } else if (deviceInfo.device_type === "laptop") {
-          checkOutRadius = deviceRadiusSettings.laptop.checkOut
-        } else if (deviceInfo.device_type === "desktop") {
-          checkOutRadius = deviceRadiusSettings.desktop.checkOut
-        }
-      }
-      
-      // RE-VALIDATE LOCATION before showing early checkout modal
-      // User must be within range even for early checkout
-      const earlyCheckoutLocationValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
-      if (!earlyCheckoutLocationValidation.canCheckOut) {
-        throw new Error(`You are out of range. ${earlyCheckoutLocationValidation.message}`)
-      }
-      
-      // Fallback to proximity settings if device radius not available
-      const effectiveCheckOutRadius = checkOutRadius ?? proximitySettings.checkInProximityRange
-
-      let nearestLocation = null
-      if (realTimeLocations && realTimeLocations.length > 0) {
-        if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
-          nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
-        } else {
-          const locationDistances = realTimeLocations
-            .map((loc) => {
-              const distance = calculateDistance(
-                locationData.latitude,
-                locationData.longitude,
-                loc.latitude,
-                loc.longitude,
-              )
-              return { location: loc, distance: Math.round(distance) }
-            })
-            .sort((a, b) => a.distance - b.distance)
-            .filter(({ distance }) => distance <= effectiveCheckOutRadius)
-
-          nearestLocation = locationDistances[0]?.location
-        }
-      }
-
-        // Store pending checkout data and show dialog
+        // Store pending checkout data and show dialog - THEN release loading
         setPendingCheckoutData({ location: locationData, nearestLocation })
         setShowEarlyCheckoutDialog(true)
         setIsLoading(false)
         return
-      } catch (err) {
-        console.error("[v0] Pre-checkout validation error:", err)
-        setFlashMessage({
-          message: err instanceof Error ? err.message : "Failed to validate checkout location.",
-          type: "error",
-        })
-        setIsLoading(false)
-        return
-      }
-    }
-    // End of early checkout check
-
-    // Proceed with normal checkout
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      if (!realTimeLocations || realTimeLocations.length === 0) {
-        throw new Error("No QCC locations found")
       }
 
-      const locationData = await getCurrentLocationData()
-      if (!locationData) {
-        setIsLoading(false)
-        return
-      }
-
-      const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], proximitySettings)
-
-      if (!checkoutValidation.canCheckOut) {
-        throw new Error(checkoutValidation.message)
-      }
-
+      // CHECKOUT TIME HAS PASSED or no early checkout reason needed
+      // Proceed with immediate checkout without delays
+      console.log("[v0] Checkout time passed or no reason needed - proceeding with immediate checkout")
+      
+      // Find nearest location for checkout location name
       let nearestLocation = null
       if (userProfile?.assigned_location_id && assignedLocationInfo?.isAtAssignedLocation) {
-        nearestLocation = realTimeLocations.find((loc) => loc.id === userProfile.assigned_location_id)
+        nearestLocation = realTimeLocations?.find((loc) => loc.id === userProfile.assigned_location_id)
       } else {
-        const locationDistances = realTimeLocations
+        const effectiveCheckOutRadius = checkOutRadius ?? proximitySettings.checkInProximityRange
+        const locationDistances = (realTimeLocations || [])
           .map((loc) => {
             const distance = calculateDistance(
               locationData.latitude,
@@ -1216,11 +1156,25 @@ export function AttendanceRecorder({
             return { location: loc, distance: Math.round(distance) }
           })
           .sort((a, b) => a.distance - b.distance)
-          .filter(({ distance }) => distance <= proximitySettings.checkInProximityRange)
+          .filter(({ distance }) => distance <= effectiveCheckOutRadius)
 
         nearestLocation = locationDistances[0]?.location
       }
 
+      // Immediately proceed with checkout API call
+      await performCheckoutAPI(locationData, nearestLocation, earlyCheckoutReason)
+    } catch (error) {
+      setIsLoading(false)
+      setFlashMessage({
+        message: error instanceof Error ? error.message : "Checkout failed. Please try again.",
+        type: "error",
+      })
+    }
+  }
+
+  // OPTIMIZATION: Extracted checkout API call into separate function for cleaner flow
+  const performCheckoutAPI = async (locationData: any, nearestLocation: any, reason: string) => {
+    try {
       const response = await fetch("/api/attendance/check-out", {
         method: "POST",
         headers: {
@@ -1233,7 +1187,7 @@ export function AttendanceRecorder({
           accuracy: locationData.accuracy,
           location_source: locationData.source,
           location_name: nearestLocation?.name || "Unknown Location",
-          early_checkout_reason: earlyCheckoutReason || null,
+          early_checkout_reason: reason || null,
         }),
       })
 
@@ -1243,7 +1197,6 @@ export function AttendanceRecorder({
         console.log("[v0] Checkout successful:", result.data)
 
         setLocalTodayAttendance(result.data)
-
         clearAttendanceCache()
 
         setRecentCheckOut(true)
@@ -1259,104 +1212,20 @@ export function AttendanceRecorder({
         })
 
         setEarlyCheckoutReason("")
-        setPendingCheckoutData(null) // Clear pending data after successful checkout
+        setPendingCheckoutData(null)
 
+        // Refetch to verify checkout was recorded
         setTimeout(() => {
           fetchTodayAttendance()
-        }, 1000)
+        }, 500)
+      } else if (result.error) {
+        throw new Error(result.error)
       } else {
-        throw new Error(result.error || "Failed to record checkout")
+        throw new Error("Invalid checkout response from server")
       }
     } catch (err) {
       console.error("[v0] Checkout error:", err)
-      setFlashMessage({
-        message: err instanceof Error ? err.message : "Failed to record checkout. Please try again.",
-        type: "error",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const performCheckout = async (location: LocationData | null, nearestLocation: any, reason: string | null) => {
-    setIsLoading(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      console.log("[v0] Attempting automatic check-out with location:", nearestLocation?.name)
-
-      const requestBody = {
-        latitude: location?.latitude || null,
-        longitude: location?.longitude || null,
-        location_id: nearestLocation?.id || null,
-        early_checkout_reason: reason || null,
-      }
-
-      console.log("[v0] Check-out request body:", requestBody)
-
-      const response = await fetch("/api/attendance/check-out", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-device-type": deviceInfo.device_type || "desktop",
-        },
-        body: JSON.stringify(requestBody),
-      })
-
-      let result
-      const responseText = await response.text()
-
-      try {
-        result = JSON.parse(responseText)
-      } catch {
-        result = { error: responseText || `Server error (${response.status})` }
-      }
-
-      if (!response.ok) {
-        setError(result.error || result.message || "Failed to check out")
-        setIsLoading(false)
-        return
-      }
-
-      console.log("[v0] Check-out response:", result)
-
-      if (result.success) {
-        if (result.earlyCheckoutWarning) {
-          // Format the checkout end time dynamically based on assigned location
-          const assignedLoc = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
-          const checkOutTime = assignedLoc?.check_out_end_time || "17:00"
-          const [hours, minutes] = checkOutTime.split(":").map(Number)
-          const period = hours >= 12 ? "PM" : "AM"
-          const displayHours = hours % 12 || 12
-          const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
-          
-          setError(
-            `⚠️ EARLY CHECKOUT WARNING: ${result.earlyCheckoutWarning.message}\n\nYou are checking out before the standard ${formattedTime} end time for ${assignedLoc?.name}. This will be recorded and visible to your department head.`,
-          )
-          setTimeout(() => {
-            setError(null)
-            setSuccessDialogMessage(result.message)
-            setShowSuccessDialog(true)
-            setTimeout(() => {
-              window.location.reload()
-            }, 70000)
-          }, 70000)
-          return
-        }
-
-        setSuccessDialogMessage(result.message)
-        setShowSuccessDialog(true)
-        setTimeout(() => {
-          window.location.reload()
-        }, 70000)
-      } else {
-        setError(result.error || "Failed to check out")
-      }
-    } catch (error) {
-      console.error("[v0] Check-out error:", error)
-      const message = error instanceof Error ? error.message : "Failed to check out"
-      setError(message)
+      throw err
     } finally {
       setIsLoading(false)
     }
@@ -1387,64 +1256,16 @@ export function AttendanceRecorder({
     try {
       const { location, nearestLocation } = pendingCheckoutData
 
-      const response = await fetch("/api/attendance/check-out", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          accuracy: location.accuracy,
-          location_source: location.source,
-          location_name: nearestLocation?.name || "Unknown Location",
-          early_checkout_reason: earlyCheckoutReason,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success && result.data) {
-        console.log("[v0] Early checkout successful with reason")
-
-        setLocalTodayAttendance(result.data)
-
-        clearAttendanceCache()
-
-        setRecentCheckOut(true)
-        setTimeout(() => setRecentCheckOut(false), 3000)
-
-        const checkInTime = new Date(result.data.check_in_time)
-        const checkOutTime = new Date(result.data.check_out_time)
-        const workHours = ((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2)
-
-        setFlashMessage({
-          message: `Successfully checked out early from ${result.data.check_out_location_name}. Work hours: ${workHours} hours. Your reason has been recorded and is visible to department heads, supervisors, and HR.`,
-          type: "warning",
-        })
-
-        setEarlyCheckoutReason("")
-        setPendingCheckoutData(null)
-
-        // Redirect to main page after 2 seconds
-        setTimeout(() => {
-          window.location.href = "/dashboard"
-        }, 2000)
-      } else {
-        throw new Error(result.error || "Failed to record checkout")
-      }
-    } catch (err) {
-      console.error("[v0] Early checkout error:", err)
+      // Use optimized checkout function with reason
+      await performCheckoutAPI(location, nearestLocation, earlyCheckoutReason)
+    } catch (error) {
+      console.error("[v0] Early checkout error:", error)
       setFlashMessage({
-        message: err instanceof Error ? err.message : "Failed to record checkout. Please try again.",
+        message: error instanceof Error ? error.message : "Failed to check out. Please try again.",
         type: "error",
       })
-      setShowEarlyCheckoutDialog(true) // Keep dialog open if there's an error
-    } finally {
-      setIsLoading(false)
     }
   }
-
   const handleEarlyCheckoutCancel = () => {
     setShowEarlyCheckoutDialog(false)
     setEarlyCheckoutReason("")

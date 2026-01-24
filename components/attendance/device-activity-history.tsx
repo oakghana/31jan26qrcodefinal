@@ -1,11 +1,10 @@
 "use client"
 
 import React from "react"
-
+import { format } from "date-fns"
 import { useEffect, useState } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { Smartphone, Laptop, Monitor, Clock, MapPin, ArrowRight } from "lucide-react"
-import { format } from "date-fns"
 
 interface AttendanceActivity {
   id: string
@@ -128,7 +127,7 @@ export function DeviceActivityHistory({ userId }: DeviceActivityHistoryProps) {
           new Date(new Date().setDate(new Date().getDate() - 1)).toDateString() === 
           checkInDate.toDateString()
 
-        let dateLabel = format(checkInDate, "MMM d, yyyy")
+        let dateLabel = checkInDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
         if (isToday) dateLabel = "Today"
         if (isYesterday) dateLabel = "Yesterday"
 
@@ -161,7 +160,7 @@ export function DeviceActivityHistory({ userId }: DeviceActivityHistoryProps) {
               <div className="flex items-center gap-2 text-sm">
                 <Clock className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                 <span className="text-xs text-muted-foreground">Check-in:</span>
-                <span className="font-medium">{format(checkInDate, "h:mm a")}</span>
+                <span className="font-medium">{checkInDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
                 <span className="text-xs text-muted-foreground">at</span>
                 <span className="font-medium truncate">{activity.check_in_location_name}</span>
               </div>
@@ -171,7 +170,7 @@ export function DeviceActivityHistory({ userId }: DeviceActivityHistoryProps) {
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
                   <span className="text-xs text-muted-foreground">Check-out:</span>
-                  <span className="font-medium">{format(new Date(activity.check_out_time), "h:mm a")}</span>
+                  <span className="font-medium">{new Date(activity.check_out_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
                   <span className="text-xs text-muted-foreground">at</span>
                   <span className="font-medium truncate">{activity.check_out_location_name}</span>
                 </div>
