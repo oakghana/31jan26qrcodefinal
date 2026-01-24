@@ -296,7 +296,8 @@ export function AttendanceRecorder({
   const isOnLeave = false // Placeholder: Assume not on leave if leave status is removed
   
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
-  const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave
+  // MUST also verify user is within proximity range (matches checkout validation logic)
+  const canCheckInButton = (initialCanCheckIn ?? true) && !recentCheckIn && !localTodayAttendance?.check_in_time && !isOnLeave && locationValidation?.canCheckIn === true
   
   // CRITICAL: Checkout button should ONLY be enabled if:
   // 1. User has actually checked in today
