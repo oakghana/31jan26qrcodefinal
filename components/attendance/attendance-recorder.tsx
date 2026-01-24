@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   getCurrentLocation,
   getAveragedLocation,
@@ -290,6 +290,8 @@ export function AttendanceRecorder({
       console.error("[v0] Error in fetchTodayAttendance:", error)
     }
   }
+
+
 
   // Removed leave status logic
   // const isOnLeave = leaveStatus !== "active"
@@ -1450,6 +1452,17 @@ export function AttendanceRecorder({
     setIsLoading(false)
   }
 
+  const getFormattedCheckoutTime = () => {
+    const assignedLoc = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
+    const checkOutTime = assignedLoc?.check_out_end_time || "17:00"
+    const [hours, minutes] = checkOutTime.split(":").map(Number)
+    const period = hours >= 12 ? "PM" : "AM"
+    const displayHours = hours % 12 || 12
+    const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+    const locationName = assignedLoc?.name || "your location"
+    return `You are checking out before the standard ${formattedTime} end time for ${locationName}`
+  }
+
   const handleRefreshLocations = async () => {
     setIsLoading(true)
     setError(null)
@@ -1807,19 +1820,9 @@ export function AttendanceRecorder({
                 <AlertTriangle className="h-5 w-5" />
                 Early Check-Out Notice
               </CardTitle>
-              <CardDescription>
-                You are checking out before {(() => {
-                  const assignedLocation = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
-                  const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
-                  
-                  // Convert 24-hour format to 12-hour format with AM/PM
-                  const [hours, minutes] = checkOutEndTime.split(":").map(Number)
-                  const period = hours >= 12 ? "PM" : "AM"
-                  const displayHours = hours % 12 || 12
-                  
-                  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
-                })()}. Please provide a reason.
-              </CardDescription>
+            <CardDescription>
+              {getFormattedCheckoutTime()}. Please provide a reason.
+            </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert className="border-orange-200 bg-orange-50">

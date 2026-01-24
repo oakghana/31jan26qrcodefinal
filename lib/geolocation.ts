@@ -384,6 +384,41 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
   return Math.round(distance)
 }
 
+// OPTIMIZATION: Memoized distance cache to prevent recalculating same distances
+const distanceCache = new Map<string, number>()
+const MAX_CACHE_ENTRIES = 1000
+
+/**
+ * Memoized distance calculation - caches results to avoid redundant calculations
+ * Useful when checking multiple locations from same user position
+ */
+export function calculateDistanceMemoized(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const key = `${lat1.toFixed(6)},${lon1.toFixed(6)},${lat2.toFixed(6)},${lon2.toFixed(6)}`
+  
+  if (distanceCache.has(key)) {
+    return distanceCache.get(key)!
+  }
+
+  const distance = calculateDistance(lat1, lon1, lat2, lon2)
+
+  // Keep cache size bounded
+  if (distanceCache.size >= MAX_CACHE_ENTRIES) {
+    const firstKey = distanceCache.keys().next().value
+    distanceCache.delete(firstKey)
+  }
+
+  distanceCache.set(key, distance)
+  return distance
+}
+
+/**
+ * Clears the distance calculation cache
+ * Call when user location significantly changes or on logout
+ */
+export function clearDistanceCache() {
+  distanceCache.clear()
+}
+
 export function isWithinGeofence(
   userLocation: LocationData,
   geofenceLocation: GeofenceLocation,

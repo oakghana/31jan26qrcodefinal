@@ -15,11 +15,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: userProfile } = await supabase
-      .from("user_profiles")
-      .select("leave_status, leave_end_date")
-      .eq("id", user.id)
-      .maybeSingle()
+    const body = await request.json()
+    const { latitude, longitude, location_id, qr_code_used, qr_timestamp, early_checkout_reason } = body
+
+    if (!qr_code_used && (!latitude || !longitude)) {
+      return NextResponse.json({ error: "Location coordinates are required for GPS check-out" }, { status: 400 })
+    }
+
+    const now = new Date()
+    const today = new Date().toISOString().split("T")[0]
+
+    // OPTIMIZATION: Parallelize database queries
+    const [
+      { data: userProfile },
+      { data: attendanceRecord, error: findError },
+    ] = await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("leave_status, leave_end_date")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("attendance_records")
+        .select(`
+          *,
+          geofence_locations!check_in_location_id (
+            name,
+            address
+          )
+        `)
+        .eq("user_id", user.id)
+        .gte("check_in_time", `${today}T00:00:00`)
+        .lt("check_in_time", `${today}T23:59:59`)
+        .maybeSingle(),
+    ])
 
     if (userProfile && userProfile.leave_status && userProfile.leave_status !== "active") {
       const leaveType = userProfile.leave_status === "on_leave" ? "on leave" : "on sick leave"
@@ -34,30 +63,6 @@ export async function POST(request: NextRequest) {
         { status: 403 },
       )
     }
-
-    const body = await request.json()
-    const { latitude, longitude, location_id, qr_code_used, qr_timestamp, early_checkout_reason } = body
-
-    if (!qr_code_used && (!latitude || !longitude)) {
-      return NextResponse.json({ error: "Location coordinates are required for GPS check-out" }, { status: 400 })
-    }
-
-    const now = new Date()
-    const today = new Date().toISOString().split("T")[0]
-
-    const { data: attendanceRecord, error: findError } = await supabase
-      .from("attendance_records")
-      .select(`
-        *,
-        geofence_locations!check_in_location_id (
-          name,
-          address
-        )
-      `)
-      .eq("user_id", user.id)
-      .gte("check_in_time", `${today}T00:00:00`)
-      .lt("check_in_time", `${today}T23:59:59`)
-      .maybeSingle()
 
     if (findError || !attendanceRecord) {
       return NextResponse.json({ error: "No check-in record found for today" }, { status: 400 })
@@ -124,21 +129,21 @@ export async function POST(request: NextRequest) {
         userId: user.id
       })
       
-      // Check device fingerprint sharing
-      const { data: recentDeviceSession } = await supabase
-        .from("device_sessions")
-        .select("user_id, last_activity, ip_address, device_id")
-        .eq("device_id", device_info.device_id)
-        .neq("user_id", user.id)
-        .gte("last_activity", twoHoursAgo)
-        .order("last_activity", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      
-      // Check IP sharing
-      let ipSharingSession = null
-      if (ipAddress) {
-        const { data: ipSession } = await supabase
+      // OPTIMIZATION: Parallelize device sharing checks
+      const [
+        { data: recentDeviceSession },
+        { data: ipSession }
+      ] = await Promise.all([
+        supabase
+          .from("device_sessions")
+          .select("user_id, last_activity, ip_address, device_id")
+          .eq("device_id", device_info.device_id)
+          .neq("user_id", user.id)
+          .gte("last_activity", twoHoursAgo)
+          .order("last_activity", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        ipAddress ? supabase
           .from("device_sessions")
           .select("user_id, last_activity, ip_address, device_id")
           .eq("ip_address", ipAddress)
@@ -148,9 +153,10 @@ export async function POST(request: NextRequest) {
           .order("last_activity", { ascending: false })
           .limit(1)
           .maybeSingle()
-        
-        ipSharingSession = ipSession
-      }
+          : Promise.resolve({ data: null })
+      ])
+      
+      let ipSharingSession = ipSession
       
       // Process device sharing warnings
       if (recentDeviceSession) {
@@ -269,20 +275,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No active QCC locations found" }, { status: 400 })
     }
 
-    const { data: settingsData } = await supabase.from("system_settings").select("geo_settings").maybeSingle()
-
-    const proximitySettings = {
-      checkInProximityRange: settingsData?.geo_settings?.checkInProximityRange || 50,
-      defaultRadius: settingsData?.geo_settings?.defaultRadius || 20,
-      requireHighAccuracy: settingsData?.geo_settings?.requireHighAccuracy ?? true,
-      allowManualOverride: settingsData?.geo_settings?.allowManualOverride ?? false,
-    }
-
-    // Fetch device radius settings from database
-    const { data: deviceRadiusSettings } = await supabase
-      .from("device_radius_settings")
-      .select("device_type, check_out_radius_meters")
-      .eq("is_active", true)
+    // OPTIMIZATION: Parallelize settings fetches
+    const [
+      { data: settingsData },
+      { data: deviceRadiusSettings },
+    ] = await Promise.all([
+      supabase.from("system_settings").select("geo_settings").maybeSingle(),
+      supabase
+        .from("device_radius_settings")
+        .select("device_type, check_out_radius_meters")
+        .eq("is_active", true),
+    ])
 
     // Get device type from request headers (sent by client)
     const deviceType = request.headers.get("x-device-type") || "desktop"
