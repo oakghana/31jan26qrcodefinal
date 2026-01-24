@@ -2,7 +2,8 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Timer, Calendar } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Clock, MapPin, Timer, Calendar, LogOut, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -13,6 +14,9 @@ interface ActiveSessionTimerProps {
   minimumWorkMinutes?: number
   locationCheckInTime?: string | null
   locationCheckOutTime?: string | null
+  onCheckOut?: () => void
+  canCheckOut?: boolean
+  isCheckingOut?: boolean
 }
 
 export function ActiveSessionTimer({
@@ -22,6 +26,9 @@ export function ActiveSessionTimer({
   minimumWorkMinutes = 120,
   locationCheckInTime,
   locationCheckOutTime,
+  onCheckOut,
+  canCheckOut = true,
+  isCheckingOut = false,
 }: ActiveSessionTimerProps) {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [timeUntilCheckout, setTimeUntilCheckout] = useState<{
@@ -111,6 +118,29 @@ export function ActiveSessionTimer({
             </p>
           </div>
         </div>
+
+        {/* Checkout Button - Show when ready */}
+        {timeUntilCheckout.canCheckout && onCheckOut && (
+          <Button
+            onClick={onCheckOut}
+            disabled={!canCheckOut || isCheckingOut}
+            variant="destructive"
+            className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white shadow-lg"
+            size="lg"
+          >
+            {isCheckingOut ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Checking Out...
+              </>
+            ) : (
+              <>
+                <LogOut className="mr-2 h-5 w-5" />
+                Check Out Now
+              </>
+            )}
+          </Button>
+        )}
 
         {/* Countdown Timer */}
         {!timeUntilCheckout.canCheckout ? (

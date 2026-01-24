@@ -1551,6 +1551,9 @@ export function AttendanceRecorder({
                   minimumWorkMinutes={120}
                   locationCheckInTime={checkInLocationData?.check_in_start_time}
                   locationCheckOutTime={checkInLocationData?.check_out_end_time}
+                  onCheckOut={handleCheckOut}
+                  canCheckOut={locationValidation?.canCheckOut}
+                  isCheckingOut={isLoading}
                 />
               )
             })()}
@@ -1584,35 +1587,11 @@ export function AttendanceRecorder({
                 </Button>
               )}
 
-              {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && checkoutTimeReached && (
-                <>
-                  <Button
-                    onClick={handleCheckOut}
-                    disabled={
-                      !locationValidation?.canCheckOut || isCheckingIn || isProcessing || recentCheckOut || isLoading
-                    }
-                    variant="destructive"
-                    className="w-full transition-all duration-300 bg-red-600 hover:bg-red-700 text-white"
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Checking Out...
-                      </>
-                    ) : (
-                      <>
-                        <LogOut className="mr-2 h-5 w-5" />
-                        Check Out Now
-                      </>
-                    )}
-                  </Button>
-                  {!locationValidation?.canCheckOut && (
-                    <p className="text-xs text-red-500 mt-2 text-center">
-                      You are outside the approved location range. Please move closer to a QCC location to check out.
-                    </p>
-                  )}
-                </>
+              {/* Checkout button now integrated into Active Session Timer */}
+              {localTodayAttendance?.check_in_time && !localTodayAttendance?.check_out_time && checkoutTimeReached && !locationValidation?.canCheckOut && (
+                <p className="text-xs text-red-500 mt-2 text-center">
+                  You are outside the approved location range. Please move closer to a QCC location to check out.
+                </p>
               )}
             </div>
 
