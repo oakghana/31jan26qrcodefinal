@@ -77,17 +77,29 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
       )
       const data = await response.json()
-      const area =
-        data.address?.suburb ||
-        data.address?.neighbourhood ||
-        data.address?.village ||
-        data.address?.town ||
-        data.address?.city ||
-        "Unknown Area"
-      setDetectedArea(area)
+      
+      // Build a detailed address string with street name
+      const addressParts = []
+      
+      if (data.address?.road) {
+        addressParts.push(data.address.road)
+      }
+      
+      if (data.address?.suburb || data.address?.neighbourhood) {
+        addressParts.push(data.address.suburb || data.address.neighbourhood)
+      } else if (data.address?.village || data.address?.town) {
+        addressParts.push(data.address.village || data.address.town)
+      }
+      
+      if (data.address?.city || data.address?.state) {
+        addressParts.push(data.address.city || data.address.state)
+      }
+      
+      const detailedAddress = addressParts.length > 0 ? addressParts.join(", ") : data.display_name || "Unknown Location"
+      setDetectedArea(detailedAddress)
     } catch (error) {
       console.error("[v0] Failed to reverse geocode:", error)
       setDetectedArea("Location detected")
@@ -144,7 +156,7 @@ export function LocationPreviewCard({ assignedLocation, locations = [] }: Locati
             <div className="space-y-3">
               <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3">
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Detected Area</p>
-                <p className="font-semibold text-gray-900 dark:text-gray-100">{detectedArea}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-relaxed">{detectedArea || "Loading..."}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

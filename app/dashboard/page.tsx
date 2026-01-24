@@ -12,6 +12,7 @@ import { MobileAppDownload } from "@/components/ui/mobile-app-download"
 import { StaffWarningModal } from "@/components/notifications/staff-warning-modal"
 import { GPSStatusBanner } from "@/components/attendance/gps-status-banner"
 import { WeeklySummaryModal } from "@/components/attendance/weekly-summary-modal"
+import { AdminLocationsOverview } from "@/components/admin/admin-locations-overview"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -104,6 +105,13 @@ export default async function DashboardPage() {
     .from("geofence_locations")
     .select("*", { count: "exact", head: true })
     .eq("is_active", true)
+
+  // Fetch all locations for admin view
+  const { data: allLocations } = await supabase
+    .from("geofence_locations")
+    .select("*")
+    .eq("is_active", true)
+    .order("name")
 
   return (
     <DashboardLayout>
@@ -247,6 +255,11 @@ export default async function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Admin Locations Overview */}
+        {profile?.role === "admin" && allLocations && allLocations.length > 0 && (
+          <AdminLocationsOverview locations={allLocations} />
+        )}
       </div>
       <MobileAppDownload variant="dashboard" />
     </DashboardLayout>
