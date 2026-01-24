@@ -1041,6 +1041,47 @@ export function AttendanceRecorder({
       return
     }
 
+    // CRITICAL: Validate location FIRST before anything else
+    // This ensures users cannot check out if they are out of range, regardless of time
+    setIsLoading(true)
+    try {
+      const locationData = await getCurrentLocationData()
+      if (!locationData) {
+        setIsLoading(false)
+        return
+      }
+
+      // Get device-specific checkout radius
+      let checkOutRadius: number | undefined
+      if (deviceRadiusSettings) {
+        if (deviceInfo.device_type === "mobile") {
+          checkOutRadius = deviceRadiusSettings.mobile.checkOut
+        } else if (deviceInfo.device_type === "tablet") {
+          checkOutRadius = deviceRadiusSettings.tablet.checkOut
+        } else if (deviceInfo.device_type === "laptop") {
+          checkOutRadius = deviceRadiusSettings.laptop.checkOut
+        } else if (deviceInfo.device_type === "desktop") {
+          checkOutRadius = deviceRadiusSettings.desktop.checkOut
+        }
+      }
+      
+      const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
+
+      if (!checkoutValidation.canCheckOut) {
+        console.log("[v0] Location validation failed - user out of range:", checkoutValidation.message)
+        throw new Error(checkoutValidation.message)
+      }
+
+      console.log("[v0] Location validation passed - user within range")
+    } catch (error) {
+      setIsLoading(false)
+      setFlashMessage({
+        message: error instanceof Error ? error.message : "Location validation failed. Please try again.",
+        type: "error",
+      })
+      return
+    }
+
     const now = new Date()
     const checkoutHour = now.getHours()
     const checkoutMinutes = now.getMinutes()
@@ -1066,9 +1107,8 @@ export function AttendanceRecorder({
     })
 
     if (isBeforeCheckoutTime && requireEarlyCheckoutReason && !earlyCheckoutReason) {
-      setIsLoading(true)
       try {
-        // Get location data first to show in dialog
+        // Get location data
         const locationData = await getCurrentLocationData()
         if (!locationData) {
           setIsLoading(false)
@@ -1090,12 +1130,6 @@ export function AttendanceRecorder({
       }
       // Fallback to proximity settings if device radius not available
       const effectiveCheckOutRadius = checkOutRadius ?? proximitySettings.checkInProximityRange
-
-      const checkoutValidation = validateCheckoutLocation(locationData, realTimeLocations || [], checkOutRadius)
-
-        if (!checkoutValidation.canCheckOut) {
-          throw new Error(checkoutValidation.message)
-        }
 
       let nearestLocation = null
       if (realTimeLocations && realTimeLocations.length > 0) {
