@@ -2,11 +2,22 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, QrCode, Calendar, Zap, ArrowRight } from "lucide-react"
+import { Clock, QrCode, Calendar, Zap, ArrowRight, Home } from "lucide-react"
 import Link from "next/link"
 
 export function QuickActions() {
   const actions = [
+    {
+      title: "Dashboard Home",
+      description: "Return to main dashboard overview",
+      href: "/dashboard",
+      icon: Home,
+      gradient: "from-blue-50 via-blue-100 to-blue-150",
+      hoverGradient: "hover:from-blue-100 hover:via-blue-150 hover:to-blue-200",
+      border: "border-blue-200 hover:border-blue-300",
+      iconBg: "bg-gradient-to-br from-blue-100 to-blue-200",
+      iconColor: "text-blue-600",
+    },
     {
       title: "Check In/Out",
       description: "Record your daily attendance with location verification",

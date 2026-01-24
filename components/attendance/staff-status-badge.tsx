@@ -7,13 +7,15 @@ import { cn } from "@/lib/utils"
 interface StaffStatusBadgeProps {
   isCheckedIn: boolean
   isOnLeave: boolean
-  leaveStatus?: "active" | "pending" | "approved" | "rejected" | null
+  leaveStatus?: "active" | "pending" | "approved" | "rejected" | "on_leave" | "sick_leave" | null
   className?: string
 }
 
 export function StaffStatusBadge({ isCheckedIn, isOnLeave, leaveStatus, className }: StaffStatusBadgeProps) {
   // Priority: Leave status > Check-in status
-  if (isOnLeave && leaveStatus === "active") {
+  // Note: leave_status "active" means working/at post, NOT on leave
+  // "on_leave" or "sick_leave" means staff is on leave
+  if (isOnLeave || leaveStatus === "on_leave" || leaveStatus === "sick_leave") {
     return (
       <Badge
         className={cn(

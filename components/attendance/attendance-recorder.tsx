@@ -295,9 +295,9 @@ export function AttendanceRecorder({
 
 
 
-  // Removed leave status logic
-  // SMART LEAVE HANDLING: Disable check-in/check-out when user is on active leave
-  const isOnLeave = userLeaveStatus === "active"
+  // SMART LEAVE HANDLING: Disable check-in/check-out when user is on leave
+  // Note: 'active' means working/at post, 'on_leave' or 'sick_leave' means actually on leave
+  const isOnLeave = userLeaveStatus === "on_leave" || userLeaveStatus === "sick_leave"
   
   // Default canCheckIn to true if not explicitly set, allowing staff to check in any time after midnight
   // MUST also verify user is within proximity range (matches checkout validation logic)

@@ -1,56 +1,53 @@
 /**
  * Cache Manager Utility
  * Provides functions to clear browser cache, storage, and force app refresh
+ * Optimized for production with minimal logging
  */
+
+const isDev = process.env.NODE_ENV === "development"
 
 export async function clearAppCache(): Promise<void> {
   try {
-    console.log("[v0] Starting cache clearing process...")
-
     // 1. Clear all localStorage
     localStorage.clear()
-    console.log("[v0] Cleared localStorage")
 
     // 2. Clear all sessionStorage
     sessionStorage.clear()
-    console.log("[v0] Cleared sessionStorage")
 
-    // 3. Clear IndexedDB
-    if (window.indexedDB) {
-      const databases = await window.indexedDB.databases()
-      for (const db of databases) {
-        if (db.name) {
-          window.indexedDB.deleteDatabase(db.name)
-          console.log(`[v0] Deleted IndexedDB: ${db.name}`)
-        }
+    // 3. Clear IndexedDB (parallel execution for speed)
+    const clearIndexedDB = async () => {
+      if (window.indexedDB) {
+        const databases = await window.indexedDB.databases()
+        await Promise.all(
+          databases
+            .filter((db) => db.name)
+            .map((db) => window.indexedDB.deleteDatabase(db.name!))
+        )
       }
     }
 
     // 4. Clear Service Worker caches
-    if ("caches" in window) {
-      const cacheNames = await caches.keys()
-      await Promise.all(
-        cacheNames.map(async (cacheName) => {
-          await caches.delete(cacheName)
-          console.log(`[v0] Deleted cache: ${cacheName}`)
-        }),
-      )
+    const clearCaches = async () => {
+      if ("caches" in window) {
+        const cacheNames = await caches.keys()
+        await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)))
+      }
     }
 
     // 5. Unregister Service Workers
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(
-        registrations.map(async (registration) => {
-          await registration.unregister()
-          console.log("[v0] Unregistered service worker")
-        }),
-      )
+    const unregisterSW = async () => {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registrations.map((registration) => registration.unregister()))
+      }
     }
 
-    console.log("[v0] Cache clearing completed successfully")
+    // Execute all cleanup operations in parallel for speed
+    await Promise.all([clearIndexedDB(), clearCaches(), unregisterSW()])
+
+    if (isDev) console.log("[v0] Cache clearing completed")
   } catch (error) {
-    console.error("[v0] Error clearing cache:", error)
+    if (isDev) console.error("[v0] Error clearing cache:", error)
     throw error
   }
 }
@@ -70,59 +67,49 @@ export async function clearCacheAndReload(): Promise<void> {
 
 /**
  * Clear all cookies related to the attendance system
+ * Optimized for performance with batch operations
  */
 export function clearAllCookies(): void {
   try {
-    console.log("[v0] Clearing all cookies...")
-
-    // Get all cookies
     const cookies = document.cookie.split(";")
+    const domain = window.location.hostname
+    const expiry = "expires=Thu, 01 Jan 1970 00:00:00 UTC"
 
-    // Delete each cookie
-    for (const cookie of cookies) {
+    // Batch delete all cookies
+    cookies.forEach((cookie) => {
       const eqPos = cookie.indexOf("=")
       const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim()
-
-      // Delete cookie for current domain
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
-
-      // Delete cookie for root domain
-      const domain = window.location.hostname
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${domain}`
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${domain}`
-
-      console.log(`[v0] Cleared cookie: ${name}`)
-    }
-
-    console.log("[v0] All cookies cleared")
+      
+      // Delete for all possible paths/domains
+      document.cookie = `${name}=; ${expiry}; path=/;`
+      document.cookie = `${name}=; ${expiry}; path=/; domain=${domain}`
+      document.cookie = `${name}=; ${expiry}; path=/; domain=.${domain}`
+    })
   } catch (error) {
-    console.error("[v0] Error clearing cookies:", error)
+    if (isDev) console.error("[v0] Error clearing cookies:", error)
   }
 }
 
 /**
  * Clear all browser storage and logout user completely
+ * Optimized for fast execution
  */
 export async function clearAllDataAndLogout(): Promise<void> {
   try {
-    console.log("[v0] Starting complete data clearing and logout...")
+    // Execute in parallel for speed
+    await Promise.all([
+      clearAppCache(),
+      Promise.resolve(clearAllCookies()),
+    ])
 
-    // Clear all caches and storage
-    await clearAppCache()
-
-    // Clear all cookies
-    clearAllCookies()
-
-    // Clear browser history (only works in some contexts)
+    // Clear browser history
     try {
       window.history.replaceState(null, "", "/auth/login")
-    } catch (error) {
-      console.log("[v0] Could not clear history:", error)
+    } catch {
+      // Silently fail - not critical
     }
-
-    console.log("[v0] Complete data clearing and logout finished")
   } catch (error) {
-    console.error("[v0] Error in clearAllDataAndLogout:", error)
+    if (isDev) console.error("[v0] Error in clearAllDataAndLogout:", error)
     throw error
   }
 }

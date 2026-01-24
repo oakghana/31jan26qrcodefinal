@@ -9,7 +9,7 @@ import { Calendar, CheckCircle2, Clock, AlertCircle, Upload } from "lucide-react
 import { LeaveRequestDialog, LeaveRequestData } from "./leave-request-dialog"
 
 interface LeaveStatusCardProps {
-  leaveStatus: "active" | "pending" | "rejected" | "approved" | null
+  leaveStatus: "active" | "pending" | "rejected" | "approved" | "on_leave" | "sick_leave" | null
   leaveStartDate: string | null
   leaveEndDate: string | null
   leaveReason: string | null
@@ -33,10 +33,13 @@ export function LeaveStatusCard({
   const startDate = leaveStartDate ? new Date(leaveStartDate) : null
   const endDate = leaveEndDate ? new Date(leaveEndDate) : null
 
-  // User is on leave if they have leave dates and today is within that range
+  // User is on leave if:
+  // 1. leave_status is "on_leave" or "sick_leave", OR
+  // 2. they have leave dates and today is within that range
   // Note: leave_status "active" means working at post, NOT on leave
   const isCurrentlyOnLeave =
-    startDate && endDate && today >= startDate && today <= endDate
+    (leaveStatus === "on_leave" || leaveStatus === "sick_leave") ||
+    (startDate && endDate && today >= startDate && today <= endDate)
 
   const handleSubmitApprovedLeave = async (data: LeaveRequestData) => {
     setIsSubmitting(true)
