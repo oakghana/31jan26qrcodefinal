@@ -2,7 +2,6 @@ export const metadata = {
   title: "QCC Electronic Attendance | Quality Control Company Limited",
   description: "Quality Control Company Limited Electronic Attendance System - Intranet Portal",
   manifest: "/manifest.json",
-  themeColor: "#ea580c",
   applicationName: "QCC Attendance",
   appleWebApp: {
     capable: true,
@@ -21,13 +20,6 @@ export const metadata = {
     apple: "/images/qcc-logo.png",
     shortcut: "/favicon.ico",
   },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  },
   other: {
     "mobile-web-app-capable": "yes",
     "msapplication-config": "/browserconfig.xml",
@@ -35,4 +27,13 @@ export const metadata = {
     "msapplication-tap-highlight": "no",
   },
   generator: "v0.app",
+}
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#ea580c",
 }

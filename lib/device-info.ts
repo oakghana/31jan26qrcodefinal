@@ -10,6 +10,10 @@ export interface DeviceInfo {
 }
 
 export function generateDeviceId(): string {
+  if (typeof document === "undefined") {
+    throw new Error("generateDeviceId must be called on the client side.");
+  }
+
   // Create a comprehensive device fingerprint that mimics MAC address uniqueness
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
@@ -52,59 +56,23 @@ export function generateDeviceId(): string {
 }
 
 export function getDeviceInfo(): DeviceInfo {
+  if (typeof window === "undefined") {
+    throw new Error("getDeviceInfo must be called on the client side.");
+  }
+
   const deviceId = generateDeviceId()
-
-  // Detect device type
-  const ua = navigator.userAgent.toLowerCase()
-  const isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)
-  const isTablet = /ipad|android(?!.*mobile)|tablet/i.test(ua)
-
-  let deviceType = "desktop"
-  if (isMobile) {
-    deviceType = "mobile"
-  } else if (isTablet) {
-    deviceType = "tablet"
-  }
-
-  // Get device name
-  let deviceName = "Unknown Device"
-  let isLaptop = false
-  
-  if (/iPhone/i.test(navigator.userAgent)) {
-    deviceName = "iPhone"
-  } else if (/iPad/i.test(navigator.userAgent)) {
-    deviceName = "iPad"
-  } else if (/Android/i.test(navigator.userAgent)) {
-    deviceName = "Android Device"
-  } else if (/Windows/i.test(navigator.userAgent)) {
-    // Distinguish between Windows laptop and desktop PC
-    // Laptops typically have battery, lower screen resolution, or touch capability
-    const hasTouch = navigator.maxTouchPoints > 0
-    const screenWidth = window.screen.width
-    const screenHeight = window.screen.height
-    const pixelDensity = window.devicePixelRatio || 1
-    
-    // Heuristics: laptops typically have smaller screens, higher pixel density, or touch
-    isLaptop = hasTouch || screenWidth <= 1920 || pixelDensity > 1.25
-    deviceName = isLaptop ? "Windows Laptop" : "Windows Desktop PC"
-  } else if (/Mac/i.test(navigator.userAgent)) {
-    // Distinguish between MacBook and Mac desktop (iMac, Mac Mini, Mac Pro)
-    const hasTouch = navigator.maxTouchPoints > 0
-    const screenWidth = window.screen.width
-    
-    // MacBooks typically have smaller screens (up to 16" = ~3456px wide max)
-    isLaptop = hasTouch || screenWidth <= 3456
-    deviceName = isLaptop ? "MacBook" : "Mac Desktop"
-  }
+  const deviceName = navigator.userAgent
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent)
+  const isTablet = /Tablet|iPad/i.test(navigator.userAgent)
+  const isDesktop = !isMobile && !isTablet
 
   return {
     device_id: deviceId,
     device_name: deviceName,
-    device_type: deviceType,
+    device_type: isMobile ? "Mobile" : isTablet ? "Tablet" : "Desktop",
     browser_info: navigator.userAgent,
     isMobile,
     isTablet,
-    isDesktop: !isMobile && !isTablet,
-    isLaptop,
+    isDesktop,
   }
 }

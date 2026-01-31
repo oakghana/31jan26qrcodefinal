@@ -2,7 +2,7 @@ import type React from "react"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import dynamic from "next/dynamic"
 import "./globals.css"
-import { metadata } from "./metadata"
+import { metadata, viewport } from "./metadata"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,7 +20,7 @@ const jetbrainsMono = JetBrains_Mono({
   preload: true,
 })
 
-export { metadata }
+export { metadata, viewport }
 
 const RootLayoutClient = dynamic(() => import("./root-layout-client"), {
   ssr: true,

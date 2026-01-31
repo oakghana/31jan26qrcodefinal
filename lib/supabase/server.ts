@@ -2,6 +2,11 @@ import "server-only"
 import { createServerClient as createSupabaseServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+// Ensure this file is only used in server components
+if (typeof window !== "undefined") {
+  throw new Error("The `server.ts` file should only be used in server components.");
+}
+
 /**
  * Especially important if using Fluid compute: Don't put this client in a
  * global variable. Always create a new client within each function when using

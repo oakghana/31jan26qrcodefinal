@@ -2,22 +2,11 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, Calendar, Zap, ArrowRight, Home } from "lucide-react"
+import { Clock, Calendar, Zap, ArrowRight } from "lucide-react"
 import Link from "next/link"
 
 export function QuickActions() {
   const actions = [
-    {
-      title: "Dashboard Home",
-      description: "Return to main dashboard overview",
-      href: "/dashboard",
-      icon: Home,
-      gradient: "from-blue-50 via-blue-100 to-blue-150",
-      hoverGradient: "hover:from-blue-100 hover:via-blue-150 hover:to-blue-200",
-      border: "border-blue-200 hover:border-blue-300",
-      iconBg: "bg-gradient-to-br from-blue-100 to-blue-200",
-      iconColor: "text-blue-600",
-    },
     {
       title: "Check In/Out",
       description: "Record your daily attendance with location verification",
@@ -30,15 +19,15 @@ export function QuickActions() {
       iconColor: "text-green-600",
     },
     {
-      title: "Request Leave",
+      title: "Leave Notification",
       description: "Submit a leave notification for approval by your manager",
       href: "/dashboard/leave-management",
       icon: Calendar,
-      gradient: "from-purple-50 via-purple-100 to-purple-150",
-      hoverGradient: "hover:from-purple-100 hover:via-purple-150 hover:to-purple-200",
-      border: "border-purple-200 hover:border-purple-300",
-      iconBg: "bg-gradient-to-br from-purple-100 to-purple-200",
-      iconColor: "text-purple-600",
+      gradient: "from-orange-50 via-orange-100 to-orange-150",
+      hoverGradient: "hover:from-orange-100 hover:via-orange-150 hover:to-orange-200",
+      border: "border-orange-200 hover:border-orange-300",
+      iconBg: "bg-gradient-to-br from-orange-100 to-orange-200",
+      iconColor: "text-orange-600",
     },
     {
       title: "View Schedule",

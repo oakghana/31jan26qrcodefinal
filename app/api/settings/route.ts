@@ -105,13 +105,17 @@ export async function PUT(request: NextRequest) {
         throw userSettingsError
       }
 
-      await supabase.from("audit_logs").insert({
+      const { error: auditLogError } = await supabase.from("audit_logs").insert({
         user_id: user.id,
         action: "update_user_settings",
         details: { updated_fields: Object.keys(userSettings) },
         ip_address: request.headers.get("x-forwarded-for") || null,
         user_agent: request.headers.get("user-agent") || "unknown",
-      })
+      });
+
+      if (auditLogError) {
+        console.error("[v0] Audit log insertion error:", auditLogError);
+      }
     }
 
     // Update system settings if admin
@@ -153,7 +157,7 @@ export async function PUT(request: NextRequest) {
         throw systemSettingsError
       }
 
-      await supabase.from("audit_logs").insert({
+      const { error: auditLogError } = await supabase.from("audit_logs").insert({
         user_id: user.id,
         action: "update_system_settings",
         details: {
@@ -164,7 +168,11 @@ export async function PUT(request: NextRequest) {
         },
         ip_address: request.headers.get("x-forwarded-for") || null,
         user_agent: request.headers.get("user-agent") || "unknown",
-      })
+      });
+
+      if (auditLogError) {
+        console.error("[v0] Audit log insertion error:", auditLogError);
+      }
     }
 
     return NextResponse.json(

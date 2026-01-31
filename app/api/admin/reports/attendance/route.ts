@@ -177,7 +177,19 @@ export async function GET(request: NextRequest) {
     })
 
     // Calculate summary statistics
-    const totalRecords = enrichedRecords.length
+    const { count: totalRecords, error: countError } = await supabase
+      .from("attendance_records")
+      .select("id", { count: "exact" })
+      .gte("check_in_time", `${startDate}T00:00:00`)
+      .lte("check_in_time", `${endDate}T23:59:59`)
+
+    if (countError) {
+      console.error("[v0] Reports API - Count query error:", countError)
+      return NextResponse.json({ error: "Failed to fetch attendance count" }, { status: 500 })
+    }
+
+    console.log("[v0] Reports API - Total records:", totalRecords)
+
     const totalWorkHours = enrichedRecords.reduce((sum, record) => sum + (record.work_hours || 0), 0)
     const averageWorkHours = totalRecords > 0 ? totalWorkHours / totalRecords : 0
 

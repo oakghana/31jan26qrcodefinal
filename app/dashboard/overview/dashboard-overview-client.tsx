@@ -1,82 +1,31 @@
-import { createClient } from "@/lib/supabase/server"
-import { DashboardOverviewClient } from "./dashboard-overview-client"
+"use client"
 
-export default async function DashboardOverviewPage() {
-  const supabase = await createClient()
+import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
+import { StatsCard } from "@/components/dashboard/stats-card"
+import { QuickActions } from "@/components/dashboard/quick-actions"
+import { LeaveNotificationsCard } from "@/components/leave/leave-notifications-card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Activity, Loader } from "lucide-react"
+import Link from "next/link"
+import { MobileAppDownload } from "@/components/ui/mobile-app-download"
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return <div>Please log in</div>
-  }
-
-  // Get profile
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select(`
-      *,
-      departments (
-        name,
-        code
-      )
-    `)
-    .eq("id", user.id)
-    .maybeSingle()
-
-  // Get today's attendance
-  const today = new Date().toISOString().split("T")[0]
-  const { data: todayData } = await supabase
-    .from("attendance_records")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("check_in_time", `${today}T00:00:00`)
-    .lt("check_in_time", `${today}T23:59:59`)
-    .maybeSingle()
-
-  // Get monthly attendance count
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
-  const { count: monthCount } = await supabase
-    .from("attendance_records")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("check_in_time", startOfMonth)
-
-  // Get pending approvals if admin
-  let pendingApprovals = 0
-  if (profile?.role === "admin") {
-    const { count } = await supabase
-      .from("user_profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("is_active", false)
-    pendingApprovals = count || 0
-  }
-
-  return (
-    <DashboardOverviewClient
-      user={user}
-      profile={profile}
-      todayAttendance={todayData}
-      monthlyAttendance={monthCount || 0}
-      pendingApprovals={pendingApprovals}
-    />
-  )
+interface DashboardOverviewClientProps {
+  user: any
+  profile: any
+  todayAttendance: any
+  monthlyAttendance: number
+  pendingApprovals: number
 }
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="flex flex-col items-center gap-4">
-            <Loader className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading dashboard...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
+export function DashboardOverviewClient({
+  user,
+  profile,
+  todayAttendance,
+  monthlyAttendance,
+  pendingApprovals,
+}: DashboardOverviewClientProps) {
   return (
     <DashboardLayout>
       <div className="space-y-8">

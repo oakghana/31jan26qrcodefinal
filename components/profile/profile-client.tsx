@@ -102,6 +102,12 @@ export function ProfileClient() {
 
         if (error) throw error
 
+        if (!profileData) {
+          console.error("Profile not found for user ID:", user.id);
+          setError("Profile not found. Please contact support.");
+          return;
+        }
+
         setProfile(profileData)
         setEditForm({
           first_name: profileData.first_name || "",
