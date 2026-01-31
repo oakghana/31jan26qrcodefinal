@@ -21,6 +21,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Location ID is required" }, { status: 400 })
     }
 
+    // Check if user is on leave
+    const today = new Date().toISOString().split("T")[0]
+    const { data: leaveStatus } = await supabase
+      .from("leave_status")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "on_leave")
+      .gte("end_date", today)
+      .lte("start_date", today)
+      .maybeSingle()
+
+    if (leaveStatus) {
+      return NextResponse.json(
+        {
+          error: `You are currently on approved leave from ${new Date(leaveStatus.start_date).toLocaleDateString()} to ${new Date(leaveStatus.end_date).toLocaleDateString()}. You cannot check out during this period. Please contact your manager if you believe this is incorrect.`,
+          onLeave: true,
+        },
+        { status: 403 }
+      )
+    }
+
     const { data: location } = await supabase
       .from("geofence_locations")
       .select("*")
@@ -33,15 +54,15 @@ export async function POST(request: Request) {
     }
 
     const now = new Date()
-    const today = now.toISOString().split("T")[0]
+    const todayDate = now.toISOString().split("T")[0]
 
     // Find today's attendance record without check-out
     const { data: attendance, error: findError } = await supabase
       .from("attendance_records")
       .select("*")
       .eq("user_id", user.id)
-      .gte("check_in_time", `${today}T00:00:00Z`)
-      .lt("check_in_time", `${today}T23:59:59Z`)
+      .gte("check_in_time", `${todayDate}T00:00:00Z`)
+      .lt("check_in_time", `${todayDate}T23:59:59Z`)
       .is("check_out_time", null)
       .single()
 
@@ -53,8 +74,8 @@ export async function POST(request: Request) {
         .from("attendance_records")
         .select("check_in_time, check_out_time")
         .eq("user_id", user.id)
-        .gte("check_in_time", `${today}T00:00:00Z`)
-        .lt("check_in_time", `${today}T23:59:59Z`)
+        .gte("check_in_time", `${todayDate}T00:00:00Z`)
+        .lt("check_in_time", `${todayDate}T23:59:59Z`)
         .not("check_out_time", "is", null)
         .maybeSingle()
 

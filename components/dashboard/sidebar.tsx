@@ -42,6 +42,7 @@ import {
   ShieldAlert,
   TrendingUp,
   Calendar,
+  Bell,
 } from "lucide-react"
 import Image from "next/image"
 
@@ -88,6 +89,13 @@ const navigationItems = [
     title: "Leave Management",
     href: "/dashboard/leave-management",
     icon: Calendar,
+    roles: ["admin", "regional_manager", "department_head"],
+    category: "admin",
+  },
+  {
+    title: "Leave Notifications",
+    href: "/dashboard/leave-notifications",
+    icon: Bell,
     roles: ["admin", "regional_manager", "department_head"],
     category: "admin",
   },

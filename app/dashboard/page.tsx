@@ -133,33 +133,37 @@ export default async function DashboardPage() {
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2">
                   <Activity className="h-5 w-5 text-primary" />
-                  Recent Activity
+                  Leave Notifications
                 </CardTitle>
-                <CardDescription className="text-base">Your latest attendance records</CardDescription>
+                <CardDescription className="text-base">Your leave requests and notifications</CardDescription>
               </CardHeader>
               <CardContent>
-                {todayAttendance ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-4 p-4 sm:p-6 bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl border border-primary/10">
-                      <div className="w-3 h-3 bg-primary rounded-full animate-pulse flex-shrink-0"></div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground">Checked in today</p>
-                        <p className="text-sm text-muted-foreground font-medium truncate">
-                          {new Date(todayAttendance.check_in_time).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="p-2 bg-primary/10 rounded-lg flex-shrink-0">
-                        <Clock className="h-5 w-5 text-primary" />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
+                {profile?.role !== "staff" && (
                   <div className="text-center py-8 sm:py-12">
                     <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Clock className="h-8 w-8 text-muted-foreground" />
+                      <Calendar className="h-8 w-8 text-muted-foreground" />
                     </div>
-                    <p className="text-lg font-medium text-muted-foreground">No attendance recorded today</p>
-                    <p className="text-sm text-muted-foreground mt-2">Use the quick actions to check in</p>
+                    <p className="text-lg font-medium text-muted-foreground">Leave Notification Management</p>
+                    <p className="text-sm text-muted-foreground mt-2">View and manage all leave requests from your staff</p>
+                    <Button asChild className="mt-4">
+                      <Link href="/dashboard/leave-management">
+                        Manage Leave Requests
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+                {profile?.role === "staff" && (
+                  <div className="text-center py-8 sm:py-12">
+                    <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Calendar className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <p className="text-lg font-medium text-muted-foreground">No active leave notifications</p>
+                    <p className="text-sm text-muted-foreground mt-2">Submit a leave request to notify your manager</p>
+                    <Button asChild className="mt-4">
+                      <Link href="/dashboard/leave-management">
+                        Request Leave
+                      </Link>
+                    </Button>
                   </div>
                 )}
               </CardContent>
