@@ -43,11 +43,11 @@ export function QuickActions() {
   ]
 
   return (
-    <Card className="bg-gradient-to-br from-white/90 to-white/50 dark:from-slate-900/90 dark:to-slate-800/50 backdrop-blur-xl border-white/20 dark:border-slate-700/20 shadow-2xl">
+    <Card className="bg-slate-900 text-white backdrop-blur-xl border-slate-800/40 shadow-2xl">
       <CardHeader className="pb-6">
         <CardTitle className="text-xl font-bold flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-950/50 dark:to-blue-900/50 rounded-xl border border-blue-200/50 dark:border-blue-800/50">
-            <Zap className="h-5 w-5 text-blue-600" />
+          <div className="p-2 rounded-xl bg-slate-800/60 border border-slate-700/50">
+            <Zap className="h-5 w-5 text-white" />
           </div>
           Quick Actions
         </CardTitle>
@@ -60,24 +60,22 @@ export function QuickActions() {
             <Button
               key={action.href}
               asChild
-              className={`h-auto w-full flex items-center gap-6 p-6 bg-gradient-to-r ${action.gradient} ${action.hoverGradient} border ${action.border} transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:scale-[1.02] touch-manipulation group relative overflow-hidden`}
+              className={`h-auto w-full flex items-center gap-6 p-6 bg-slate-800/60 border border-slate-700/40 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:scale-[1.02] touch-manipulation group relative overflow-hidden`}
               variant="outline"
             >
               <Link href={action.href}>
-                <div
-                  className={`flex-shrink-0 p-4 ${action.iconBg} rounded-2xl shadow-sm transition-all duration-300 group-hover:shadow-md group-hover:scale-110`}
-                >
+                <div className={`flex-shrink-0 p-4 rounded-2xl shadow-sm transition-all duration-300 group-hover:shadow-md group-hover:scale-110 bg-slate-700/60`}>
                   <Icon
-                    className={`h-6 w-6 ${action.iconColor} transition-transform duration-300 group-hover:rotate-3`}
+                    className={`h-6 w-6 text-white transition-transform duration-300 group-hover:rotate-3`}
                   />
                 </div>
 
                 <div className="flex-1 text-left space-y-1">
-                  <div className="font-bold text-foreground text-lg flex items-center gap-2">
+                  <div className="font-bold text-white text-lg flex items-center gap-2">
                     {action.title}
-                    <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1" />
+                    <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1 text-white" />
                   </div>
-                  <div className="text-sm text-muted-foreground font-medium leading-relaxed">{action.description}</div>
+                  <div className="text-sm text-white/80 font-medium leading-relaxed">{action.description}</div>
                 </div>
 
                 <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

@@ -107,31 +107,16 @@ export function AttendanceReports() {
     return new Date().toISOString().split("T")[0]
   })
   const [selectedDepartment, setSelectedDepartment] = useState("all")
-  const [selectedUser, setSelectedUser] = useState("all")
   const [locations, setLocations] = useState([])
   const [districts, setDistricts] = useState([])
   const [selectedLocation, setSelectedLocation] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [selectedLocationStatus, setSelectedLocationStatus] = useState("all")
-  const [minHours, setMinHours] = useState("")
-  const [maxHours, setMaxHours] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
-  const [visibleColumns, setVisibleColumns] = useState({
-    date: true,
-    employee: true,
-    department: true,
-    checkIn: true,
-    checkInLocation: true,
-    checkOut: true,
-    checkOutLocation: true,
-    earlyCheckoutReason: true,
-    hours: true,
-    status: true,
-    locationStatus: true,
-  })
+  const [sortKey, setSortKey] = useState<string>("check_in_time")
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  const visibleColumnCount = useMemo(() => Object.values(visibleColumns).filter(Boolean).length, [visibleColumns])
+  const visibleColumnCount = 9
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -145,15 +130,13 @@ export function AttendanceReports() {
   })
 
   const [departments, setDepartments] = useState([])
-  const [users, setUsers] = useState([])
 
   useEffect(() => {
     fetchReport()
     fetchDepartments()
-    fetchUsers()
     fetchLocations()
     fetchDistricts()
-  }, [startDate, endDate, selectedDepartment, selectedUser, selectedLocation, selectedDistrict, selectedStatus, selectedLocationStatus, minHours, maxHours])
+  }, [startDate, endDate, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus])
 
   const fetchReport = async () => {
     setLoading(true)
@@ -167,13 +150,9 @@ export function AttendanceReports() {
       })
 
       if (selectedDepartment !== "all") params.append("department_id", selectedDepartment)
-      if (selectedUser !== "all") params.append("user_id", selectedUser)
       if (selectedLocation !== "all") params.append("location_id", selectedLocation)
       if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
       if (selectedStatus !== "all") params.append("status", selectedStatus)
-      if (selectedLocationStatus !== "all") params.append("location_status", selectedLocationStatus)
-      if (minHours) params.append("min_hours", minHours)
-      if (maxHours) params.append("max_hours", maxHours)
 
       console.log("[v0] API call URL:", `/api/admin/reports/attendance?${params}`)
 
@@ -215,22 +194,7 @@ export function AttendanceReports() {
     }
   }
 
-  const fetchUsers = async () => {
-    try {
-      console.log("[v0] Fetching users...")
-      const response = await fetch("/api/admin/users")
-      const result = await response.json()
-      console.log("[v0] Users response:", result)
-
-      if (result.success) {
-        setUsers(result.data || [])
-      } else {
-        console.error("[v0] Users error:", result.error)
-      }
-    } catch (error) {
-      console.error("[v0] Failed to fetch users:", error)
-    }
-  }
+  // users list removed — Employee filter omitted per requirements
 
   const fetchLocations = async () => {
     try {
@@ -337,7 +301,6 @@ export function AttendanceReports() {
               locationId: selectedLocation !== "all" ? selectedLocation : null,
               districtId: selectedDistrict !== "all" ? selectedDistrict : null,
               departmentId: selectedDepartment !== "all" ? selectedDepartment : null,
-              userId: selectedUser !== "all" ? selectedUser : null,
               reportType: "attendance",
             },
           }),
@@ -410,9 +373,7 @@ export function AttendanceReports() {
     }
 
     // User filter
-    if (selectedUser !== "all") {
-      filtered = filtered.filter((r) => r.id === selectedUser)
-    }
+    // employee filter removed
 
     // Location filter
     if (selectedLocation !== "all") {
@@ -426,29 +387,9 @@ export function AttendanceReports() {
       filtered = filtered.filter((r) => r.user_profiles?.assigned_location?.districts?.id === selectedDistrict)
     }
 
-    // Status filter
+    // Status filter retained (if needed)
     if (selectedStatus !== "all") {
       filtered = filtered.filter((r) => r.status === selectedStatus)
-    }
-
-    // Location status filter
-    if (selectedLocationStatus !== "all") {
-      const isRemote = selectedLocationStatus === "remote"
-      filtered = filtered.filter((r) =>
-        isRemote
-          ? r.is_check_in_outside_location || r.is_check_out_outside_location
-          : !r.is_check_in_outside_location && !r.is_check_out_outside_location
-      )
-    }
-
-    // Hours range filter
-    if (minHours) {
-      const min = parseFloat(minHours)
-      filtered = filtered.filter((r) => (r.work_hours || 0) >= min)
-    }
-    if (maxHours) {
-      const max = parseFloat(maxHours)
-      filtered = filtered.filter((r) => (r.work_hours || 0) <= max)
     }
 
     // Search filter
@@ -472,7 +413,7 @@ export function AttendanceReports() {
     }
 
     return filtered
-  }, [records, selectedDepartment, selectedUser, selectedLocation, selectedDistrict, selectedStatus, selectedLocationStatus, minHours, maxHours, searchQuery])
+  }, [records, selectedDepartment, selectedLocation, selectedDistrict, selectedStatus, searchQuery])
 
   const presentCount = useMemo(() => records.filter((r) => r.status === "present" || r.check_in_time).length, [records])
 
@@ -504,30 +445,65 @@ export function AttendanceReports() {
     }
   }
 
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedRecords = useMemo(() => {
+    const arr = [...filteredRecords]
+    arr.sort((a: any, b: any) => {
+      const get = (r: any) => {
+        switch (sortKey) {
+          case 'check_in_time':
+            return new Date(r.check_in_time).getTime() || 0
+          case 'check_out_time':
+            return r.check_out_time ? new Date(r.check_out_time).getTime() : 0
+          case 'work_hours':
+            return r.work_hours || 0
+          case 'last_name':
+            return (r.user_profiles.last_name || '').toLowerCase()
+          case 'department':
+            return (r.user_profiles.departments?.name || '').toLowerCase()
+          case 'status':
+            return (r.status || '').toLowerCase()
+          default:
+            return ''
+        }
+      }
+
+      const va = get(a)
+      const vb = get(b)
+
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return sortDir === 'asc' ? va - vb : vb - va
+      }
+      if (typeof va === 'string' && typeof vb === 'string') {
+        return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+      }
+      return 0
+    })
+    return arr
+  }, [filteredRecords, sortKey, sortDir])
+
   return (
     <div className="space-y-8">
       {/* Advanced Filters - Modern Design */}
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 p-8 text-white">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
-              <BarChart3 className="h-8 w-8" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold">Advanced Analytics Dashboard</h2>
-              <p className="text-blue-100">Comprehensive attendance reports with intelligent filtering</p>
-            </div>
-          </div>
-
-          {exportError && (
-            <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 rounded-xl p-4 mt-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-300" />
-                <p className="text-red-200 font-medium">{exportError}</p>
+          <div className="p-8">
+            {exportError && (
+              <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 rounded-xl p-4 mt-2">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-300" />
+                  <p className="text-red-200 font-medium">{exportError}</p>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
         <div className="p-8">
           {/* Primary Filters */}
@@ -599,75 +575,8 @@ export function AttendanceReports() {
             </div>
           </div>
 
-          {/* Secondary Filters */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <User className="h-4 w-4 text-indigo-600" />
-                Employee
-              </label>
-              <Select value={selectedUser} onValueChange={setSelectedUser}>
-                <SelectTrigger className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white">
-                  <SelectValue placeholder="All Employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Employees</SelectItem>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.first_name} {user.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-orange-600" />
-                Status
-              </label>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="present">Present</SelectItem>
-                  <SelectItem value="absent">Absent</SelectItem>
-                  <SelectItem value="late">Late</SelectItem>
-                  <SelectItem value="half_day">Half Day</SelectItem>
-                  <SelectItem value="early_checkout">Early Checkout</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <Clock className="h-4 w-4 text-teal-600" />
-                Hours Range
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={minHours}
-                  onChange={(e) => setMinHours(e.target.value)}
-                  placeholder="Min"
-                  className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white text-sm"
-                />
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={maxHours}
-                  onChange={(e) => setMaxHours(e.target.value)}
-                  placeholder="Max"
-                  className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white text-sm"
-                />
-              </div>
-            </div>
-
+          {/* Secondary Filters - simplified (search only) */}
+          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-1 mb-8">
             <div className="space-y-3">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Search className="h-4 w-4 text-pink-600" />
@@ -819,6 +728,23 @@ export function AttendanceReports() {
               <p className="text-white/60 text-xs">Active locations</p>
             </div>
           </div>
+
+            {/* Quick Select Card */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-6 text-amber-800 shadow-md border border-amber-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-amber-100 rounded-xl">
+                  <CalendarIcon className="h-6 w-6 text-amber-600" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-amber-800 text-sm font-medium">Quick Select</p>
+                <div className="flex flex-col gap-3">
+                  <Button variant="ghost" size="sm" onClick={() => setQuickDate('today')} className="text-amber-700 text-left">Today</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setQuickDate('week')} className="text-amber-700 text-left">This Week</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setQuickDate('month')} className="text-amber-700 text-left">This Month</Button>
+                </div>
+              </div>
+            </div>
         </div>
       )}
 
@@ -891,34 +817,19 @@ export function AttendanceReports() {
         </div>
       </div>
 
-      {/* Column Visibility */}
-      <div className="pt-6 border-t border-gray-100">
-        <div className="flex items-center gap-3 mb-4">
-          <Eye className="h-5 w-5 text-gray-600" />
-          <span className="text-sm font-semibold text-gray-700">Visible Columns</span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {Object.entries(visibleColumns).map(([key, isVisible]) => (
-            <label key={key} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-              <input
-                type="checkbox"
-                checked={isVisible}
-                onChange={(e) => setVisibleColumns(prev => ({ ...prev, [key]: e.target.checked }))}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-              />
-              <span className="text-sm text-gray-700 capitalize">
-                {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
+      {/* Column visibility controls removed per request */}
 
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
         <div className="border-b border-gray-100">
-          <Tabs defaultValue="overview" className="w-full">
+          <Tabs defaultValue="details" className="w-full">
             <div className="px-8 pt-6">
-              <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-2xl h-14">
+              <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 rounded-2xl h-14">
+                <TabsTrigger
+                  value="details"
+                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
+                >
+                  📋 Details
+                </TabsTrigger>
                 <TabsTrigger
                   value="overview"
                   className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
@@ -926,22 +837,10 @@ export function AttendanceReports() {
                   📊 Overview
                 </TabsTrigger>
                 <TabsTrigger
-                  value="trends"
-                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
-                >
-                  📈 Trends
-                </TabsTrigger>
-                <TabsTrigger
                   value="departments"
                   className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
                 >
                   🏢 Departments
-                </TabsTrigger>
-                <TabsTrigger
-                  value="details"
-                  className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
-                >
-                  📋 Details
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -1155,121 +1054,46 @@ export function AttendanceReports() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50 hover:bg-gray-50">
-                        {visibleColumns.date && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Date</TableHead>
-                        )}
-                        {visibleColumns.employee && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Employee</TableHead>
-                        )}
-                        {visibleColumns.department && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Department</TableHead>
-                        )}
-                        {visibleColumns.checkIn && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Check In</TableHead>
-                        )}
-                        {visibleColumns.checkInLocation && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Check In Location</TableHead>
-                        )}
-                        {visibleColumns.checkOut && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Check Out</TableHead>
-                        )}
-                        {visibleColumns.checkOutLocation && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Check Out Location</TableHead>
-                        )}
-                        {visibleColumns.hours && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Hours</TableHead>
-                        )}
-                        {visibleColumns.status && (
-                          <TableHead className="font-semibold text-gray-700 py-4">Status</TableHead>
-                        )}
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('check_in_time')}>Date</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('last_name')}>Employee</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('department')}>Department</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('check_in_time')}>Check In</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4">Check In Location</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('check_out_time')}>Check Out</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4">Check Out Location</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('work_hours')}>Hours</TableHead>
+                        <TableHead className="font-semibold text-gray-700 py-4 cursor-pointer" onClick={() => toggleSort('status')}>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRecords.slice(0, 100).map((record) => (
+                      {sortedRecords.slice(0, 100).map((record) => (
                         <TableRow key={record.id} className="hover:bg-gray-50 transition-colors">
-                          {visibleColumns.date && (
-                            <TableCell className="py-4">
-                              {new Date(record.check_in_time).toLocaleDateString()}
-                            </TableCell>
-                          )}
-                          {visibleColumns.employee && (
-                            <TableCell className="py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-medium">
-                                  {record.user_profiles.first_name[0]}{record.user_profiles.last_name[0]}
-                                </div>
-                                <div>
-                                  <p className="font-medium text-gray-900">
-                                    {record.user_profiles.first_name} {record.user_profiles.last_name}
-                                  </p>
-                                  <p className="text-sm text-gray-500">
-                                    {record.user_profiles.employee_id}
-                                  </p>
-                                </div>
+                          <TableCell className="py-4">{new Date(record.check_in_time).toLocaleDateString()}</TableCell>
+                          <TableCell className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-medium">
+                                {record.user_profiles.first_name[0]}{record.user_profiles.last_name[0]}
                               </div>
-                            </TableCell>
-                          )}
-                          {visibleColumns.department && (
-                            <TableCell className="py-4">
-                              <Badge variant="outline" className="font-medium">
-                                {record.user_profiles.departments?.name || 'N/A'}
-                              </Badge>
-                            </TableCell>
-                          )}
-                          {visibleColumns.checkIn && (
-                            <TableCell className="py-4">
-                              {new Date(record.check_in_time).toLocaleTimeString()}
-                            </TableCell>
-                          )}
-                          {visibleColumns.checkInLocation && (
-                            <TableCell className="py-4">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-gray-400" />
-                                <span className="text-sm">
-                                  {record.check_in_location_name || 'N/A'}
-                                </span>
+                              <div>
+                                <p className="font-medium text-gray-900">{record.user_profiles.first_name} {record.user_profiles.last_name}</p>
+                                <p className="text-sm text-gray-500">{record.user_profiles.employee_id}</p>
                               </div>
-                            </TableCell>
-                          )}
-                          {visibleColumns.checkOut && (
-                            <TableCell className="py-4">
-                              {record.check_out_time
-                                ? new Date(record.check_out_time).toLocaleTimeString()
-                                : <span className="text-gray-400">-</span>
-                              }
-                            </TableCell>
-                          )}
-                          {visibleColumns.checkOutLocation && (
-                            <TableCell className="py-4">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-gray-400" />
-                                <span className="text-sm">
-                                  {record.check_out_location_name || 'N/A'}
-                                </span>
-                              </div>
-                            </TableCell>
-                          )}
-                          {visibleColumns.hours && (
-                            <TableCell className="py-4">
-                              <span className="font-medium">
-                                {record.work_hours ? `${record.work_hours.toFixed(1)}h` : '-'}
-                              </span>
-                            </TableCell>
-                          )}
-                          {visibleColumns.status && (
-                            <TableCell className="py-4">
-                              <Badge
-                                variant={
-                                  record.status === 'present' ? 'default' :
-                                  record.status === 'late' ? 'secondary' :
-                                  record.status === 'absent' ? 'destructive' : 'outline'
-                                }
-                                className="font-medium"
-                              >
-                                {record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}
-                              </Badge>
-                            </TableCell>
-                          )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4"><Badge variant="outline" className="font-medium">{record.user_profiles.departments?.name || 'N/A'}</Badge></TableCell>
+                          <TableCell className="py-4">{new Date(record.check_in_time).toLocaleTimeString()}</TableCell>
+                          <TableCell className="py-4"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-400" /><span className="text-sm">{record.check_in_location_name || 'N/A'}</span></div></TableCell>
+                          <TableCell className="py-4">{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : <span className="text-gray-400">-</span>}</TableCell>
+                          <TableCell className="py-4"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-400" /><span className="text-sm">{record.check_out_location_name || 'N/A'}</span></div></TableCell>
+                          <TableCell className="py-4"><span className="font-medium">{record.work_hours ? `${record.work_hours.toFixed(1)}h` : '-'}</span></TableCell>
+                          <TableCell className="py-4"><Badge
+                            variant={
+                              record.status === 'present' ? 'default' :
+                              record.status === 'late' ? 'secondary' :
+                              record.status === 'absent' ? 'destructive' : 'outline'
+                            }
+                            className="font-medium"
+                          >{record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}</Badge></TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

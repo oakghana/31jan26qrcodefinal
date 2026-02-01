@@ -23,6 +23,7 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
   const [isInstalling, setIsInstalling] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(false)
+  const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     const checkInstalled = () => {
@@ -48,6 +49,11 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
     }
 
     checkInstalled()
+
+    // Auto-open the install modal (instructions) when not installed
+    if (!checkInstalled()) {
+      setShowModal(true)
+    }
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
@@ -79,6 +85,7 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
           setIsInstalling(false)
         }
       } else {
+        // Fallback: show a friendly modal/alert with instructions for iOS/Android and general browsers
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
         const isAndroid = /Android/.test(navigator.userAgent)
         const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)
@@ -105,7 +112,10 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
         instructions += "• Push notifications\n"
         instructions += "• Native mobile experience"
 
-        alert(instructions)
+        // show a modal/alert — prefer modal, but keep alert fallback
+        if (typeof window !== 'undefined' && window?.document) {
+          alert(instructions)
+        }
         setIsInstalling(false)
       }
     } catch (error) {
@@ -120,33 +130,67 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
     return null
   }
 
-  // Dashboard variant - floating badge with clear call-to-action
+  // Dashboard variant - floating badge with clear call-to-action + modal
   return (
-    <div className={cn("fixed bottom-6 right-6 z-40", className)}>
-      <Button
-        onClick={handlePWAInstall}
-        disabled={isInstalling}
-        size="lg"
-        className="h-auto px-6 py-4 rounded-2xl shadow-2xl bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary hover:shadow-3xl transition-all duration-300 hover:scale-105 touch-manipulation flex items-center gap-3"
-      >
-        <div className="relative">
-          <Smartphone className="h-6 w-6" />
-          {canInstall && (
-            <div className="absolute -top-1 -right-1">
-              <Sparkles className="h-3 w-3 text-yellow-300 animate-pulse" />
+    <>
+      {showModal && !isInstalled && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowModal(false)} />
+          <div className="relative max-w-lg w-full bg-white rounded-xl shadow-xl p-6 z-10">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-green-50 rounded-lg">
+                <Smartphone className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Install QCC Attendance</h3>
+                <p className="text-sm text-muted-foreground mt-1">Follow the steps below to install the app on your device.</p>
+                <div className="mt-4 text-sm space-y-2">
+                  <p className="font-medium">iOS (Safari)</p>
+                  <p>- Tap the Share button (⬆️) → Add to Home Screen → Add</p>
+                  <p className="font-medium mt-2">Android</p>
+                  <p>- Menu (⋮) → Add to Home screen / Install app → Confirm</p>
+                  <p className="font-medium mt-2">Other browsers</p>
+                  <p>- Look for an install icon in the address bar or use the browser menu → Install</p>
+                </div>
+              </div>
             </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowModal(false)}>Close</Button>
+              <Button onClick={() => { handlePWAInstall(); setShowModal(false); }} disabled={isInstalling}>
+                {isInstalling ? 'Installing...' : 'Install'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={cn("fixed bottom-6 right-6 z-50", className)}>
+        <Button
+          onClick={() => setShowModal(true)}
+          disabled={isInstalling}
+          size="lg"
+          className="h-auto px-6 py-4 rounded-3xl shadow-2xl bg-green-500 hover:bg-green-600 text-white hover:shadow-3xl transition-all duration-300 hover:scale-105 touch-manipulation flex items-center gap-3"
+        >
+          <div className="relative">
+            <Smartphone className="h-6 w-6" />
+            {canInstall && (
+              <div className="absolute -top-1 -right-1">
+                <Sparkles className="h-3 w-3 text-yellow-300 animate-pulse" />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="font-semibold text-base">Install App</span>
+            <span className="text-xs opacity-90">Download & install instantly</span>
+          </div>
+          {isInstalling ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Download className="h-5 w-5" />
           )}
-        </div>
-        <div className="flex flex-col items-start">
-          <span className="font-semibold text-base">Install App</span>
-          <span className="text-xs opacity-90">Download to your device</span>
-        </div>
-        {isInstalling ? (
-          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        ) : (
-          <Download className="h-5 w-5" />
-        )}
-      </Button>
-    </div>
+        </Button>
+      </div>
+    </>
   )
 }
