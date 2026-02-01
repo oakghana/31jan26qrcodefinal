@@ -40,6 +40,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
+import { LeaveNotificationsClient } from "@/components/leave/leave-notifications-client"
 
 interface LeaveRequest {
   id: string
@@ -345,6 +346,13 @@ export function LeaveManagementClient({
                 </DialogContent>
               </Dialog>
             )}
+
+              {/* If manager/admin, show notifications panel inline */}
+              {(["admin", "regional_manager", "department_head"].includes(userRole || "")) && (
+                <div className="mt-6">
+                  <LeaveNotificationsClient />
+                </div>
+              )}
           </div>
         </div>
 

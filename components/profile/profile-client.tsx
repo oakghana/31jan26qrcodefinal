@@ -8,8 +8,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield } from "lucide-react"
+import { User, Mail, Phone, MapPin, Building, Save, Camera, Lock, Key, Calendar, Eye, EyeOff, Settings2, Shield, Bell } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { clearAppCache } from "@/lib/cache-manager"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { SecureInput } from "@/components/ui/secure-input"
 import { validatePassword } from "@/lib/security"
@@ -792,6 +793,47 @@ export function ProfileClient({ initialUser, initialProfile }: ProfileClientProp
                     English
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Notifications & Cache */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Notifications
+              </CardTitle>
+              <CardDescription>Manage in-app notifications and clear local cache</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Notification Center</Label>
+                  <p className="text-xs text-muted-foreground">View and manage your leave notifications</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => window.location.href = '/dashboard/leave-notifications'}>
+                  Manage
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Clear Cache</Label>
+                  <p className="text-xs text-muted-foreground">Remove cached data and reload the app</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={async () => {
+                  try {
+                    await clearAppCache()
+                    // reload to ensure a clean state
+                    window.location.reload()
+                  } catch (e) {
+                    console.error('Failed to clear cache from settings:', e)
+                    alert('Failed to clear cache')
+                  }
+                }}>
+                  Clear Cache
+                </Button>
               </div>
             </CardContent>
           </Card>
