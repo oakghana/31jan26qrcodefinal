@@ -64,62 +64,71 @@ ALTER TABLE leave_notifications ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for leave_requests
 -- Users can view their own leave requests
+DROP POLICY IF EXISTS "Users can view their own leave requests" ON leave_requests;
 CREATE POLICY "Users can view their own leave requests"
 ON leave_requests FOR SELECT
 USING (user_id = auth.uid() OR EXISTS (
-    SELECT 1 FROM user_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
+  SELECT 1 FROM user_profiles
+  WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
 ));
 
 -- Users can create their own leave requests
+DROP POLICY IF EXISTS "Users can create leave requests" ON leave_requests;
 CREATE POLICY "Users can create leave requests"
 ON leave_requests FOR INSERT
 WITH CHECK (user_id = auth.uid());
 
 -- Admin, regional_manager, and department_head can approve/reject leave requests
+DROP POLICY IF EXISTS "Managers can approve/reject leave requests" ON leave_requests;
 CREATE POLICY "Managers can approve/reject leave requests"
 ON leave_requests FOR UPDATE
 USING (EXISTS (
-    SELECT 1 FROM user_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
+  SELECT 1 FROM user_profiles
+  WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
 ));
 
 -- RLS Policies for leave_status
 -- Users can view their own leave status
+DROP POLICY IF EXISTS "Users can view their own leave status" ON leave_status;
 CREATE POLICY "Users can view their own leave status"
 ON leave_status FOR SELECT
 USING (user_id = auth.uid() OR EXISTS (
-    SELECT 1 FROM user_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
+  SELECT 1 FROM user_profiles
+  WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
 ));
 
 -- System can update leave status (from backend)
+DROP POLICY IF EXISTS "System can update leave status" ON leave_status;
 CREATE POLICY "System can update leave status"
 ON leave_status FOR INSERT
 WITH CHECK (true);
 
+DROP POLICY IF EXISTS "System can update leave status records" ON leave_status;
 CREATE POLICY "System can update leave status records"
 ON leave_status FOR UPDATE
 WITH CHECK (EXISTS (
-    SELECT 1 FROM user_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
+  SELECT 1 FROM user_profiles
+  WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
 ) OR true);
 
 -- RLS Policies for leave_notifications
 -- Recipients can view their notifications
+DROP POLICY IF EXISTS "Users can view their leave notifications" ON leave_notifications;
 CREATE POLICY "Users can view their leave notifications"
 ON leave_notifications FOR SELECT
 USING (recipient_id = auth.uid());
 
 -- Managers can send notifications
+DROP POLICY IF EXISTS "Managers can send leave notifications" ON leave_notifications;
 CREATE POLICY "Managers can send leave notifications"
 ON leave_notifications FOR INSERT
 WITH CHECK (EXISTS (
-    SELECT 1 FROM user_profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
+  SELECT 1 FROM user_profiles
+  WHERE id = auth.uid() AND role IN ('admin', 'regional_manager', 'department_head')
 ));
 
 -- Users can mark notifications as read
+DROP POLICY IF EXISTS "Users can update their leave notifications" ON leave_notifications;
 CREATE POLICY "Users can update their leave notifications"
 ON leave_notifications FOR UPDATE
 USING (recipient_id = auth.uid());
@@ -136,7 +145,8 @@ WITH CHECK (
   )
 );
 
--- Create function to auto-update leave_status when leave is approved
+-- Drop function if exists to avoid signature/name conflicts, then create
+DROP FUNCTION IF EXISTS update_leave_status_on_approval();
 CREATE OR REPLACE FUNCTION update_leave_status_on_approval()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -158,12 +168,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Ensure trigger is idempotent: drop existing trigger before (re)creating
+DROP TRIGGER IF EXISTS leave_status_update_trigger ON leave_requests;
 CREATE TRIGGER leave_status_update_trigger
 AFTER UPDATE ON leave_requests
 FOR EACH ROW
 EXECUTE FUNCTION update_leave_status_on_approval();
 
--- Create function to check if user is on leave
+-- Ensure trigger is idempotent: drop existing trigger before (re)creating
+DROP TRIGGER IF EXISTS leave_status_update_trigger ON leave_requests;
+CREATE TRIGGER leave_status_update_trigger
+AFTER UPDATE ON leave_requests
+FOR EACH ROW
+EXECUTE FUNCTION update_leave_status_on_approval();
+
+-- Drop function first to avoid parameter name/signature conflicts
+DROP FUNCTION IF EXISTS is_user_on_leave(UUID, DATE);
 CREATE OR REPLACE FUNCTION is_user_on_leave(user_id_param UUID, check_date DATE)
 RETURNS BOOLEAN AS $$
 BEGIN

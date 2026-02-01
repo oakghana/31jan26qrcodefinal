@@ -24,6 +24,8 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  // Only show floating CTA on Mondays (1) and Fridays (5)
+  const [showFloating, setShowFloating] = useState(false)
 
   useEffect(() => {
     const checkInstalled = () => {
@@ -50,9 +52,39 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
 
     checkInstalled()
 
-    // Auto-open the install modal (instructions) when not installed
-    if (!checkInstalled()) {
-      setShowModal(true)
+    // Auto-open the install modal (instructions) when not installed,
+    // but only on Mondays and Fridays to avoid nuisance on other days.
+    let autoTimer: ReturnType<typeof setTimeout> | null = null
+    const day = new Date().getDay()
+    const allowedDay = day === 1 || day === 5 // Monday=1, Friday=5
+
+    if (!checkInstalled() && allowedDay) {
+      // Only show once per session (e.g., once after login/tab open)
+      try {
+        const sessionKey = "pwaInstallShown"
+        const alreadyShown = typeof window !== "undefined" && sessionStorage.getItem(sessionKey)
+
+        if (!alreadyShown) {
+          setShowModal(true)
+          setShowFloating(true)
+          // mark shown for this session so it won't reappear
+          if (typeof window !== "undefined") sessionStorage.setItem(sessionKey, "1")
+
+          // Auto-hide modal and floating CTA after 10s to avoid nuisance
+          autoTimer = setTimeout(() => {
+            setShowModal(false)
+            setShowFloating(false)
+          }, 10000)
+        }
+      } catch (e) {
+        // if sessionStorage isn't available, fall back to showing once
+        setShowModal(true)
+        setShowFloating(true)
+        autoTimer = setTimeout(() => {
+          setShowModal(false)
+          setShowFloating(false)
+        }, 10000)
+      }
     }
 
     const handleVisibilityChange = () => {
@@ -69,8 +101,16 @@ export function MobileAppDownload({ className, variant = "sidebar" }: MobileAppD
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
       window.removeEventListener("appinstalled", handleAppInstalled)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
+      if (autoTimer) clearTimeout(autoTimer)
     }
   }, [])
+
+  // Ensure any time the modal is opened it auto-closes after 10s
+  useEffect(() => {
+    if (!showModal) return
+    const t = setTimeout(() => setShowModal(false), 10000)
+    return () => clearTimeout(t)
+  }, [showModal])
 
   const handlePWAInstall = async () => {
     setIsInstalling(true)

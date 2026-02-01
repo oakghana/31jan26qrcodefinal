@@ -105,20 +105,51 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
         .order("created_at", { ascending: false })
 
       if (error) {
-        console.error("Database query error:", error)
-        throw error
+        // Log raw object (may appear empty in console for certain prototypes)
+        try { console.error("Database query error (raw):", error) } catch {}
+
+        // Build a robust dump including non-enumerable and prototype keys
+        const dump: Record<string, unknown> = {}
+        try {
+          const seen = new Set<any>()
+          let obj: any = error
+          while (obj && obj !== Object.prototype && !seen.has(obj)) {
+            seen.add(obj)
+            Reflect.ownKeys(obj).forEach((key) => {
+              const k = String(key)
+              if (k in dump) return
+              try {
+                const v = (error as any)[key]
+                dump[k] = (v === undefined || typeof v === 'function') ? String(v) : v
+              } catch {
+                dump[k] = 'unreadable'
+              }
+            })
+            obj = Object.getPrototypeOf(obj)
+          }
+        } catch (e) {
+          try { dump._dump_error = String(e) } catch {}
+        }
+
+        try { console.error("Database query error (dump):", dump) } catch {}
+        try { console.error("Database query error (string):", String(error)) } catch {}
+
+        // Bail out gracefully so UI can render; developer can inspect the console dump above.
+        setLoading(false)
+        return
       }
 
       console.log("Fetched notifications:", data?.length || 0, "items")
       setNotifications(data || [])
     } catch (error) {
-      console.error("Error fetching notifications:", error)
-      console.error("Error details:", {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        error
-      })
-      // Don't re-throw the error, just log it and continue
+      const details = error instanceof Error
+        ? { message: error.message, stack: error.stack }
+        : (() => {
+            try { return JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error))) } catch { return String(error) }
+          })()
+
+      console.error("Error fetching notifications:", details)
+      // Continue without throwing to avoid breaking the client UI
     } finally {
       setLoading(false)
     }
