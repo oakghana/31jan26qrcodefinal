@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Activity, Loader } from "lucide-react"
 import Link from "next/link"
 import { MobileAppDownload } from "@/components/ui/mobile-app-download"
+import { PWAInstallToast } from "@/components/pwa/pwa-install-toast"
 
 interface DashboardOverviewClientProps {
   user: any
@@ -28,6 +29,9 @@ export function DashboardOverviewClient({
 }: DashboardOverviewClientProps) {
   return (
     <div className="space-y-8">
+        {/* PWA Install notification - shows for 5 seconds */}
+        <PWAInstallToast />
+        
         <div className="space-y-2">
           <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard</h1>
           <p className="text-lg text-muted-foreground font-medium">

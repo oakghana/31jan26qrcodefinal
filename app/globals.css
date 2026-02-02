@@ -217,3 +217,13 @@
 .animate-slide-out-to-bottom {
   animation: slide-out-to-bottom 0.2s ease-out;
 }
+
+/* PWA Install Toast countdown animation */
+@keyframes shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
