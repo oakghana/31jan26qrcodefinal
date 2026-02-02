@@ -1,5 +1,4 @@
 import { AuditLogsClient } from "@/components/admin/audit-logs-client"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 
@@ -18,9 +17,5 @@ export default async function AuditLogsPage() {
     redirect("/dashboard")
   }
 
-  return (
-    <DashboardLayout>
-      <AuditLogsClient />
-    </DashboardLayout>
-  )
+  return <AuditLogsClient />
 }

@@ -1,5 +1,4 @@
 import { BulkUpload } from "@/components/admin/bulk-upload"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 
@@ -19,14 +18,12 @@ export default async function DataManagementPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-primary">Data Management</h1>
-          <p className="text-muted-foreground">Bulk upload and manage organizational data for QCC</p>
-        </div>
-        <BulkUpload />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-primary">Data Management</h1>
+        <p className="text-muted-foreground">Bulk upload and manage organizational data for QCC</p>
       </div>
-    </DashboardLayout>
+      <BulkUpload />
+    </div>
   )
 }

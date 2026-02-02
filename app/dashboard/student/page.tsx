@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -94,21 +93,20 @@ export default async function StudentDashboardPage() {
   const attendanceRate = monthlyAttendance ? Math.round((monthlyAttendance / currentDate) * 100) : 0
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Student Dashboard</h1>
-          <p className="text-lg text-muted-foreground font-medium">
-            Welcome back,{" "}
-            <span className="text-primary font-semibold">{profile?.first_name || user.email?.split("@")[0]}</span>{" "}
-            {profile?.last_name || ""}
-          </p>
-        </div>
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Student Dashboard</h1>
+        <p className="text-lg text-muted-foreground font-medium">
+          Welcome back,{" "}
+          <span className="text-primary font-semibold">{profile?.first_name || user.email?.split("@")[0]}</span>{" "}
+          {profile?.last_name || ""}
+        </p>
+      </div>
 
-        {/* Quick Status Alert */}
-        {!todayAttendance && (
-          <Alert className="border-accent/20 bg-accent/5 shadow-sm">
-            <AlertCircle className="h-5 w-5 text-accent" />
+      {/* Quick Status Alert */}
+      {!todayAttendance && (
+        <Alert className="border-accent/20 bg-accent/5 shadow-sm">
+          <AlertCircle className="h-5 w-5 text-accent" />
             <AlertDescription className="flex items-center justify-between">
               <span className="text-accent font-semibold text-base">You haven't checked in today yet</span>
               <Button asChild size="sm" className="ml-4 shadow-sm hover:shadow-md transition-shadow">
@@ -332,6 +330,6 @@ export default async function StudentDashboardPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </div>
   )
 }

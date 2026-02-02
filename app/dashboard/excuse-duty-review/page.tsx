@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { ExcuseDutyReviewClient } from "@/components/admin/excuse-duty-review-client"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 
 export default async function ExcuseDutyReviewPage() {
   const supabase = await createClient()
@@ -33,8 +32,7 @@ export default async function ExcuseDutyReviewPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="container mx-auto py-6">
+    <div className="container mx-auto py-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Excuse Duty Review</h1>
           <p className="text-muted-foreground">
@@ -46,6 +44,5 @@ export default async function ExcuseDutyReviewPage() {
 
         <ExcuseDutyReviewClient userRole={profile.role} userDepartment={profile.department_id} />
       </div>
-    </DashboardLayout>
   )
 }

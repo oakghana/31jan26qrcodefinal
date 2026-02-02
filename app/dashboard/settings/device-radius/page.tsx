@@ -1,4 +1,4 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
+
 import { DeviceRadiusSettings } from "@/components/admin/device-radius-settings"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
@@ -35,8 +35,7 @@ export default async function DeviceRadiusPage() {
     .order("device_type")
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-heading font-bold text-foreground">Device Radius Settings</h1>
           <p className="text-muted-foreground mt-2">
@@ -47,6 +46,5 @@ export default async function DeviceRadiusPage() {
 
         <DeviceRadiusSettings initialSettings={deviceSettings || []} />
       </div>
-    </DashboardLayout>
   )
 }

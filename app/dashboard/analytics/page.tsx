@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { AnalyticsDashboard } from "@/components/admin/analytics-dashboard"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
@@ -19,8 +18,6 @@ export default async function AnalyticsPage() {
   }
 
   return (
-    <DashboardLayout>
-      <AnalyticsDashboard />
-    </DashboardLayout>
+    <AnalyticsDashboard />
   )
 }

@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { AttendanceAnalytics } from "@/components/attendance/attendance-analytics"
 import { RealTimeTracker } from "@/components/attendance/real-time-tracker"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -6,8 +5,7 @@ import { BarChart3, Activity, TrendingUp } from "lucide-react"
 
 export default function AttendanceTrackingPage() {
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <div className="space-y-8">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -49,6 +47,5 @@ export default function AttendanceTrackingPage() {
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
   )
 }

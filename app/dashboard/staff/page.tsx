@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { StaffManagement } from "@/components/admin/staff-management"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
@@ -18,15 +17,13 @@ export default async function StaffPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <div className="space-y-4">
-          <h1 className="text-4xl font-bold text-primary tracking-tight">Staff Management</h1>
-          <p className="text-lg text-muted-foreground">Manage QCC staff members, roles, and permissions</p>
-        </div>
-
-        <StaffManagement />
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <h1 className="text-4xl font-bold text-primary tracking-tight">Staff Management</h1>
+        <p className="text-lg text-muted-foreground">Manage QCC staff members, roles, and permissions</p>
       </div>
-    </DashboardLayout>
+
+      <StaffManagement />
+    </div>
   )
 }

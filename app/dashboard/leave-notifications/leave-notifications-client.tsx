@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -228,27 +227,23 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading leave notifications...</p>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading leave notifications...</p>
         </div>
-      </DashboardLayout>
+      </div>
     )
   }
 
   if (!["admin", "regional_manager", "department_head"].includes(userRole || "")) {
     return (
-      <DashboardLayout>
-        <Alert className="border-amber-200 bg-amber-50">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <AlertDescription className="text-amber-800">
-            You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
-          </AlertDescription>
-        </Alert>
-      </DashboardLayout>
+      <Alert className="border-amber-200 bg-amber-50">
+        <AlertCircle className="h-5 w-5 text-amber-600" />
+        <AlertDescription className="text-amber-800">
+          You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
+        </AlertDescription>
+      </Alert>
     )
   }
 
@@ -263,8 +258,7 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <div className="space-y-8">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -460,6 +454,6 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

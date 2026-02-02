@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import DashboardLayout from "@/components/dashboard/dashboard-layout"
 import UserManagementClient from "@/components/admin/user-management-client"
 
 export default async function UserManagementPage() {
@@ -36,8 +35,6 @@ export default async function UserManagementPage() {
     .order("name")
 
   return (
-    <DashboardLayout user={profile}>
-      <UserManagementClient users={users || []} departments={departments || []} currentUserRole={profile.role} />
-    </DashboardLayout>
+    <UserManagementClient users={users || []} departments={departments || []} currentUserRole={profile.role} />
   )
 }

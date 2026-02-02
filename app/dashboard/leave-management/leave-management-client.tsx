@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -201,8 +200,7 @@ export function LeaveManagementClient({
   const pendingNotifications = managerNotifications.filter((n) => n.status === "pending")
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <div className="space-y-8">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -616,6 +614,5 @@ export function LeaveManagementClient({
           )}
         </Tabs>
       </div>
-    </DashboardLayout>
   )
 }

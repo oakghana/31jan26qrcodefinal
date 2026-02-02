@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,12 +71,11 @@ export default async function SettingsPage() {
   const availableSettings = settingsSections.filter((section) => section.roles.includes(profile?.role || "staff"))
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-2">Manage system configuration and preferences</p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-2">Manage system configuration and preferences</p>
+      </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {availableSettings.map((section) => {
@@ -104,7 +102,6 @@ export default async function SettingsPage() {
             )
           })}
         </div>
-      </div>
-    </DashboardLayout>
+    </div>
   )
 }

@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { AttendanceRecorder } from "@/components/attendance/attendance-recorder"
 import { PersonalAttendanceHistory } from "@/components/attendance/personal-attendance-history"
 import { LocationPreviewCard } from "@/components/attendance/location-preview-card"
@@ -71,21 +70,20 @@ export default async function AttendancePage() {
   const isCheckedIn = !!enhancedAttendance && !enhancedAttendance.check_out_time
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <div className="space-y-3">
-          {/* Back to Dashboard Button - Always visible */}
-          <div className="flex items-center gap-2 mb-4">
-            <Button variant="outline" size="sm" asChild className="gap-2 hover:bg-primary/5">
-              <Link href="/dashboard">
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-                <Home className="h-4 w-4 sm:hidden" />
-              </Link>
-            </Button>
-          </div>
-          
-          <div className="flex items-center justify-between gap-4">
+    <div className="space-y-8">
+      {/* Back to Dashboard Button - Always visible */}
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" asChild className="gap-2 hover:bg-primary/5">
+          <Link href="/dashboard">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back to Dashboard</span>
+            <Home className="h-4 w-4 sm:hidden" />
+          </Link>
+        </Button>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/10 rounded-lg">
                 <Clock className="h-6 w-6 text-primary" />
@@ -103,7 +101,6 @@ export default async function AttendancePage() {
               leaveStatus={userProfile?.leave_status as "active" | "pending" | "approved" | "rejected" | "on_leave" | "sick_leave" | null}
             />
           </div>
-        </div>
 
         {/* Leave Status Card - Shows if user is on leave (not when status is 'active' which means at post) */}
         {userProfile?.leave_status && userProfile.leave_status !== "active" && (
@@ -144,6 +141,6 @@ export default async function AttendancePage() {
           </TabsContent>
         </Tabs>
       </div>
-    </DashboardLayout>
+    </div>
   )
 }

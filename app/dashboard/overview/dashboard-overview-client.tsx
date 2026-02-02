@@ -1,6 +1,5 @@
 "use client"
 
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { LeaveNotificationsCard } from "@/components/leave/leave-notifications-card"
@@ -28,8 +27,7 @@ export function DashboardOverviewClient({
   pendingApprovals,
 }: DashboardOverviewClientProps) {
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <div className="space-y-8">
         <div className="space-y-2">
           <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard</h1>
           <p className="text-lg text-muted-foreground font-medium">
@@ -123,19 +121,13 @@ export function DashboardOverviewClient({
               </div>
               <div className="text-center p-6 bg-gradient-to-br from-chart-3/5 to-chart-3/10 rounded-xl border border-chart-3/10">
                 <div className="text-lg font-heading font-bold text-chart-3 mb-2">
-                  {profile?.role === "admin"
-                    ? "Administrator"
-                    : profile?.role === "department_head"
-                      ? "Department Head"
-                      : "Staff"}
+                  {profile?.role === "admin" ? "Administrator" : profile?.role === "department_head" ? "Department Head" : "Staff"}
                 </div>
                 <div className="text-sm font-medium text-muted-foreground">Role</div>
               </div>
             </div>
           </CardContent>
         </Card>
-      </div>
-      <MobileAppDownload variant="dashboard" />
-    </DashboardLayout>
+    </div>
   )
 }

@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -161,8 +160,7 @@ export default async function InstructorDashboardPage() {
   const attendanceRate = expectedAttendance > 0 ? Math.round(((monthlyAttendance || 0) / expectedAttendance) * 100) : 0
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <div className="space-y-8">
         <div className="space-y-2">
           <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Instructor Dashboard</h1>
           <p className="text-lg text-muted-foreground font-medium">
@@ -468,6 +466,5 @@ export default async function InstructorDashboardPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
   )
 }
