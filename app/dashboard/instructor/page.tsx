@@ -57,8 +57,8 @@ export default async function InstructorDashboardPage() {
   const today = new Date().toISOString().split("T")[0]
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
-  // Get department students count
-  const { count: totalStudents } = await supabase
+  // Get department staff count
+  const { count: totalStaff } = await supabase
     .from("user_profiles")
     .select("*", { count: "exact", head: true })
     .eq("department_id", profile.department_id)
@@ -156,7 +156,7 @@ export default async function InstructorDashboardPage() {
 
   // Calculate attendance rate
   const currentDate = new Date().getDate()
-  const expectedAttendance = (totalStudents || 0) * currentDate
+  const expectedAttendance = (totalStaff || 0) * currentDate
   const attendanceRate = expectedAttendance > 0 ? Math.round(((monthlyAttendance || 0) / expectedAttendance) * 100) : 0
 
   return (
@@ -173,8 +173,8 @@ export default async function InstructorDashboardPage() {
         {/* Stats Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard
-            title="Total Students"
-            value={totalStudents || 0}
+            title="Total Staff"
+            value={totalStaff || 0}
             description="In your department"
             icon={Users}
             variant="default"
@@ -182,10 +182,10 @@ export default async function InstructorDashboardPage() {
 
           <StatsCard
             title="Today's Attendance"
-            value={`${todayAttendance || 0}/${totalStudents || 0}`}
-            description="Students present"
+            value={`${todayAttendance || 0}/${totalStaff || 0}`}
+            description="Staff present"
             icon={UserCheck}
-            variant={todayAttendance && totalStudents && todayAttendance >= totalStudents * 0.8 ? "success" : "default"}
+            variant={todayAttendance && totalStaff && todayAttendance >= totalStaff * 0.8 ? "success" : "default"}
           />
 
           <StatsCard
@@ -369,7 +369,7 @@ export default async function InstructorDashboardPage() {
                     <QrCode className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <p className="text-lg font-medium text-muted-foreground">No active events</p>
-                  <p className="text-sm text-muted-foreground mt-2">Create QR events for student attendance</p>
+                  <p className="text-sm text-muted-foreground mt-2">Create QR events for staff attendance</p>
                   <Button asChild className="mt-4" size="sm">
                     <Link href="/dashboard/qr-events">Create Event</Link>
                   </Button>
@@ -428,7 +428,7 @@ export default async function InstructorDashboardPage() {
                     <Activity className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <p className="text-lg font-medium text-muted-foreground">No recent activity</p>
-                  <p className="text-sm text-muted-foreground mt-2">Student attendance will appear here</p>
+                  <p className="text-sm text-muted-foreground mt-2">Staff attendance will appear here</p>
                 </div>
               )}
             </CardContent>
@@ -447,8 +447,8 @@ export default async function InstructorDashboardPage() {
           <CardContent>
             <div className="grid gap-6 md:grid-cols-4">
               <div className="text-center p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/10">
-                <div className="text-3xl font-heading font-bold text-primary mb-2">{totalStudents || 0}</div>
-                <div className="text-sm font-medium text-muted-foreground">Total Students</div>
+                <div className="text-3xl font-heading font-bold text-primary mb-2">{totalStaff || 0}</div>
+                <div className="text-sm font-medium text-muted-foreground">Total Staff</div>
               </div>
               <div className="text-center p-6 bg-gradient-to-br from-chart-2/5 to-chart-2/10 rounded-xl border border-chart-2/10">
                 <div className="text-3xl font-heading font-bold text-chart-2 mb-2">{todayAttendance || 0}</div>

@@ -259,26 +259,26 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
 
   return (
     <div className="space-y-8">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Bell className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">
-                Leave Notifications
-              </h1>
-              <p className="text-lg text-muted-foreground font-medium mt-1">
-                Manage leave requests from your team
-              </p>
-            </div>
-            <Badge className={`ml-auto ${roleBadge[userRole as keyof typeof roleBadge]?.color || ""} border font-semibold`}>
-              {roleBadge[userRole as keyof typeof roleBadge]?.label}
-            </Badge>
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Bell className="h-6 w-6 text-primary" />
           </div>
+          <div>
+            <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">
+              Leave Notifications
+            </h1>
+            <p className="text-lg text-muted-foreground font-medium mt-1">
+              Manage leave requests from your team
+            </p>
+          </div>
+          <Badge className={`ml-auto ${roleBadge[userRole as keyof typeof roleBadge]?.color || ""} border font-semibold`}>
+            {roleBadge[userRole as keyof typeof roleBadge]?.label}
+          </Badge>
         </div>
+      </div>
 
-        {notifications.length === 0 ? (
+      {notifications.length === 0 ? (
           <Card className="border-0 shadow-sm">
             <CardContent className="pt-12 pb-12">
               <div className="text-center">
@@ -338,18 +338,17 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
                 ) : (
                   <div className="grid gap-4">
                     {pendingNotifications.map((notif) => (
-                      <div key={notif.id} onClick={() => console.log(notif)}>
-                        <LeaveNotificationCard
-                          notification={notif}
-                          isManager={true}
-                          onApprove={() => handleApprove(notif.id)}
-                          onReject={() => {
-                            setSelectedNotifId(notif.id)
-                            setShowRejectDialog(true)
-                          }}
-                          onDismiss={handleDismiss}
-                        />
-                      </div>
+                      <LeaveNotificationCard
+                        key={notif.id}
+                        notification={notif}
+                        isManager={true}
+                        onApprove={() => handleApprove(notif.id)}
+                        onReject={() => {
+                          setSelectedNotifId(notif.id)
+                          setShowRejectDialog(true)
+                        }}
+                        onDismiss={handleDismiss}
+                      />
                     ))}
                   </div>
                 )}
@@ -405,55 +404,6 @@ export function LeaveNotificationsClient({ userRole }: LeaveNotificationsClientP
             </div>
           </Tabs>
         )}
-      </div>
-
-      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Leave Request</DialogTitle>
-            <DialogDescription>
-              Provide a reason for rejecting this leave request. The staff member will be notified.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              placeholder="Enter reason for rejection (optional)"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              className="min-h-[100px]"
-            />
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowRejectDialog(false)
-                  setRejectionReason("")
-                  setSelectedNotifId(null)
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleReject}
-                disabled={processingId === selectedNotifId}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {processingId === selectedNotifId ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Rejecting...
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject Request
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

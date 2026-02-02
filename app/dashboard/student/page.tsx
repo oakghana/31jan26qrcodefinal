@@ -95,7 +95,7 @@ export default async function StudentDashboardPage() {
   return (
     <div className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Student Dashboard</h1>
+        <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Staff Dashboard</h1>
         <p className="text-lg text-muted-foreground font-medium">
           Welcome back,{" "}
           <span className="text-primary font-semibold">{profile?.first_name || user.email?.split("@")[0]}</span>{" "}
@@ -166,7 +166,7 @@ export default async function StudentDashboardPage() {
                   <Activity className="h-5 w-5 text-primary" />
                   Quick Actions
                 </CardTitle>
-                <CardDescription className="text-base">Common student tasks</CardDescription>
+                <CardDescription className="text-base">Common staff tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button asChild className="w-full justify-start h-12 bg-transparent" variant="outline">
@@ -322,7 +322,7 @@ export default async function StudentDashboardPage() {
               </div>
               <div className="text-center p-6 bg-gradient-to-br from-chart-5/5 to-chart-5/10 rounded-xl border border-chart-5/10">
                 <div className="text-lg font-heading font-bold text-chart-5 mb-2">
-                  {profile?.role === "staff" ? "Student" : profile?.role || "N/A"}
+                  {profile?.role === "staff" ? "Staff" : profile?.role || "N/A"}
                 </div>
                 <div className="text-sm font-medium text-muted-foreground">Status</div>
               </div>
