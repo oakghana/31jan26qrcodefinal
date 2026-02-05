@@ -110,6 +110,8 @@ export function AttendanceReports() {
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [recordsPerPage, setRecordsPerPage] = useState(50)
 
   const [analyticsData, setAnalyticsData] = useState({
     dailyTrends: [],
@@ -128,6 +130,7 @@ export function AttendanceReports() {
     fetchUsers()
     fetchLocations()
     fetchDistricts()
+    setCurrentPage(1) // Reset to page 1 when filters change
   }, [startDate, endDate, selectedDepartment, selectedUser, selectedLocation, selectedDistrict])
 
   const fetchReport = async () => {
@@ -395,6 +398,14 @@ export function AttendanceReports() {
 
     return filtered
   }, [records, selectedDepartment, selectedUser, selectedLocation, selectedDistrict])
+
+  // Pagination calculation
+  const totalPages = Math.ceil(filteredRecords.length / recordsPerPage)
+  const paginatedRecords = useMemo(() => {
+    const startIdx = (currentPage - 1) * recordsPerPage
+    const endIdx = startIdx + recordsPerPage
+    return filteredRecords.slice(startIdx, endIdx)
+  }, [filteredRecords, currentPage, recordsPerPage])
 
   const presentCount = useMemo(() => records.filter((r) => r.status === "present" || r.check_in_time).length, [records])
 
@@ -837,10 +848,18 @@ export function AttendanceReports() {
         <TabsContent value="details" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Detailed Attendance Records</CardTitle>
-              <CardDescription>
-                Complete attendance entries for the selected period with location tracking
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Detailed Attendance Records</CardTitle>
+                  <CardDescription>
+                    Complete attendance entries for the selected period with location tracking
+                  </CardDescription>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold">{filteredRecords.length}</div>
+                  <p className="text-sm text-muted-foreground">Total Records</p>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="border rounded-lg">
@@ -874,7 +893,7 @@ export function AttendanceReports() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredRecords.map((record) => (
+                      paginatedRecords.map((record) => (
                         <TableRow key={record.id}>
                           <TableCell>{new Date(record.check_in_time).toLocaleDateString()}</TableCell>
                           <TableCell>
@@ -957,10 +976,101 @@ export function AttendanceReports() {
                   </TableBody>
                 </Table>
               </div>
-              {records.length > 50 && (
-                <p className="text-sm text-muted-foreground mt-4">
-                  Showing first 50 records. Export CSV for complete data.
-                </p>
+              {filteredRecords.length > 0 && (
+                <div className="flex flex-col gap-4 mt-6 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Show per page:</span>
+                      <Select value={recordsPerPage.toString()} onValueChange={(val) => {
+                        setRecordsPerPage(Number(val))
+                        setCurrentPage(1)
+                      }}>
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="25">25</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                          <SelectItem value="250">250</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      Showing {((currentPage - 1) * recordsPerPage) + 1} to {Math.min(currentPage * recordsPerPage, filteredRecords.length)} of {filteredRecords.length} records
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                    >
+                      First
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const pageNum = i + 1
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        )
+                      })}
+                      {totalPages > 5 && (
+                        <>
+                          <span className="text-muted-foreground">...</span>
+                          <Button
+                            variant={currentPage === totalPages ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(totalPages)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {totalPages}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                    >
+                      Last
+                    </Button>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Page {currentPage} of {totalPages}
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
