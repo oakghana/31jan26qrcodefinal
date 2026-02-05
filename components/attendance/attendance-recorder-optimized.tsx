@@ -11,6 +11,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { MapPin, LogIn, LogOut, Loader2, CheckCircle2, AlertTriangle } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 // Memoized sub-components to prevent unnecessary re-renders
 const AttendanceStatus = memo(function AttendanceStatus({ attendance }: { attendance: any }) {
@@ -70,6 +78,8 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
   const [success, setSuccess] = useState<string | null>(null)
   const [lateReason, setLateReason] = useState("")
   const [isLateArrival, setIsLateArrival] = useState(false)
+  const [showLateReasonDialog, setShowLateReasonDialog] = useState(false)
+  const [pendingCheckInData, setPendingCheckInData] = useState<any>(null)
   
   // Ref for preventing duplicate requests
   const requestInProgressRef = useRef(false)
@@ -143,12 +153,13 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
     const now = new Date()
     const isLate = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
     
-    // If it's after 9 AM and no reason provided, show error
-    if (isLate && !lateReason.trim()) {
-      setError("Please provide a reason for your late arrival before checking in.")
+    // If it's after 9 AM and user hasn't provided a reason yet, show dialog
+    if (isLate && !attendance?.check_in_time) {
+      setShowLateReasonDialog(true)
       return
     }
     
+    // Proceed with check-in if reason is provided or it's before 9 AM
     const result = await makeRequest("/api/attendance/check-in", "POST", {
       device_info: getDeviceInfo(),
       late_reason: isLate ? lateReason : null,
@@ -159,9 +170,10 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
       setAttendance(result.attendance)
       setLateReason("")
       setIsLateArrival(false)
+      setShowLateReasonDialog(false)
       setTimeout(() => setSuccess(null), 5000)
     }
-  }, [makeRequest, lateReason])
+  }, [makeRequest, lateReason, attendance?.check_in_time])
 
   // Handle check-out
   const handleCheckOut = useCallback(async () => {
@@ -183,21 +195,6 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
       requestInProgressRef.current = false
     }
   }, [])
-
-  // Check if current time is after 9 AM when component mounts
-  useEffect(() => {
-    const checkIfLate = () => {
-      const now = new Date()
-      const isAfter9AM = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
-      
-      // If it's after 9 AM and user hasn't checked in yet, show the late reason prompt
-      if (isAfter9AM && !attendance?.check_in_time) {
-        setIsLateArrival(true)
-      }
-    }
-
-    checkIfLate()
-  }, [attendance?.check_in_time])
 
   if (isOnLeave) {
     return (
@@ -229,36 +226,6 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
           <AlertTitle className="text-green-900">Success</AlertTitle>
           <AlertDescription className="text-green-800">{success}</AlertDescription>
         </Alert>
-      )}
-
-      {isLateArrival && !attendance?.check_in_time && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardHeader>
-            <CardTitle className="text-orange-900 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
-              Late Arrival Reason
-            </CardTitle>
-            <CardDescription>Please provide a reason for your late arrival (after 9:00 AM)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="late-reason" className="text-orange-900">
-                  Reason for Late Arrival <span className="text-red-600">*</span>
-                </Label>
-                <Textarea
-                  id="late-reason"
-                  placeholder="e.g., Traffic congestion, Public transport delay, Personal emergency..."
-                  value={lateReason}
-                  onChange={(e) => setLateReason(e.target.value)}
-                  className="mt-2 min-h-24"
-                  maxLength={250}
-                />
-                <p className="text-xs text-orange-700 mt-1">{lateReason.length}/250 characters</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       <div className="flex gap-4">
@@ -301,6 +268,63 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
           )}
         </Button>
       </div>
+
+      <Dialog open={showLateReasonDialog} onOpenChange={setShowLateReasonDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              Late Arrival
+            </DialogTitle>
+            <DialogDescription>
+              You are checking in after 9:00 AM. Please provide a reason for your late arrival.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="late-reason-dialog">
+                Reason for Late Arrival <span className="text-red-600">*</span>
+              </Label>
+              <Textarea
+                id="late-reason-dialog"
+                placeholder="e.g., Traffic congestion, Public transport delay, Personal emergency..."
+                value={lateReason}
+                onChange={(e) => setLateReason(e.target.value)}
+                className="mt-2 min-h-24"
+                maxLength={250}
+              />
+              <p className="text-xs text-muted-foreground mt-1">{lateReason.length}/250 characters</p>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowLateReasonDialog(false)
+                setLateReason("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCheckIn}
+              disabled={!lateReason.trim() || isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Checking In...
+                </>
+              ) : (
+                <>
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Confirm Check In
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 })
