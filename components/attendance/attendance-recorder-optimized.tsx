@@ -143,8 +143,8 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
     const now = new Date()
     const isLate = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
     
+    // If it's after 9 AM and no reason provided, show error
     if (isLate && !lateReason.trim()) {
-      setIsLateArrival(true)
       setError("Please provide a reason for your late arrival before checking in.")
       return
     }
@@ -183,6 +183,21 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
       requestInProgressRef.current = false
     }
   }, [])
+
+  // Check if current time is after 9 AM when component mounts
+  useEffect(() => {
+    const checkIfLate = () => {
+      const now = new Date()
+      const isAfter9AM = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
+      
+      // If it's after 9 AM and user hasn't checked in yet, show the late reason prompt
+      if (isAfter9AM && !attendance?.check_in_time) {
+        setIsLateArrival(true)
+      }
+    }
+
+    checkIfLate()
+  }, [attendance?.check_in_time])
 
   if (isOnLeave) {
     return (
