@@ -90,7 +90,6 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     // Check if user is on leave
-    const today = new Date().toISOString().split("T")[0]
     const { data: leaveStatus } = await supabase
       .from("leave_status")
       .select("*")
