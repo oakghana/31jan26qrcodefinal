@@ -460,7 +460,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (attendanceError) {
-      console.error("Attendance error:", attendanceError)
+      console.error("[v0] Attendance database error:", {
+        code: attendanceError.code,
+        message: attendanceError.message,
+        details: attendanceError.details,
+        hint: attendanceError.hint,
+      })
 
       // Check if error is due to unique constraint violation
       if (attendanceError.code === "23505" || attendanceError.message?.includes("idx_unique_daily_checkin")) {
@@ -474,8 +479,29 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Check for foreign key constraint violations
+      if (attendanceError.code === "23503") {
+        console.error("[v0] Foreign key constraint violation - location or user may not exist")
+        return NextResponse.json(
+          { error: "Location or user information is invalid. Please refresh the page and try again." },
+          { status: 400 }
+        )
+      }
+
+      // Check for not null constraint violations
+      if (attendanceError.code === "23502") {
+        console.error("[v0] Not null constraint violation:", attendanceError.message)
+        return NextResponse.json(
+          { error: "Missing required attendance information. Please try again." },
+          { status: 400 }
+        )
+      }
+
       return NextResponse.json(
-        { error: "Failed to record attendance" },
+        { 
+          error: "Failed to record attendance. Please try again.",
+          details: process.env.NODE_ENV === "development" ? attendanceError.message : undefined
+        },
         {
           status: 500,
           headers: {

@@ -897,6 +897,18 @@ export function AttendanceRecorder({
       }
 
       console.log("[v0] Sending check-in request to API...")
+      console.log("[v0] Check-in data to send:", {
+        device_info: checkInData.device_info?.device_type,
+        location_id: checkInData.location_id,
+        latitude: checkInData.latitude,
+        longitude: checkInData.longitude,
+        qr_code_used: checkInData.qr_code_used
+      })
+      
+      if (!checkInData.location_id) {
+        throw new Error("Location ID is missing. Unable to proceed with check-in.")
+      }
+      
       const response = await fetch("/api/attendance/check-in", {
         method: "POST",
         headers: {
@@ -908,7 +920,12 @@ export function AttendanceRecorder({
       })
 
       const result = await response.json()
-      console.log("[v0] Check-in API response:", result)
+      console.log("[v0] Check-in API response:", {
+        ok: response.ok,
+        status: response.status,
+        data: result,
+        checkInDataSent: checkInData
+      })
 
       if (!response.ok) {
         // Handle completed work for the day with friendly message

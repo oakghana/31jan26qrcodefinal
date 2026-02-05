@@ -437,8 +437,19 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (updateError) {
-      console.error("[v0] Update error:", updateError)
-      return NextResponse.json({ error: `Failed to record check-out: ${updateError.message}` }, { status: 500 })
+      console.error("[v0] Update error details:", {
+        code: updateError.code,
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+      })
+      return NextResponse.json(
+        { 
+          error: "Failed to record check-out. Please try again.",
+          details: process.env.NODE_ENV === "development" ? updateError.message : undefined
+        },
+        { status: 500 }
+      )
     }
 
     try {
