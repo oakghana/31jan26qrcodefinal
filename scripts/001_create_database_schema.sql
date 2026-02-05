@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_records (
     work_hours DECIMAL(4, 2),
     status VARCHAR(20) DEFAULT 'present' CHECK (status IN ('present', 'late', 'absent', 'half_day')),
     notes TEXT,
+    late_reason TEXT,
     device_session_id UUID REFERENCES public.device_sessions(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

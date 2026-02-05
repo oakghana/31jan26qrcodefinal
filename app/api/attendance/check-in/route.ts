@@ -423,6 +423,7 @@ export async function POST(request: NextRequest) {
       check_in_method: qr_code_used ? "qr_code" : "gps",
       check_in_location_name: locationData?.name || null,
       is_remote_location: false, // Will be calculated based on user's assigned location
+      late_reason: isLateArrival && body.late_reason ? body.late_reason.trim() : null,
     }
 
     // Add GPS coordinates only if available

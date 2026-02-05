@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { MapPin, LogIn, LogOut, Loader2, CheckCircle2, AlertTriangle } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 // Memoized sub-components to prevent unnecessary re-renders
 const AttendanceStatus = memo(function AttendanceStatus({ attendance }: { attendance: any }) {
@@ -66,6 +68,8 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
   const [attendance, setAttendance] = useState(initialAttendance)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [lateReason, setLateReason] = useState("")
+  const [isLateArrival, setIsLateArrival] = useState(false)
   
   // Ref for preventing duplicate requests
   const requestInProgressRef = useRef(false)
@@ -134,16 +138,30 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
   // Handle check-in
   const handleCheckIn = useCallback(async () => {
     console.log("[v0] Check-in initiated")
+    
+    // Check if current time is after 9:00 AM
+    const now = new Date()
+    const isLate = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0)
+    
+    if (isLate && !lateReason.trim()) {
+      setIsLateArrival(true)
+      setError("Please provide a reason for your late arrival before checking in.")
+      return
+    }
+    
     const result = await makeRequest("/api/attendance/check-in", "POST", {
       device_info: getDeviceInfo(),
+      late_reason: isLate ? lateReason : null,
     })
 
     if (result?.success) {
       setSuccess("Successfully checked in!")
       setAttendance(result.attendance)
+      setLateReason("")
+      setIsLateArrival(false)
       setTimeout(() => setSuccess(null), 5000)
     }
-  }, [makeRequest])
+  }, [makeRequest, lateReason])
 
   // Handle check-out
   const handleCheckOut = useCallback(async () => {
@@ -196,6 +214,36 @@ export const AttendanceRecorderOptimized = memo(function AttendanceRecorderOptim
           <AlertTitle className="text-green-900">Success</AlertTitle>
           <AlertDescription className="text-green-800">{success}</AlertDescription>
         </Alert>
+      )}
+
+      {isLateArrival && !attendance?.check_in_time && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="text-orange-900 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Late Arrival Reason
+            </CardTitle>
+            <CardDescription>Please provide a reason for your late arrival (after 9:00 AM)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="late-reason" className="text-orange-900">
+                  Reason for Late Arrival <span className="text-red-600">*</span>
+                </Label>
+                <Textarea
+                  id="late-reason"
+                  placeholder="e.g., Traffic congestion, Public transport delay, Personal emergency..."
+                  value={lateReason}
+                  onChange={(e) => setLateReason(e.target.value)}
+                  className="mt-2 min-h-24"
+                  maxLength={250}
+                />
+                <p className="text-xs text-orange-700 mt-1">{lateReason.length}/250 characters</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <div className="flex gap-4">
