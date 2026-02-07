@@ -94,14 +94,14 @@ export async function POST(request: NextRequest) {
     const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
 
     // Check if user is on leave
-    const today = new Date().toISOString().split("T")[0]
+    const todayForLeave = new Date().toISOString().split("T")[0]
     const { data: leaveStatus } = await supabase
       .from("leave_status")
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "on_leave")
-      .gte("end_date", today)
-      .lte("start_date", today)
+      .gte("end_date", todayForLeave)
+      .lte("start_date", todayForLeave)
       .maybeSingle()
 
     if (leaveStatus) {
