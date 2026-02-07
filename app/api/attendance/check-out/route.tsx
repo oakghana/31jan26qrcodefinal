@@ -356,6 +356,8 @@ export async function POST(request: NextRequest) {
       .from("user_profiles")
       .select(`
         assigned_location_id,
+        department_id,
+        departments(code, name),
         assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
           id,
           name,
@@ -366,9 +368,12 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle()
 
+    // Security and Research departments have rotating shifts - exempt from reason requirements
+    const isShiftDepartment = userProfileData?.departments?.code === 'SEC' || userProfileData?.departments?.code === 'RES'
+
     // Get location-specific checkout end time (default to 17:00 if not set)
     const checkOutEndTime = userProfileData?.assigned_location?.check_out_end_time || "17:00"
-    const requireEarlyCheckoutReason = userProfileData?.assigned_location?.require_early_checkout_reason ?? true
+    const requireEarlyCheckoutReason = !isShiftDepartment && (userProfileData?.assigned_location?.require_early_checkout_reason ?? true)
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)

@@ -1086,7 +1086,10 @@ export function AttendanceRecorder({
       // Fetch location-specific working hours configuration
       const assignedLocation = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
       const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
-      const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
+      
+      // Security and Research departments have rotating shifts - exempt from reason requirements
+      const isShiftDepartment = userProfile?.departments?.code === 'SEC' || userProfile?.departments?.code === 'RES'
+      const requireEarlyCheckoutReason = !isShiftDepartment && (assignedLocation?.require_early_checkout_reason ?? true)
       
       // Parse checkout end time (HH:MM format)
       const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
