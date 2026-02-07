@@ -90,7 +90,8 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     // Security and Research departments have rotating shifts - exempt from time restrictions
-    const isShiftDepartment = userProfile?.departments?.code === 'SEC' || userProfile?.departments?.code === 'RES'
+    const departmentCode = (userProfile?.departments as any)?.code
+    const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
 
     // Check if user is on leave
     const today = new Date().toISOString().split("T")[0]

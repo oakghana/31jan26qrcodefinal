@@ -1088,7 +1088,8 @@ export function AttendanceRecorder({
       const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
       
       // Security and Research departments have rotating shifts - exempt from reason requirements
-      const isShiftDepartment = userProfile?.departments?.code === 'SEC' || userProfile?.departments?.code === 'RES'
+      const departmentCode = userProfile?.departments?.code as string | undefined
+      const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
       const requireEarlyCheckoutReason = !isShiftDepartment && (assignedLocation?.require_early_checkout_reason ?? true)
       
       // Parse checkout end time (HH:MM format)

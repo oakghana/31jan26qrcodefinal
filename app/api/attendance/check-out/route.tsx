@@ -369,11 +369,12 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     // Security and Research departments have rotating shifts - exempt from reason requirements
-    const isShiftDepartment = userProfileData?.departments?.code === 'SEC' || userProfileData?.departments?.code === 'RES'
+    const departmentCode = (userProfileData?.departments as any)?.code
+    const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
 
     // Get location-specific checkout end time (default to 17:00 if not set)
-    const checkOutEndTime = userProfileData?.assigned_location?.check_out_end_time || "17:00"
-    const requireEarlyCheckoutReason = !isShiftDepartment && (userProfileData?.assigned_location?.require_early_checkout_reason ?? true)
+    const checkOutEndTime = (userProfileData?.assigned_location as any)?.check_out_end_time || "17:00"
+    const requireEarlyCheckoutReason = !isShiftDepartment && ((userProfileData?.assigned_location as any)?.require_early_checkout_reason ?? true)
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
