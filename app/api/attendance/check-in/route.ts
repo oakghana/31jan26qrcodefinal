@@ -85,9 +85,12 @@ export async function POST(request: NextRequest) {
 
     const { data: userProfile } = await supabase
       .from("user_profiles")
-      .select("first_name, last_name, assigned_location_id")
+      .select("first_name, last_name, assigned_location_id, department_id, departments(code, name)")
       .eq("id", user.id)
       .maybeSingle()
+
+    // Security and Research departments have rotating shifts - exempt from time restrictions
+    const isShiftDepartment = userProfile?.departments?.code === 'SEC' || userProfile?.departments?.code === 'RES'
 
     // Check if user is on leave
     const today = new Date().toISOString().split("T")[0]
