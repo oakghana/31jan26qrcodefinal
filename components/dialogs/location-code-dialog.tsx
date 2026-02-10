@@ -184,7 +184,7 @@ export function LocationCodeDialog({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Code is printed on your location QR poster or ask your supervisor
+                Ask your supervisor for your location code
               </p>
             </div>
           </div>

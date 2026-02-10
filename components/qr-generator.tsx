@@ -209,7 +209,7 @@ export function QRGenerator() {
             <QrCode className="h-5 w-5" />
             Generate QR Code for Event
           </CardTitle>
-          <CardDescription>Create a QR code for student attendance tracking at specific events</CardDescription>
+          <CardDescription>Create a QR code for staff attendance tracking at specific events</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={generateQRCode} className="space-y-4">

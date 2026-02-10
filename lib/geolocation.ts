@@ -73,7 +73,7 @@ export function detectWindowsLocationCapabilities(): {
     browserName = "Opera"
     hasKnownIssues = true
     issueDescription =
-      "Opera browser on Windows has known GPS accuracy issues and often uses IP-based location (very inaccurate). We strongly recommend using Chrome or Edge for GPS check-in, or use the QR code option for reliable attendance."
+      "Opera browser on Windows has known GPS accuracy issues and often uses IP-based location (very inaccurate). We strongly recommend using Chrome or Edge for better GPS check-in accuracy."
   } else if (userAgent.includes("firefox")) {
     browserName = "Firefox"
   } else if (userAgent.includes("edg/")) {
@@ -343,10 +343,10 @@ Windows Location Setup:
 4. In your browser, click the location icon in the address bar and select "Allow"
 5. Refresh this page and try again
 
-Alternative: Use the QR code option for attendance.`
+Alternative: Try refreshing the page and enabling location permissions.`
               } else {
                 message =
-                  "Location access denied. Please enable location permissions in your browser settings and try again, or use the QR code option instead."
+                  "Location access denied. Please enable location permissions in your browser settings and try again."
               }
               break
             case error.POSITION_UNAVAILABLE:
@@ -357,25 +357,23 @@ Troubleshooting:
 1. Check if Windows Location Services are enabled in Settings
 2. Ensure you have an active internet connection for Wi-Fi positioning
 3. Try moving to a location with better GPS signal (near a window)
-4. Use the QR code option as an alternative`
+4. Try refreshing the page and attempting again`
               } else {
                 message =
-                  "Location information is unavailable. Please check your GPS settings or use the QR code option."
+                  "Location information is unavailable. Please check your GPS settings and try again."
               }
               break
             case error.TIMEOUT:
               if (capabilities.isWindows) {
                 message = "Windows Location Services timed out."
                 guidance = `
-Quick fix: Use the QR code option below for instant check-in/check-out
-
-If you prefer GPS:
+Please try the following:
 1. Enable Windows Location Services in Settings → Privacy & Security → Location
 2. Ensure internet connection is active
 3. Move near a window for better signal
-4. Try again`
+4. Refresh the page and try again`
               } else {
-                message = "Location request timed out. Please use the QR code option below or try again."
+                message = "Location request timed out. Please try again."
               }
               break
           }
@@ -470,29 +468,28 @@ export function isWithinGeofence(
 
 ${capabilities.issueDescription}
 
-RECOMMENDED SOLUTION: Use the QR Code option below for instant and accurate check-in/check-out.`
+RECOMMENDED: Switch to Chrome or Microsoft Edge browser for better GPS accuracy.`
       : `⚠️ CRITICAL: GPS accuracy is extremely poor (${(userLocation.accuracy / 1000).toFixed(1)}km)!
 
 Your browser is using IP-based location instead of GPS, making it highly inaccurate.
 
 RECOMMENDED SOLUTIONS:
-1. Use the QR Code option below for instant check-in/check-out (FASTEST)
-2. Switch to Chrome or Microsoft Edge browser for better GPS accuracy
-3. Enable Windows Location Services in Settings → Privacy & Security → Location`
+1. Switch to Chrome or Microsoft Edge browser for better GPS accuracy
+2. Enable Windows Location Services in Settings → Privacy & Security → Location
+3. Move near a window for better GPS signal`
   } else if (userLocation.accuracy > 100) {
     accuracyWarning = capabilities.hasKnownIssues
       ? `GPS accuracy is poor (${Math.round(userLocation.accuracy)}m). 
 
 Browser: ${capabilities.browserName} - Known GPS issues on Windows.
 
-RECOMMENDED: Use QR code for reliable check-in, or switch to Chrome/Edge browser.`
+RECOMMENDED: Switch to Chrome/Edge browser for better accuracy.`
       : capabilities.isWindows
         ? `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For better accuracy on Windows:
 • Move near a window for better GPS signal
 • Ensure Windows Location Services are enabled
-• Check that Wi-Fi is connected for assisted positioning
-• Or use QR code for instant check-in`
-        : "GPS accuracy is low. Please ensure you have a clear view of the sky for better location precision, or use QR code."
+• Check that Wi-Fi is connected for assisted positioning`
+        : "GPS accuracy is low. Please ensure you have a clear view of the sky for better location precision."
   }
 
   return {
@@ -631,31 +628,30 @@ export function validateAttendanceLocation(
 Browser: ${capabilities.browserName}
 ${capabilities.issueDescription}
 
-✅ SOLUTION: Use the QR Code button below for instant and accurate attendance tracking!`
+RECOMMENDED: Switch to Chrome or Microsoft Edge browser for better GPS accuracy.`
       : `⚠️ CRITICAL GPS ISSUE: Your location accuracy is ${(userLocation.accuracy / 1000).toFixed(1)}km!
 
 Your browser is using IP-based location (very inaccurate) instead of actual GPS.
 
 SOLUTIONS:
-✅ Use QR Code option below (FASTEST & MOST RELIABLE)
-🌐 Switch to Chrome or Microsoft Edge browser for better GPS
-⚙️ Enable Windows Location Services in Settings`
+1. Switch to Chrome or Microsoft Edge browser for better GPS
+2. Enable Windows Location Services in Settings
+3. Move near a window for better GPS signal`
   } else if (userLocation.accuracy > 100) {
     accuracyWarning = capabilities.hasKnownIssues
       ? `⚠️ Poor GPS accuracy (${Math.round(userLocation.accuracy)}m)
 
 Browser: ${capabilities.browserName} has known GPS issues on Windows.
 
-RECOMMENDED: Use QR code or switch to Chrome/Edge for better accuracy.`
+RECOMMENDED: Switch to Chrome/Edge for better accuracy.`
       : capabilities.isWindows
         ? `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For better accuracy:
 • Move near a window for better GPS signal  
 • Ensure Windows Location Services are enabled
-• Connect to Wi-Fi for assisted positioning
-• Or use QR code for guaranteed check-in`
-        : `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). Consider using QR code for reliable check-in.`
+• Connect to Wi-Fi for assisted positioning`
+        : `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). Try moving to an area with better GPS signal.`
   } else if (userLocation.accuracy > 30 && userLocation.accuracy <= 100) {
-    accuracyWarning = `GPS accuracy: ${Math.round(userLocation.accuracy)}m (proximity range: ${displayDistance}m). Consider using QR code for guaranteed check-in.`
+    accuracyWarning = `GPS accuracy: ${Math.round(userLocation.accuracy)}m (proximity range: ${displayDistance}m). Try moving closer to the location for better results.`
   }
 
   return {
@@ -723,7 +719,7 @@ export function validateCheckoutLocation(
       canCheckOut: false,
       nearestLocation: nearest.location,
       distance: nearest.distance,
-      message: `Your GPS accuracy is too poor (${(userLocation.accuracy / 1000).toFixed(1)}km) for location verification. Please use QR code checkout, move to an area with better GPS signal, or try switching to Chrome/Edge browser.`,
+      message: `Your GPS accuracy is too poor (${(userLocation.accuracy / 1000).toFixed(1)}km) for location verification. Please move to an area with better GPS signal, or try switching to Chrome/Edge browser.`,
       accuracyWarning: `GPS accuracy: ${(userLocation.accuracy / 1000).toFixed(1)}km - too inaccurate for GPS checkout`,
     }
   }
@@ -747,11 +743,11 @@ export function validateCheckoutLocation(
 • Check Windows Location Services settings
 • Ensure good GPS signal reception
 • Verify Wi-Fi connection for assisted positioning
-• Consider using QR code for guaranteed check-out`
+• Try refreshing and attempting again`
       : `GPS accuracy is low (${Math.round(userLocation.accuracy)}m). For best results with ${displayDistance}m proximity range:
 • Ensure you have a clear view of the sky
 • Move to a location with better GPS signal
-• Use QR code option for instant check-out`
+• Try refreshing the page and attempting again`
   }
 
   return {
@@ -767,7 +763,7 @@ export async function requestLocationPermission(): Promise<{ granted: boolean; m
   if (!navigator.geolocation) {
     return {
       granted: false,
-      message: "Geolocation is not supported by this browser. Please use the QR code option instead.",
+      message: "Geolocation is not supported by this browser. Please try using Chrome or Edge instead.",
     }
   }
 
@@ -794,14 +790,12 @@ export async function requestLocationPermission(): Promise<{ granted: boolean; m
    • Select "Allow" for location access
    • Refresh the page and try again
 
-Alternative: Use the QR code option for attendance.`
+Alternative: Try refreshing the page after enabling permissions.`
           : `Location access is blocked. Please enable location permissions in your browser settings:
 
-1. Click the location icon (🔒) in your browser's address bar
+1. Click the location icon in your browser's address bar
 2. Select 'Allow' for location access
-3. Refresh the page and try again
-
-Alternatively, use the QR code option for attendance.`
+3. Refresh the page and try again`
 
         return { granted: false, message }
       }
@@ -824,20 +818,18 @@ Alternatively, use the QR code option for attendance.`
    • Select "Allow" for location access
    • Refresh the page and try again
 
-Or use the QR code option for attendance tracking.`
+Try refreshing the page after enabling permissions.`
         : `Location access denied. To enable:
 
-1. Click the location icon (🔒) in your browser's address bar
+1. Click the location icon in your browser's address bar
 2. Select "Allow" for location access
-3. Refresh the page and try again
-
-Or use the QR code option for attendance tracking.`
+3. Refresh the page and try again`
 
       return { granted: false, message }
     }
     return {
       granted: false,
-      message: error instanceof Error ? error.message : "Failed to access location. Please use the QR code option.",
+      message: error instanceof Error ? error.message : "Failed to access location. Please try again or use a different browser.",
     }
   }
 }
@@ -857,7 +849,7 @@ export function getWindowsLocationTroubleshooting(): {
         "Check GPS settings on your device",
         "Ensure you have internet connectivity",
       ],
-      quickFixes: ["Try refreshing the page", "Use QR code for attendance instead"],
+      quickFixes: ["Try refreshing the page", "Try using Chrome or Edge browser"],
     }
   }
 
@@ -875,7 +867,7 @@ export function getWindowsLocationTroubleshooting(): {
       "Connect to Wi-Fi for improved location accuracy",
       "Move to an area with better GPS signal (near windows)",
       "Restart your browser and try again",
-      "Use QR code for immediate attendance tracking",
+      "Try refreshing the page and attempting again",
     ],
   }
 }

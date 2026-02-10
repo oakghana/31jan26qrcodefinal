@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, Award, TrendingUp, Zap, ArrowRight, BookOpen, Calendar } from "lucide-react"
+import { Clock, Award, TrendingUp, Zap, ArrowRight, Calendar } from "lucide-react"
 import Link from "next/link"
 
 export function StudentQuickActions() {
@@ -52,17 +52,7 @@ export function StudentQuickActions() {
       iconBg: "bg-gradient-to-br from-accent/10 to-accent/20",
       iconColor: "text-accent",
     },
-    {
-      title: "Study Resources",
-      description: "Course materials",
-      href: "/dashboard/resources",
-      icon: BookOpen,
-      gradient: "from-chart-2/5 via-chart-2/8 to-chart-2/12",
-      hoverGradient: "hover:from-chart-2/10 hover:via-chart-2/15 hover:to-chart-2/20",
-      border: "border-chart-2/20 hover:border-chart-2/30",
-      iconBg: "bg-gradient-to-br from-chart-2/10 to-chart-2/20",
-      iconColor: "text-chart-2",
-    },
+
   ]
 
   return (
@@ -72,9 +62,9 @@ export function StudentQuickActions() {
           <div className="p-2 bg-gradient-to-br from-primary/10 to-primary/20 rounded-xl shadow-sm">
             <Zap className="h-5 w-5 text-primary" />
           </div>
-          Student Actions
+          Quick Actions
         </CardTitle>
-        <CardDescription className="text-base font-medium">Quick access to student services and tools</CardDescription>
+        <CardDescription className="text-base font-medium">Quick access to staff services and tools</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {actions.map((action) => {

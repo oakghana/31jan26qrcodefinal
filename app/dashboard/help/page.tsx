@@ -301,7 +301,7 @@ export default async function HelpPage() {
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-sm">
                 <strong>Experiencing GPS issues?</strong> GPS accuracy varies significantly across browsers and devices.
-                Follow these tips to improve your location accuracy or use QR codes for instant, reliable check-in.
+                Follow these tips to improve your location accuracy for reliable check-in.
               </AlertDescription>
             </Alert>
 
@@ -393,10 +393,10 @@ export default async function HelpPage() {
             <Separator />
 
             <Alert className="bg-green-500/5 border-green-500/20">
-              <QrCode className="h-4 w-4 text-green-600" />
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
               <AlertDescription>
-                <strong>Best Alternative:</strong> If GPS continues to have issues, use the QR Code option for instant
-                and 100% accurate check-in/check-out. No GPS needed, works on all browsers!
+                <strong>Best Tip:</strong> Use Chrome or Edge on Windows for the most accurate GPS. Ensure Wi-Fi is 
+                connected and location services are enabled in both your browser and device settings.
               </AlertDescription>
             </Alert>
 
@@ -412,19 +412,19 @@ export default async function HelpPage() {
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                   <p>
-                    <strong>Moderate accuracy (30-100m):</strong> May work but consider using QR code
+                    <strong>Moderate accuracy (30-100m):</strong> May work, try moving closer to a window
                   </p>
                 </div>
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
                   <p>
-                    <strong>Poor accuracy (100m+):</strong> Strongly recommend using QR code instead
+                    <strong>Poor accuracy (100m+):</strong> Switch to Chrome/Edge and enable Wi-Fi
                   </p>
                 </div>
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
                   <p>
-                    <strong>Critical accuracy:</strong> Browser using IP location - MUST use QR code
+                    <strong>Critical accuracy:</strong> Browser using IP location - switch browser and enable device location
                   </p>
                 </div>
               </div>
@@ -447,7 +447,7 @@ export default async function HelpPage() {
                 <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium">Check-in Requirements</p>
-                  <p className="text-muted-foreground">You must be within 100 meters of a QCC location to check in</p>
+                  <p className="text-muted-foreground">You must be within the device-specific radius of your assigned QCC location to check in</p>
                 </div>
               </div>
 
@@ -495,9 +495,9 @@ export default async function HelpPage() {
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">QR Code Alternative</p>
+                  <p className="font-medium">Browser Recommendation</p>
                   <p className="text-sm text-muted-foreground">
-                    If GPS is unavailable, you can use QR code scanning for check-in at supported locations.
+                    Use Chrome or Edge for the best GPS accuracy. Avoid Opera as it may use IP-based location.
                   </p>
                 </div>
               </div>

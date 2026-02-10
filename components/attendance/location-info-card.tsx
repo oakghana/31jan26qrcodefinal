@@ -51,14 +51,14 @@ export function LocationInfoCard({ assignedLocation, currentDistance, gpsAccurac
           <Alert variant="destructive" className="bg-red-50 border-red-200">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              GPS accuracy is low ({Math.round(gpsAccuracy)}m). For best results, use the QR code scanner.
+              GPS accuracy is low ({Math.round(gpsAccuracy)}m). Try moving near a window or switching to Chrome/Edge for better accuracy.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="pt-2 border-t border-green-100">
           <p className="text-xs text-gray-600 text-center">
-            Having GPS issues? Use the <strong>QR Code Scanner</strong> for instant check-in
+            Having GPS issues? Try using <strong>Chrome or Edge</strong> browser for better accuracy
           </p>
         </div>
       </CardContent>

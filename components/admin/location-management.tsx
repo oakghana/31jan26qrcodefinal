@@ -23,7 +23,6 @@ import {
 import {
   MapPin,
   Plus,
-  QrCode,
   Edit,
   AlertTriangle,
   Loader2,
@@ -33,7 +32,7 @@ import {
   Power,
   Home,
 } from "lucide-react"
-import { generateQRCode, generateSignature, type QRCodeData } from "@/lib/qr-code"
+
 
 interface GeofenceLocation {
   id: string
@@ -43,7 +42,6 @@ interface GeofenceLocation {
   longitude: number
   radius_meters: number
   is_active: boolean
-  qr_code?: string
   check_in_start_time?: string | null
   check_out_end_time?: string | null
   require_early_checkout_reason?: boolean
@@ -58,7 +56,6 @@ export function LocationManagement() {
   const [isAddingLocation, setIsAddingLocation] = useState(false)
   const [editingLocation, setEditingLocation] = useState<GeofenceLocation | null>(null)
   const [selectedLocation, setSelectedLocation] = useState<GeofenceLocation | null>(null)
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [locationPermission, setLocationPermission] = useState<"granted" | "denied" | "prompt" | null>(null)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -343,24 +340,6 @@ export function LocationManagement() {
     }
   }
 
-  const generateLocationQR = async (location: GeofenceLocation) => {
-    try {
-      const timestamp = Date.now()
-      const qrData: QRCodeData = {
-        type: "location",
-        locationId: location.id,
-        timestamp,
-        signature: generateSignature(location.id, timestamp),
-      }
-
-      const qrCodeDataUrl = await generateQRCode(qrData)
-      setQrCodeUrl(qrCodeDataUrl)
-      setSelectedLocation(location)
-    } catch (err) {
-      setError("Failed to generate QR code")
-    }
-  }
-
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       setError("Geolocation is not supported by this browser")
@@ -457,182 +436,13 @@ export function LocationManagement() {
     </div>
   )
 
-  const downloadQRCodeAsPDF = async () => {
-    if (!qrCodeUrl || !selectedLocation) return
-
-    try {
-      // Create a printable HTML page
-      const printWindow = window.open("", "_blank")
-      if (!printWindow) {
-        setError("Please allow pop-ups to download the QR code")
-        return
-      }
-
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <title>${selectedLocation.name} - QR Code Instructions</title>
-            <style>
-              @page {
-                size: A4;
-                margin: 20mm;
-              }
-              body {
-                font-family: Arial, sans-serif;
-                padding: 20px;
-                max-width: 800px;
-                margin: 0 auto;
-              }
-              .header {
-                text-align: center;
-                margin-bottom: 30px;
-              }
-              .logo {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 20px;
-              }
-              h1 {
-                color: #1a5f3f;
-                font-size: 24px;
-                margin-bottom: 10px;
-              }
-              .qr-container {
-                text-align: center;
-                margin: 30px 0;
-                padding: 20px;
-                border: 2px solid #1a5f3f;
-                border-radius: 8px;
-              }
-              .qr-code {
-                width: 300px;
-                height: 300px;
-                margin: 0 auto;
-              }
-              .location-name {
-                font-size: 20px;
-                font-weight: bold;
-                color: #1a5f3f;
-                margin-top: 20px;
-              }
-              .instructions {
-                margin: 30px 0;
-              }
-              .instructions h2 {
-                color: #1a5f3f;
-                font-size: 18px;
-                margin-bottom: 15px;
-              }
-              .instructions ol {
-                line-height: 1.8;
-                font-size: 14px;
-              }
-              .instructions li {
-                margin-bottom: 10px;
-              }
-              .note {
-                background-color: #fff3cd;
-                border-left: 4px solid #ffc107;
-                padding: 15px;
-                margin: 20px 0;
-                font-size: 13px;
-              }
-              .note strong {
-                display: block;
-                margin-bottom: 8px;
-                color: #856404;
-              }
-              .footer {
-                text-align: center;
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #ddd;
-                font-size: 12px;
-                color: #666;
-              }
-              @media print {
-                .no-print {
-                  display: none;
-                }
-              }
-              .print-button {
-                background-color: #1a5f3f;
-                color: white;
-                border: none;
-                padding: 12px 30px;
-                font-size: 16px;
-                border-radius: 6px;
-                cursor: pointer;
-                margin: 20px auto;
-                display: block;
-              }
-              .print-button:hover {
-                background-color: #145032;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div class="logo">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="50" cy="50" r="45" fill="#1a5f3f"/>
-                  <text x="50" y="60" fontSize="40" fontWeight="bold" fill="white" textAnchor="middle">QCC</text>
-                </svg>
-              </div>
-              <h1>QCC Attendance System</h1>
-            </div>
-
-            <div class="qr-container">
-              <img src="${qrCodeUrl}" alt="QR Code" class="qr-code" />
-              <div class="location-name">${selectedLocation.name}</div>
-            </div>
-
-            <div class="instructions">
-              <h2>How to Use QR Code Check-In/Out</h2>
-              <ol>
-                <li>Go to the <strong>Attendance</strong> page in your dashboard</li>
-                <li>Click on the <strong>"Scan QR Code"</strong> button</li>
-                <li>Allow camera access when prompted</li>
-                <li>Point your camera at this QR code</li>
-                <li>The system will verify you're within <strong>100 meters</strong> of the location</li>
-                <li>If verified, you'll be checked in/out automatically</li>
-              </ol>
-            </div>
-
-            <div class="note">
-              <strong>⚠️ Important Note:</strong>
-              You must be within <strong>100 meters</strong> of ${selectedLocation.name} to use this QR code.
-              Location services must be enabled on your device.
-            </div>
-
-            <button class="print-button no-print" onclick="window.print()">
-              🖨️ Print or Save as PDF
-            </button>
-
-            <div class="footer">
-              <p>Quality Control Company (QCC) - Attendance Management System</p>
-              <p>For support, contact your IT administrator</p>
-            </div>
-          </body>
-        </html>
-      `)
-
-      printWindow.document.close()
-    } catch (error) {
-      console.error("[v0] Error generating printable page:", error)
-      setError("Failed to generate printable QR code")
-    }
-  }
-
   if (loading && locations.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Location Management</h2>
-            <p className="text-muted-foreground">Manage geofence locations and QR codes</p>
+            <p className="text-muted-foreground">Manage geofence locations for attendance tracking</p>
           </div>
           <Skeleton className="h-10 w-32" />
         </div>
@@ -655,7 +465,7 @@ export function LocationManagement() {
             <h2 className="text-xl sm:text-2xl font-bold">Location Management</h2>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Manage geofence locations and QR codes</span>
+            <span>Manage geofence locations for attendance tracking</span>
             {!isOnline && (
               <div className="flex items-center gap-1 text-orange-600">
                 <WifiOff className="h-3 w-3" />
@@ -933,12 +743,9 @@ export function LocationManagement() {
                 <div>Radius: {location.radius_meters}m</div>
               </div>
               <div className="flex gap-2 mt-4">
-                <Button size="sm" variant="outline" onClick={() => generateLocationQR(location)} className="flex-1">
-                  <QrCode className="h-4 w-4 mr-1" />
-                  QR Code
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)}>
-                  <Edit className="h-4 w-4" />
+                <Button size="sm" variant="outline" onClick={() => setEditingLocation(location)} className="flex-1">
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
                 </Button>
                 <Button
                   size="sm"
@@ -1107,56 +914,6 @@ export function LocationManagement() {
         </Dialog>
       )}
 
-      {qrCodeUrl && (
-        <Dialog open={!!qrCodeUrl} onOpenChange={() => setQrCodeUrl(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Location QR Code</DialogTitle>
-              <DialogDescription>QR code for {selectedLocation?.name}</DialogDescription>
-            </DialogHeader>
-            {qrCodeUrl && (
-              <div className="text-center space-y-4">
-                <img src={qrCodeUrl || "/placeholder.svg"} alt="Location QR Code" className="mx-auto" />
-                <div className="bg-muted/50 p-4 rounded-lg text-left space-y-3">
-                  <h4 className="font-semibold text-sm flex items-center gap-2">
-                    <QrCode className="h-4 w-4" />
-                    How to Use QR Code Check-In/Out
-                  </h4>
-                  <ol className="text-sm space-y-2 text-muted-foreground list-decimal list-inside">
-                    <li>Go to the Attendance page in your dashboard</li>
-                    <li>
-                      Click on the <strong>"Scan QR Code"</strong> button
-                    </li>
-                    <li>Allow camera access when prompted</li>
-                    <li>Point your camera at this QR code</li>
-                    <li>
-                      The system will verify you're within <strong>100 meters</strong> of the location
-                    </li>
-                    <li>If verified, you'll be checked in/out automatically</li>
-                  </ol>
-                  <div className="pt-2 border-t border-border">
-                    <p className="text-xs text-muted-foreground">
-                      <strong>Note:</strong> You must be within 100 meters of {selectedLocation?.name} to use this QR
-                      code. Location services must be enabled on your device.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => {
-                    const link = document.createElement("a")
-                    link.download = `${selectedLocation?.name}-qr-code.png`
-                    link.href = qrCodeUrl
-                    link.click()
-                  }}
-                >
-                  Download QR Code
-                </Button>
-                <Button onClick={downloadQRCodeAsPDF}>Download QR Code with Instructions (PDF)</Button>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   )
 }
