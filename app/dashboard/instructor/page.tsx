@@ -12,7 +12,7 @@ import {
   FileText,
   CheckCircle,
   XCircle,
-  QrCode,
+
   BarChart3,
   UserCheck,
   Activity,
@@ -58,8 +58,8 @@ export default async function InstructorDashboardPage() {
   const today = new Date().toISOString().split("T")[0]
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
-  // Get department students count
-  const { count: totalStudents } = await supabase
+  // Get department staff count
+  const { count: totalStaff } = await supabase
     .from("user_profiles")
     .select("*", { count: "exact", head: true })
     .eq("department_id", profile.department_id)
@@ -126,21 +126,6 @@ export default async function InstructorDashboardPage() {
     .order("created_at", { ascending: false })
     .limit(5)
 
-  // Get active QR events
-  const { data: activeEvents } = await supabase
-    .from("qr_events")
-    .select(`
-      *,
-      geofence_locations (
-        name,
-        address
-      )
-    `)
-    .eq("is_active", true)
-    .gte("event_date", today)
-    .order("event_date", { ascending: true })
-    .limit(3)
-
   // Get recent attendance records for department
   const { data: recentAttendance } = await supabase
     .from("attendance_records")
@@ -157,7 +142,7 @@ export default async function InstructorDashboardPage() {
 
   // Calculate attendance rate
   const currentDate = new Date().getDate()
-  const expectedAttendance = (totalStudents || 0) * currentDate
+  const expectedAttendance = (totalStaff || 0) * currentDate
   const attendanceRate = expectedAttendance > 0 ? Math.round(((monthlyAttendance || 0) / expectedAttendance) * 100) : 0
 
   return (
@@ -175,8 +160,8 @@ export default async function InstructorDashboardPage() {
         {/* Stats Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard
-            title="Total Students"
-            value={totalStudents || 0}
+            title="Total Staff"
+            value={totalStaff || 0}
             description="In your department"
             icon={Users}
             variant="default"
@@ -184,10 +169,10 @@ export default async function InstructorDashboardPage() {
 
           <StatsCard
             title="Today's Attendance"
-            value={`${todayAttendance || 0}/${totalStudents || 0}`}
-            description="Students present"
+            value={`${todayAttendance || 0}/${totalStaff || 0}`}
+            description="Staff present"
             icon={UserCheck}
-            variant={todayAttendance && totalStudents && todayAttendance >= totalStudents * 0.8 ? "success" : "default"}
+            variant={todayAttendance && totalStaff && todayAttendance >= totalStaff * 0.8 ? "success" : "default"}
           />
 
           <StatsCard
@@ -230,12 +215,7 @@ export default async function InstructorDashboardPage() {
                     )}
                   </Link>
                 </Button>
-                <Button asChild className="w-full justify-start h-12 bg-transparent" variant="outline">
-                  <Link href="/dashboard/qr-events">
-                    <QrCode className="h-4 w-4 mr-3" />
-                    Manage QR Events
-                  </Link>
-                </Button>
+
                 <Button asChild className="w-full justify-start h-12 bg-transparent" variant="outline">
                   <Link href="/dashboard/reports">
                     <BarChart3 className="h-4 w-4 mr-3" />
@@ -317,69 +297,8 @@ export default async function InstructorDashboardPage() {
           </div>
         </div>
 
-        {/* Active Events and Recent Activity */}
-        <div className="grid gap-8 lg:grid-cols-2">
-          {/* Active QR Events */}
-          <Card className="glass-effect shadow-lg border-border/50">
-            <CardHeader className="pb-6">
-              <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2">
-                <QrCode className="h-5 w-5 text-primary" />
-                Active QR Events
-              </CardTitle>
-              <CardDescription className="text-base">Current and upcoming events</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {activeEvents && activeEvents.length > 0 ? (
-                <div className="space-y-4">
-                  {activeEvents.map((event) => (
-                    <div
-                      key={event.id}
-                      className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/10"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <h3 className="font-semibold text-foreground">{event.name}</h3>
-                        <Badge variant="secondary" className="bg-primary/10 text-primary">
-                          Active
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">{event.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(event.event_date).toLocaleDateString()}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {event.start_time} - {event.end_time}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                        <MapPin className="h-3 w-3" />
-                        {event.geofence_locations?.name || "Location TBD"}
-                      </div>
-                    </div>
-                  ))}
-                  <div className="text-center pt-2">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href="/dashboard/qr-events">Manage All Events</Link>
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <QrCode className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <p className="text-lg font-medium text-muted-foreground">No active events</p>
-                  <p className="text-sm text-muted-foreground mt-2">Create QR events for student attendance</p>
-                  <Button asChild className="mt-4" size="sm">
-                    <Link href="/dashboard/qr-events">Create Event</Link>
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
+        {/* Recent Activity */}
+        <div className="grid gap-8 lg:grid-cols-1">
           {/* Recent Department Activity */}
           <Card className="glass-effect shadow-lg border-border/50">
             <CardHeader className="pb-6">
@@ -430,7 +349,7 @@ export default async function InstructorDashboardPage() {
                     <Activity className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <p className="text-lg font-medium text-muted-foreground">No recent activity</p>
-                  <p className="text-sm text-muted-foreground mt-2">Student attendance will appear here</p>
+                    <p className="text-sm text-muted-foreground mt-2">Staff attendance will appear here</p>
                 </div>
               )}
             </CardContent>
@@ -449,8 +368,8 @@ export default async function InstructorDashboardPage() {
           <CardContent>
             <div className="grid gap-6 md:grid-cols-4">
               <div className="text-center p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/10">
-                <div className="text-3xl font-heading font-bold text-primary mb-2">{totalStudents || 0}</div>
-                <div className="text-sm font-medium text-muted-foreground">Total Students</div>
+                <div className="text-3xl font-heading font-bold text-primary mb-2">{totalStaff || 0}</div>
+                <div className="text-sm font-medium text-muted-foreground">Total Staff</div>
               </div>
               <div className="text-center p-6 bg-gradient-to-br from-chart-2/5 to-chart-2/10 rounded-xl border border-chart-2/10">
                 <div className="text-3xl font-heading font-bold text-chart-2 mb-2">{todayAttendance || 0}</div>

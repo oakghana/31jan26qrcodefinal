@@ -14,7 +14,7 @@ import {
   reverseGeocode, // Import reverseGeocode
 } from "@/lib/geolocation"
 import { getDeviceInfo } from "@/lib/device-info"
-import type { QRCodeData } from "@/lib/qr-code"
+
 import { useRealTimeLocations } from "@/hooks/use-real-time-locations"
 import { useDeviceRadiusSettings } from "@/hooks/use-device-radius-settings"
 import { createClient } from "@/lib/supabase/client"
@@ -25,7 +25,7 @@ import {
   MapPin,
   LogIn,
   LogOut,
-  QrCode,
+
   RefreshCw,
   Loader2,
   AlertTriangle,
@@ -36,7 +36,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { LocationCodeDialog } from "@/components/dialogs/location-code-dialog"
-import { QRScannerDialog } from "@/components/dialogs/qr-scanner-dialog"
+
 import { FlashMessage } from "@/components/notifications/flash-message"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
@@ -160,8 +160,7 @@ export function AttendanceRecorder({
   const [success, setSuccess] = useState<string | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [successDialogMessage, setSuccessDialogMessage] = useState("")
-  const [showQRScanner, setShowQRScanner] = useState(false)
-  const [qrScanMode, setQrScanMode] = useState<"checkin" | "checkout">("checkin")
+
   const [locationPermissionStatus, setLocationPermissionStatus] = useState<{
     granted: boolean | null
     message: string
@@ -178,7 +177,6 @@ export function AttendanceRecorder({
     nearestLocation: any
   } | null>(null)
   const [showCodeEntry, setShowCodeEntry] = useState(false)
-  const [showScanner, setShowScanner] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [showLocationCodeDialog, setShowLocationCodeDialog] = useState(false) // Added
 
@@ -316,126 +314,6 @@ export function AttendanceRecorder({
     !isOnLeave &&
     locationValidation?.canCheckOut === true // MUST be within proximity range (with null check)
 
-  const handleQRScanSuccess = async (qrData: QRCodeData) => {
-    console.log("[v0] QR scan successful, mode:", qrScanMode)
-    setShowQRScanner(false)
-
-    if (qrScanMode === "checkin") {
-      await handleQRCheckIn(qrData)
-    } else {
-      await handleQRCheckOut(qrData)
-    }
-  }
-
-  const handleQRCheckIn = async (qrData: QRCodeData) => {
-    setIsLoading(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      console.log("[v0] Processing QR check-in with data:", qrData)
-
-      const response = await fetch("/api/attendance/qr-checkin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location_id: qrData.locationId,
-          qr_timestamp: qrData.timestamp,
-          userLatitude: qrData.userLatitude,
-          userLongitude: qrData.userLongitude,
-          device_info: getDeviceInfo(),
-        }),
-      })
-
-      const result = await response.json()
-      console.log("[v0] QR check-in API response:", result)
-
-      if (!response.ok) {
-        const errorMsg = result.message || result.error || "Failed to check in with QR code"
-        throw new Error(errorMsg)
-      }
-
-      setSuccess("✓ Checked in successfully with QR code!")
-      console.log("[v0] QR check-in successful")
-
-      // mutate() // Assuming mutate is a function from SWR or similar, not defined here, so commented out.
-
-      // Show success popup
-      setTimeout(() => {
-        setSuccess(null)
-      }, 5000)
-    } catch (error: any) {
-      console.error("[v0] QR check-in error:", error)
-      setError(error.message || "Failed to check in with QR code")
-
-      toast({
-        title: "Check-in Failed",
-        description: error.message || "Failed to check in with QR code",
-        variant: "destructive",
-        duration: 8000,
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleQRCheckOut = async (qrData: QRCodeData) => {
-    setIsLoading(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      console.log("[v0] Processing QR check-out with data:", qrData)
-
-      const response = await fetch("/api/attendance/qr-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location_id: qrData.locationId,
-          qr_timestamp: qrData.timestamp,
-          userLatitude: qrData.userLatitude,
-          userLongitude: qrData.userLongitude,
-          device_info: getDeviceInfo(),
-        }),
-      })
-
-      const result = await response.json()
-      console.log("[v0] QR check-out API response:", result)
-
-      if (!response.ok) {
-        const errorMsg = result.message || result.error || "Failed to check out with QR code"
-        throw new Error(errorMsg)
-      }
-
-      setSuccess("✓ Checked out successfully with QR code!")
-      console.log("[v0] QR check-out successful")
-
-      // mutate() // Assuming mutate is a function from SWR or similar, not defined here, so commented out.
-
-      // Show success popup
-      setTimeout(() => {
-        setSuccess(null)
-      }, 5000)
-    } catch (error: any) {
-      console.error("[v0] QR check-out error:", error)
-      setError(error.message || "Failed to check out with QR code")
-
-      toast({
-        title: "Check-out Failed",
-        description: error.message || "Failed to check out with QR code",
-        variant: "destructive",
-        duration: 8000,
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleUseQRCode = (mode: "checkin" | "checkout") => {
-    // Redirect to QR Events page with mode parameter
-    window.location.href = `/dashboard/qr-events?mode=${mode}`
-  }
-
   useEffect(() => {
     fetchUserProfile()
     loadProximitySettings()
@@ -454,7 +332,7 @@ export function AttendanceRecorder({
         setLocationPermissionStatus({ granted: true, message: "Location access granted" })
         console.log("[v0] Location auto-loaded successfully:", location)
       } catch (error) {
-        console.log("[v0] Auto-load location failed, user can try manual check-in or QR code:", error)
+        console.log("[v0] Auto-load location failed, user can try manual check-in:", error)
       }
     }
 
@@ -685,7 +563,7 @@ export function AttendanceRecorder({
         userLocation.accuracy > 1000 || (windowsCapabilities?.isWindows && userLocation.accuracy > 100)
       let accuracyWarning = ""
       if (criticalAccuracyIssue) {
-        accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is critically low. For accurate attendance, please use the QR code option or ensure you are in an open area with clear sky view.`
+        accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is critically low. Please ensure you are in an open area with clear sky view or try a different browser.`
       } else if (userLocation.accuracy > 100) {
         accuracyWarning = `Your current GPS accuracy (${userLocation.accuracy.toFixed(0)}m) is moderate. For best results, ensure you have a clear view of the sky or move closer to your assigned location.`
       }
@@ -779,7 +657,7 @@ export function AttendanceRecorder({
     } catch (error) {
       console.error("[v0] Failed to get location:", error)
       const errorMessage =
-        error instanceof Error ? error.message : "Unable to access location. Please enable GPS or use QR code option."
+        error instanceof Error ? error.message : "Unable to access location. Please enable GPS in your browser settings."
       setError(errorMessage)
       setLocationPermissionStatus({
         granted: false,
@@ -864,16 +742,20 @@ export function AttendanceRecorder({
           }))
           .sort((a, b) => a.distance - b.distance)
 
-        // Use device-specific proximity radius: 400m for mobile/tablet, 700m for laptop, 2000m for desktop PC
-        let deviceProximityRadius = 400
-        if (deviceInfo.isMobile || deviceInfo.isTablet) {
-          deviceProximityRadius = 400
-        } else if (deviceInfo.isLaptop) {
-          deviceProximityRadius = 700
-        } else {
-          deviceProximityRadius = 2000 // Desktop PC
+        // Use device radius settings from the database (admin-configured)
+        let deviceProximityRadius = 1000 // Fallback default
+        if (deviceRadiusSettings) {
+          const dt = deviceInfo.device_type
+          if (dt === "mobile" && deviceRadiusSettings.mobile) {
+            deviceProximityRadius = deviceRadiusSettings.mobile.checkIn
+          } else if (dt === "tablet" && deviceRadiusSettings.tablet) {
+            deviceProximityRadius = deviceRadiusSettings.tablet.checkIn
+          } else if (dt === "laptop" && deviceRadiusSettings.laptop) {
+            deviceProximityRadius = deviceRadiusSettings.laptop.checkIn
+          } else if (dt === "desktop" && deviceRadiusSettings.desktop) {
+            deviceProximityRadius = deviceRadiusSettings.desktop.checkIn
+          }
         }
-        const displayRadius = 50 // Trade secret - what we show to users
         
         console.log("[v0] Check-in proximity validation:", {
           nearestLocation: distances[0]?.location.name,
@@ -888,8 +770,10 @@ export function AttendanceRecorder({
           resolvedNearestLocation = distances[0].location
           checkInData.location_id = resolvedNearestLocation.id // Update checkInData with resolved nearest location
         } else {
+          const nearestName = distances[0]?.location.name || "any location"
+          const nearestDist = distances[0]?.distance ? Math.round(distances[0].distance).toLocaleString() : "unknown"
           throw new Error(
-            `You must be within ${displayRadius}m of a valid location to check in.`,
+            `You are ${nearestDist} meters from ${nearestName}. Check-in requires being within ${deviceProximityRadius} meters of a registered location.`,
           )
         }
       } else {
@@ -1275,10 +1159,10 @@ export function AttendanceRecorder({
 
       if (location.accuracy > 1000) {
         setError(
-          `GPS accuracy is critically poor (${(location.accuracy / 1000).toFixed(1)}km) - Use QR code for reliable attendance.`,
+          `GPS accuracy is critically poor (${(location.accuracy / 1000).toFixed(1)}km). Please move to an area with better GPS signal or try Chrome/Edge browser.`,
         )
       } else if (location.accuracy > 500) {
-        setError(`GPS accuracy is poor (${Math.round(location.accuracy)}m). Consider using QR code for best results.`)
+        setError(`GPS accuracy is poor (${Math.round(location.accuracy)}m). Try moving to an open area for better results.`)
       } else {
         setSuccess(`Location refreshed successfully. Accuracy: ${Math.round(location.accuracy)}m`)
         setTimeout(() => setSuccess(null), 3000)
@@ -1289,7 +1173,7 @@ export function AttendanceRecorder({
     } catch (error) {
       console.error("[v0] Failed to refresh location:", error)
       const errorMessage =
-        error instanceof Error ? error.message : "Unable to access location. Please enable GPS or use QR code option."
+        error instanceof Error ? error.message : "Unable to access location. Please enable GPS in your browser settings."
       setError(errorMessage)
       setLocationPermissionStatus({ granted: false, message: errorMessage })
       setShowLocationHelp(true)
@@ -1602,15 +1486,6 @@ export function AttendanceRecorder({
           canCheckIn={canCheckInButton}
           canCheckOut={canCheckOutButton}
           isCheckedIn={isCheckedIn}
-        />
-      )}
-
-      {showScanner && (
-        <QRScannerDialog
-          open={showScanner}
-          onClose={() => setShowScanner(false)}
-          mode={defaultMode}
-          userLocation={userLocation}
         />
       )}
 

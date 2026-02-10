@@ -14,8 +14,8 @@ import {
   Activity,
   CheckCircle,
   XCircle,
-  MapPin,
-  QrCode,
+
+
 } from "lucide-react"
 import { redirect } from "next/navigation"
 import Link from "next/link"
@@ -74,21 +74,6 @@ export default async function StudentDashboardPage() {
     .order("check_in_time", { ascending: false })
     .limit(5)
 
-  // Get upcoming QR events
-  const { data: upcomingEvents } = await supabase
-    .from("qr_events")
-    .select(`
-      *,
-      geofence_locations (
-        name,
-        address
-      )
-    `)
-    .eq("is_active", true)
-    .gte("event_date", today)
-    .order("event_date", { ascending: true })
-    .limit(3)
-
   // Calculate attendance rate
   const currentDate = new Date().getDate()
   const attendanceRate = monthlyAttendance ? Math.round((monthlyAttendance / currentDate) * 100) : 0
@@ -97,7 +82,7 @@ export default async function StudentDashboardPage() {
     <DashboardLayout>
       <div className="space-y-8">
         <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Student Dashboard</h1>
+          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Staff Dashboard</h1>
           <p className="text-lg text-muted-foreground font-medium">
             Welcome back,{" "}
             <span className="text-primary font-semibold">{profile?.first_name || user.email?.split("@")[0]}</span>{" "}
@@ -168,19 +153,13 @@ export default async function StudentDashboardPage() {
                   <Activity className="h-5 w-5 text-primary" />
                   Quick Actions
                 </CardTitle>
-                <CardDescription className="text-base">Common student tasks</CardDescription>
+                <CardDescription className="text-base">Common staff tasks</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button asChild className="w-full justify-start h-12 bg-transparent" variant="outline">
                   <Link href="/dashboard/attendance">
                     <Clock className="h-4 w-4 mr-3" />
                     Check In/Out
-                  </Link>
-                </Button>
-                <Button asChild className="w-full justify-start h-12 bg-transparent" variant="outline">
-                  <Link href="/scan">
-                    <QrCode className="h-4 w-4 mr-3" />
-                    Scan QR Code
                   </Link>
                 </Button>
                 <Button asChild className="w-full justify-start h-12 bg-transparent" variant="outline">
@@ -256,47 +235,6 @@ export default async function StudentDashboardPage() {
           </div>
         </div>
 
-        {/* Upcoming Events */}
-        {upcomingEvents && upcomingEvents.length > 0 && (
-          <Card className="glass-effect shadow-lg border-border/50">
-            <CardHeader className="pb-6">
-              <CardTitle className="text-xl font-heading font-semibold flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                Upcoming Events
-              </CardTitle>
-              <CardDescription className="text-base">QR code events you can attend</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {upcomingEvents.map((event) => (
-                  <div
-                    key={event.id}
-                    className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/10"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold text-foreground">{event.name}</h3>
-                      <QrCode className="h-5 w-5 text-primary flex-shrink-0" />
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">{event.description}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      {new Date(event.event_date).toLocaleDateString()}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <MapPin className="h-3 w-3" />
-                      {event.geofence_locations?.name || "Location TBD"}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <Clock className="h-3 w-3" />
-                      {event.start_time} - {event.end_time}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Performance Overview */}
         <Card className="glass-effect shadow-lg border-border/50">
           <CardHeader className="pb-6">
@@ -324,7 +262,7 @@ export default async function StudentDashboardPage() {
               </div>
               <div className="text-center p-6 bg-gradient-to-br from-chart-5/5 to-chart-5/10 rounded-xl border border-chart-5/10">
                 <div className="text-lg font-heading font-bold text-chart-5 mb-2">
-                  {profile?.role === "staff" ? "Student" : profile?.role || "N/A"}
+                  {profile?.role === "staff" ? "Staff" : profile?.role || "N/A"}
                 </div>
                 <div className="text-sm font-medium text-muted-foreground">Status</div>
               </div>

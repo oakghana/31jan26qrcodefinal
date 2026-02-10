@@ -1,10 +1,5 @@
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
-import { QREventsClient } from "@/components/qr/qr-events-client"
+import { redirect } from "next/navigation"
 
 export default function QREventsPage() {
-  return (
-    <DashboardLayout>
-      <QREventsClient />
-    </DashboardLayout>
-  )
+  redirect("/dashboard/attendance")
 }
