@@ -571,6 +571,9 @@ export function validateAttendanceLocation(
 
   const nearest = findNearestLocation(userLocation, qccLocations)
 
+  // Trade secret: display fixed 100m to users regardless of actual device radius
+  const displayDistance = 100
+
   if (!nearest) {
     return {
       canCheckIn: false,
@@ -704,6 +707,9 @@ export function validateCheckoutLocation(
   // Poor GPS accuracy should BLOCK checkout, not grant a larger radius.
   // Previously, accuracy * 0.5 was added as a buffer which allowed checkout from hundreds of km away.
   const effectiveProximity = deviceProximityBase
+  
+  // Trade secret: display fixed 100m to users regardless of actual device radius
+  const displayDistance = 100
 
   console.log("[v0] Check-out validation:", {
     location: nearest.location.name,
