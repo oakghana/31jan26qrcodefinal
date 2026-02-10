@@ -171,13 +171,37 @@ export async function getBrowserTolerance(geoSettings?: GeoSettings): Promise<nu
   }
 }
 
-function detectDevice(): { isMobile: boolean; isTablet: boolean; isDesktop: boolean } {
+function detectDevice(): { isMobile: boolean; isTablet: boolean; isDesktop: boolean; isLaptop: boolean; device_type: string; device_name: string; browser_info: string } {
+  // Server-side safety check
+  if (typeof navigator === "undefined" || typeof window === "undefined") {
+    return { isMobile: false, isTablet: false, isDesktop: true, isLaptop: false, device_type: "desktop", device_name: "server", browser_info: "server" }
+  }
+
   const ua = navigator.userAgent.toLowerCase()
   const isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)
   const isTablet = /ipad|android(?!.*mobile)|tablet/i.test(ua)
-  const isDesktop = !isMobile && !isTablet
 
-  return { isMobile, isTablet, isDesktop }
+  let isLaptop = false
+  if (!isMobile && !isTablet) {
+    if (/windows/i.test(navigator.userAgent)) {
+      const hasTouch = navigator.maxTouchPoints > 0
+      const screenWidth = window.screen.width
+      const pixelDensity = window.devicePixelRatio || 1
+      isLaptop = hasTouch || screenWidth <= 1920 || pixelDensity > 1.25
+    } else if (/mac/i.test(navigator.userAgent)) {
+      const hasTouch = navigator.maxTouchPoints > 0
+      const screenWidth = window.screen.width
+      isLaptop = hasTouch || screenWidth <= 3456
+    }
+  }
+
+  const isDesktop = !isMobile && !isTablet && !isLaptop
+  let device_type = "desktop"
+  if (isMobile) device_type = "mobile"
+  else if (isTablet) device_type = "tablet"
+  else if (isLaptop) device_type = "laptop"
+
+  return { isMobile, isTablet, isDesktop, isLaptop, device_type, device_name: navigator.userAgent, browser_info: navigator.userAgent }
 }
 
 /**
@@ -685,21 +709,29 @@ export function validateCheckoutLocation(
   }
 
   // Use device-specific radius (location radius is ignored)
-  const baseProximity = deviceProximityBase
-
-  // More lenient validation: if accuracy is poor but distance is reasonable, still allow
-  const effectiveProximity = userLocation.accuracy > 1000 
-    ? baseProximity + userLocation.accuracy * 0.5 // Add 50% of accuracy as buffer
-    : baseProximity
+  // CRITICAL FIX: Never expand the radius based on GPS accuracy.
+  // Poor GPS accuracy should BLOCK checkout, not grant a larger radius.
+  // Previously, accuracy * 0.5 was added as a buffer which allowed checkout from hundreds of km away.
+  const effectiveProximity = deviceProximityBase
 
   console.log("[v0] Check-out validation:", {
     location: nearest.location.name,
     distance: nearest.distance,
     deviceProximityBase,
-    baseProximity,
     effectiveProximity,
     userAccuracy: userLocation.accuracy,
   })
+
+  // Block checkout if GPS accuracy is critically poor (IP-based location)
+  if (userLocation.accuracy > 5000) {
+    return {
+      canCheckOut: false,
+      nearestLocation: nearest.location,
+      distance: nearest.distance,
+      message: `Your GPS accuracy is too poor (${(userLocation.accuracy / 1000).toFixed(1)}km) for location verification. Please use QR code checkout, move to an area with better GPS signal, or try switching to Chrome/Edge browser.`,
+      accuracyWarning: `GPS accuracy: ${(userLocation.accuracy / 1000).toFixed(1)}km - too inaccurate for GPS checkout`,
+    }
+  }
 
   const canCheckOut = nearest.distance <= effectiveProximity
 

@@ -303,6 +303,7 @@ export async function POST(request: NextRequest) {
       deviceType,
       checkOutRadius: deviceCheckOutRadius,
       foundSettings: deviceRadiusSettings?.length || 0,
+      allSettings: deviceRadiusSettings?.map((s: any) => `${s.device_type}: ${s.check_out_radius_meters}m`),
     })
 
     let checkoutLocationData = null

@@ -7,6 +7,7 @@ export interface DeviceInfo {
   isMobile: boolean
   isTablet: boolean
   isDesktop: boolean
+  isLaptop?: boolean
 }
 
 export function generateDeviceId(): string {
@@ -65,6 +66,7 @@ export function getDeviceInfo(): DeviceInfo {
   } else if (isTablet) {
     deviceType = "tablet"
   }
+  // Note: deviceType may be overridden to "laptop" below after laptop detection
 
   // Get device name
   let deviceName = "Unknown Device"
@@ -95,6 +97,12 @@ export function getDeviceInfo(): DeviceInfo {
     // MacBooks typically have smaller screens (up to 16" = ~3456px wide max)
     isLaptop = hasTouch || screenWidth <= 3456
     deviceName = isLaptop ? "MacBook" : "Mac Desktop"
+  }
+
+  // CRITICAL FIX: Set device_type to "laptop" when laptop is detected
+  // Previously, laptops were sent as "desktop" which caused the wrong radius to be used
+  if (isLaptop && !isMobile && !isTablet) {
+    deviceType = "laptop"
   }
 
   return {

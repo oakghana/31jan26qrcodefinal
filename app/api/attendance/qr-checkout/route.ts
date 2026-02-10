@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { calculateDistance } from "@/lib/location-utils"
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { location_id, qr_timestamp, device_info } = body
+    const { location_id, qr_timestamp, device_info, userLatitude, userLongitude } = body
 
     if (!location_id) {
       return NextResponse.json({ error: "Location ID is required" }, { status: 400 })
@@ -51,6 +52,69 @@ export async function POST(request: Request) {
 
     if (!location) {
       return NextResponse.json({ error: "Invalid location" }, { status: 400 })
+    }
+
+    // CRITICAL FIX: Validate user's GPS location against QR code location
+    // This prevents users from scanning a QR code screenshot/photo from a remote location
+    if (userLatitude && userLongitude) {
+      // Fetch device-specific radius settings
+      const { data: deviceRadiusSettings } = await supabase
+        .from("device_radius_settings")
+        .select("device_type, check_out_radius_meters")
+        .eq("is_active", true)
+
+      // Determine device type from device_info
+      const deviceType = device_info?.device_type || "desktop"
+      let maxCheckoutRadius = 1000 // Default fallback
+      if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
+        const setting = deviceRadiusSettings.find((s: any) => s.device_type === deviceType)
+        if (setting) {
+          maxCheckoutRadius = setting.check_out_radius_meters
+        }
+      }
+
+      const distanceToLocation = calculateDistance(
+        userLatitude,
+        userLongitude,
+        location.latitude,
+        location.longitude,
+      )
+
+      console.log("[v0] QR checkout distance validation:", {
+        userLat: userLatitude,
+        userLng: userLongitude,
+        locationLat: location.latitude,
+        locationLng: location.longitude,
+        distance: Math.round(distanceToLocation),
+        maxRadius: maxCheckoutRadius,
+        deviceType,
+      })
+
+      if (distanceToLocation > maxCheckoutRadius) {
+        // Log as potential abuse attempt
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: "qr_checkout_out_of_range",
+          table_name: "attendance_records",
+          record_id: location_id,
+          new_values: {
+            distance: Math.round(distanceToLocation),
+            maxRadius: maxCheckoutRadius,
+            deviceType,
+            location: location.name,
+            userLatitude,
+            userLongitude,
+            timestamp: new Date().toISOString(),
+          },
+        }).catch(() => {})
+
+        return NextResponse.json(
+          {
+            error: `You are ${Math.round(distanceToLocation).toLocaleString()} meters from ${location.name}. QR code checkout requires being within ${maxCheckoutRadius} meters of the location. Please go to the location and try again.`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     const now = new Date()
@@ -140,6 +204,9 @@ export async function POST(request: Request) {
         check_out_method: device_info?.method || "qr_code",
         work_hours: workHours,
         timestamp: now.toISOString(),
+        userDistance: userLatitude && userLongitude
+          ? Math.round(calculateDistance(userLatitude, userLongitude, location.latitude, location.longitude))
+          : null,
       },
     })
 
