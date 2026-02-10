@@ -94,8 +94,7 @@ export async function POST(request: NextRequest) {
     const departmentCode = (userProfile?.departments as any)?.code
     const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
 
-    // Check if user is on leave
-    const today = new Date().toISOString().split("T")[0]
+    // Check if user is on leave (reuses `today` from line 20)
     const { data: leaveStatus } = await supabase
       .from("leave_status")
       .select("*")
