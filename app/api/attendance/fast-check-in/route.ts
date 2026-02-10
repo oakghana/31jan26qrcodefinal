@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-import { getDeviceInfo } from "@/lib/device-info"
+import { calculateDistance } from "@/lib/location-utils"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -49,6 +49,59 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       )
+    }
+
+    // SERVER-SIDE DISTANCE VALIDATION: Enforce device radius settings
+    if (latitude && longitude && location_id) {
+      // Fetch location coordinates and device radius in parallel
+      const [
+        { data: locationData },
+        { data: deviceRadiusSettings },
+      ] = await Promise.all([
+        supabase
+          .from("geofence_locations")
+          .select("name, latitude, longitude")
+          .eq("id", location_id)
+          .single(),
+        supabase
+          .from("device_radius_settings")
+          .select("device_type, check_in_radius_meters")
+          .eq("is_active", true),
+      ])
+
+      if (locationData?.latitude && locationData?.longitude) {
+        const deviceType = device_info?.device_type || "desktop"
+        let maxCheckInRadius = 1000
+        if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
+          const setting = deviceRadiusSettings.find((s: any) => s.device_type === deviceType)
+          if (setting) {
+            maxCheckInRadius = setting.check_in_radius_meters
+          }
+        }
+
+        const distanceToLocation = calculateDistance(
+          latitude,
+          longitude,
+          locationData.latitude,
+          locationData.longitude,
+        )
+
+        console.log("[v0] Fast check-in distance validation:", {
+          distance: Math.round(distanceToLocation),
+          maxRadius: maxCheckInRadius,
+          deviceType,
+          location: locationData.name,
+        })
+
+        if (distanceToLocation > maxCheckInRadius) {
+          return NextResponse.json(
+            {
+              error: `You are ${Math.round(distanceToLocation).toLocaleString()} meters from ${locationData.name}. Check-in requires being within ${maxCheckInRadius} meters.`,
+            },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     // Insert attendance record (optimized query)

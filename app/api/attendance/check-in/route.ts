@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { calculateDistance } from "@/lib/location-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -338,12 +339,73 @@ export async function POST(request: NextRequest) {
 
     const { data: locationData, error: locationError } = await supabase
       .from("geofence_locations")
-      .select("name, address, district_id")
+      .select("name, address, district_id, latitude, longitude")
       .eq("id", location_id)
       .single()
 
     if (locationError) {
       console.error("Location lookup error:", locationError)
+    }
+
+    // SERVER-SIDE DISTANCE VALIDATION: Enforce device radius settings
+    // This is the critical security layer - client-side validation can be bypassed
+    if (!qr_code_used && latitude && longitude && locationData?.latitude && locationData?.longitude) {
+      // Fetch device-specific radius settings
+      const { data: deviceRadiusSettings } = await supabase
+        .from("device_radius_settings")
+        .select("device_type, check_in_radius_meters")
+        .eq("is_active", true)
+
+      const deviceType = device_info?.device_type || "desktop"
+      let maxCheckInRadius = 1000 // Default fallback
+      if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
+        const setting = deviceRadiusSettings.find((s: any) => s.device_type === deviceType)
+        if (setting) {
+          maxCheckInRadius = setting.check_in_radius_meters
+        }
+      }
+
+      const distanceToLocation = calculateDistance(
+        latitude,
+        longitude,
+        locationData.latitude,
+        locationData.longitude,
+      )
+
+      console.log("[v0] Server-side check-in distance validation:", {
+        distance: Math.round(distanceToLocation),
+        maxRadius: maxCheckInRadius,
+        deviceType,
+        location: locationData.name,
+      })
+
+      if (distanceToLocation > maxCheckInRadius) {
+        // Log as potential abuse attempt
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: "checkin_out_of_range",
+          table_name: "attendance_records",
+          record_id: location_id,
+          new_values: {
+            distance: Math.round(distanceToLocation),
+            maxRadius: maxCheckInRadius,
+            deviceType,
+            location: locationData.name,
+            latitude,
+            longitude,
+            timestamp: new Date().toISOString(),
+          },
+          ip_address: request.ip || null,
+          user_agent: request.headers.get("user-agent"),
+        }).catch(() => {})
+
+        return NextResponse.json(
+          {
+            error: `You are ${Math.round(distanceToLocation).toLocaleString()} meters from ${locationData.name}. Check-in requires being within ${maxCheckInRadius} meters of the location. Please move closer to your assigned location and try again.`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     // Get district name separately if needed

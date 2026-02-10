@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-import { calculateDistance, getBrowserTolerance } from "@/lib/geolocation"
+import { calculateDistance } from "@/lib/location-utils"
 
 export async function POST(request: Request) {
   try {
@@ -41,23 +41,55 @@ export async function POST(request: Request) {
     let proximityVerified = false
     let gpsAvailable = false
 
-    const browserTolerance = await getBrowserTolerance()
+    // Fetch device-specific radius settings from database (same as check-out)
+    const { data: deviceRadiusSettings } = await supabase
+      .from("device_radius_settings")
+      .select("device_type, check_in_radius_meters")
+      .eq("is_active", true)
+
+    // Determine device type from device_info sent by client
+    const deviceType = device_info?.device_type || "desktop"
+    let maxCheckInRadius = 1000 // Default fallback
+    if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
+      const setting = deviceRadiusSettings.find((s: any) => s.device_type === deviceType)
+      if (setting) {
+        maxCheckInRadius = setting.check_in_radius_meters
+      }
+    }
+
+    console.log("[v0] QR check-in device radius:", { deviceType, maxCheckInRadius })
 
     if (userLatitude !== undefined && userLongitude !== undefined) {
       gpsAvailable = true
       distance = calculateDistance(userLatitude, userLongitude, location.latitude, location.longitude)
 
-      console.log("[v0] QR scan with GPS - distance from location:", distance, "meters")
-      console.log("[v0] Browser tolerance:", browserTolerance, "meters")
+      console.log("[v0] QR scan with GPS - distance from location:", Math.round(distance), "meters")
+      console.log("[v0] Device radius limit:", maxCheckInRadius, "meters")
 
-      const QR_PROXIMITY_LIMIT = browserTolerance
+      if (distance > maxCheckInRadius) {
+        console.log("[v0] User too far from location for QR check-in:", Math.round(distance), "meters")
 
-      if (distance > QR_PROXIMITY_LIMIT) {
-        console.log("[v0] User too far from location for QR check-in:", distance, "meters")
+        // Log as potential abuse attempt
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: "qr_checkin_out_of_range",
+          table_name: "attendance_records",
+          record_id: location_id,
+          new_values: {
+            distance: Math.round(distance),
+            maxRadius: maxCheckInRadius,
+            deviceType,
+            location: location.name,
+            userLatitude,
+            userLongitude,
+            timestamp: new Date().toISOString(),
+          },
+        }).catch(() => {})
+
         return NextResponse.json(
           {
             error: "Too far from location",
-            message: `You must be within 100 meters of your assigned location to check in. Please use manual location code entry.`,
+            message: `You are ${Math.round(distance).toLocaleString()} meters from ${location.name}. QR code check-in requires being within ${maxCheckInRadius} meters of the location.`,
             distance: Math.round(distance),
             locationName: location.name,
           },
@@ -66,7 +98,7 @@ export async function POST(request: Request) {
       }
 
       proximityVerified = true
-      console.log("[v0] GPS proximity verified - within", browserTolerance, "m of:", location.name)
+      console.log("[v0] GPS proximity verified - within", maxCheckInRadius, "m of:", location.name)
     } else {
       console.log("[v0] QR check-in WITHOUT GPS (device GPS unavailable or manual entry)")
       distance = 0
@@ -138,7 +170,7 @@ export async function POST(request: Request) {
         check_in_longitude: userLongitude || location.longitude,
         status: "present",
         notes: gpsAvailable
-          ? `QR code scanned - ${Math.round(distance)}m from location (GPS verified within ${browserTolerance}m tolerance)`
+          ? `QR code scanned - ${Math.round(distance)}m from location (GPS verified within ${maxCheckInRadius}m device radius)`
           : `QR code scanned - GPS unavailable, location verified by QR code only (manual entry or GPS disabled)`,
       })
       .select()
