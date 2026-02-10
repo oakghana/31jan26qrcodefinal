@@ -23,7 +23,7 @@ import {
   FileText,
   BarChart3,
   MapPin,
-  QrCode,
+
   Users,
   UserCheck,
   Upload,
@@ -133,13 +133,7 @@ const navigationItems = [
     roles: ["admin"],
     category: "admin",
   },
-  {
-    title: "QR Events",
-    href: "/dashboard/qr-events",
-    icon: QrCode,
-    roles: ["admin", "regional_manager", "department_head"],
-    category: "admin",
-  },
+
   {
     title: "Defaulters",
     href: "/dashboard/defaulters",

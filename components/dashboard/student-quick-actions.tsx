@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, QrCode, Award, TrendingUp, Zap, ArrowRight, BookOpen, Calendar } from "lucide-react"
+import { Clock, Award, TrendingUp, Zap, ArrowRight, BookOpen, Calendar } from "lucide-react"
 import Link from "next/link"
 
 export function StudentQuickActions() {
@@ -18,17 +18,7 @@ export function StudentQuickActions() {
       iconBg: "bg-gradient-to-br from-primary/10 to-primary/20",
       iconColor: "text-primary",
     },
-    {
-      title: "Scan QR Code",
-      description: "Event attendance",
-      href: "/scan",
-      icon: QrCode,
-      gradient: "from-chart-3/5 via-chart-3/8 to-chart-3/12",
-      hoverGradient: "hover:from-chart-3/10 hover:via-chart-3/15 hover:to-chart-3/20",
-      border: "border-chart-3/20 hover:border-chart-3/30",
-      iconBg: "bg-gradient-to-br from-chart-3/10 to-chart-3/20",
-      iconColor: "text-chart-3",
-    },
+
     {
       title: "Submit Excuse",
       description: "Absence request",
