@@ -372,29 +372,29 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4 md:p-6">
       <div className="w-full max-w-md">
         <Card className="glass-effect shadow-2xl border-border/50">
-          <CardHeader className="text-center space-y-6 pb-8">
+          <CardHeader className="text-center space-y-4 sm:space-y-6 pb-6 sm:pb-8">
             <div className="flex justify-center">
-              <div className="w-24 h-24 rounded-full bg-card border-2 border-primary/20 flex items-center justify-center shadow-lg">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-card border-2 border-primary/20 flex items-center justify-center shadow-lg">
                 <Image
                   src="/images/qcc-logo.png"
                   alt="QCC Logo - Quality Control Company Limited"
                   width={80}
                   height={80}
-                  className="rounded-full object-contain"
+                  className="rounded-full object-contain w-16 h-16 sm:w-20 sm:h-20"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <CardTitle className="text-2xl font-bold text-primary tracking-wide">QCC ELECTRONIC ATTENDANCE</CardTitle>
-              <CardDescription className="text-muted-foreground text-sm">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-primary tracking-wide">QCC ELECTRONIC ATTENDANCE</CardTitle>
+              <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                 Sign in with your Staff Number, Email or use OTP
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="px-8 pb-8">
+          <CardContent className="px-4 sm:px-6 md:px-8 pb-6 sm:pb-8">
             <Tabs defaultValue="password" className="w-full">
               <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-lg">
                 <TabsTrigger
@@ -414,7 +414,7 @@ export default function LoginPage() {
               <TabsContent value="password" className="space-y-6 mt-6">
                 <form onSubmit={handleLogin} className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="identifier" className="text-sm font-medium text-foreground">
+                    <Label htmlFor="identifier" className="text-xs sm:text-sm font-medium text-foreground">
                       Staff Number or Email Address
                     </Label>
                     <Input
@@ -424,14 +424,14 @@ export default function LoginPage() {
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       required
-                      className="h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced"
+                      className="h-11 sm:h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced text-base"
                     />
                     <p className="text-xs text-muted-foreground">
                       Enter your 7-digit staff number (e.g., 1234567) or corporate email address
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-sm font-medium text-foreground">
+                    <Label htmlFor="password" className="text-xs sm:text-sm font-medium text-foreground">
                       Password
                     </Label>
                     <div className="relative">
@@ -442,7 +442,7 @@ export default function LoginPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
-                        className="h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced pr-12"
+                        className="h-11 sm:h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced pr-12 text-base"
                       />
                       <button
                         type="button"
@@ -458,7 +458,7 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
+                    className="w-full h-12 sm:h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer text-base"
                     disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
@@ -470,7 +470,7 @@ export default function LoginPage() {
                 {!otpSent ? (
                   <form onSubmit={handleSendOtp} className="space-y-6">
                     <div className="space-y-2">
-                      <Label htmlFor="otpEmail" className="text-sm font-medium text-foreground">
+                      <Label htmlFor="otpEmail" className="text-xs sm:text-sm font-medium text-foreground">
                         Corporate Email Address
                       </Label>
                       <Input
@@ -480,13 +480,13 @@ export default function LoginPage() {
                         value={otpEmail}
                         onChange={(e) => setOtpEmail(e.target.value)}
                         required
-                        className="h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced"
+                        className="h-11 sm:h-12 border-border focus:border-primary focus:ring-primary bg-input focus-enhanced text-base"
                       />
                       <p className="text-xs text-muted-foreground">OTP will be sent to your registered email address</p>
                     </div>
                     <Button
                       type="submit"
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                      className="w-full h-12 sm:h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-base"
                       disabled={isLoading}
                     >
                       {isLoading ? "Sending OTP..." : "Send OTP Code"}
@@ -507,23 +507,23 @@ export default function LoginPage() {
                             />
                             <InputOTPSlot
                               index={1}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
+                              className="w-10 h-10 sm:w-12 sm:h-12 text-base sm:text-lg border-border focus:border-primary focus:ring-primary bg-input"
                             />
                             <InputOTPSlot
                               index={2}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
+                              className="w-10 h-10 sm:w-12 sm:h-12 text-base sm:text-lg border-border focus:border-primary focus:ring-primary bg-input"
                             />
                             <InputOTPSlot
                               index={3}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
+                              className="w-10 h-10 sm:w-12 sm:h-12 text-base sm:text-lg border-border focus:border-primary focus:ring-primary bg-input"
                             />
                             <InputOTPSlot
                               index={4}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
+                              className="w-10 h-10 sm:w-12 sm:h-12 text-base sm:text-lg border-border focus:border-primary focus:ring-primary bg-input"
                             />
                             <InputOTPSlot
                               index={5}
-                              className="w-12 h-12 text-lg border-border focus:border-primary focus:ring-primary bg-input"
+                              className="w-10 h-10 sm:w-12 sm:h-12 text-base sm:text-lg border-border focus:border-primary focus:ring-primary bg-input"
                             />
                           </InputOTPGroup>
                         </InputOTP>
@@ -534,7 +534,7 @@ export default function LoginPage() {
                     </div>
                     <Button
                       type="submit"
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                      className="w-full h-12 sm:h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 text-base"
                       disabled={isLoading || otp.length !== 6}
                     >
                       {isLoading ? "Verifying..." : "Verify OTP"}
@@ -543,7 +543,7 @@ export default function LoginPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 h-12 border-border text-foreground hover:bg-muted bg-transparent"
+                        className="flex-1 h-11 sm:h-12 border-border text-foreground hover:bg-muted bg-transparent text-sm sm:text-base"
                         onClick={() => {
                           setOtpSent(false)
                           setOtp("")
@@ -555,7 +555,7 @@ export default function LoginPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 h-12 border-primary text-primary hover:bg-primary hover:text-primary-foreground bg-transparent"
+                        className="flex-1 h-11 sm:h-12 border-primary text-primary hover:bg-primary hover:text-primary-foreground bg-transparent text-sm sm:text-base"
                         onClick={handleSendOtp}
                         disabled={isLoading}
                       >

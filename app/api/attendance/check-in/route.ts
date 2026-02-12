@@ -183,19 +183,13 @@ export async function POST(request: NextRequest) {
 
       const recentDeviceSession = deviceSessionResult.data
       const ipSharingSession = ipSessionResult.data
-    const yesterdayDate = yesterday.toISOString().split("T")[0]
+    }
 
-    const { data: yesterdayRecord } = await supabase
-      .from("attendance_records")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("check_in_time", `${yesterdayDate}T00:00:00`)
-      .lt("check_in_time", `${yesterdayDate}T23:59:59`)
-      .maybeSingle()
-
+    // Get yesterday's record to check for missed check-out (already fetched in Promise.all above)
     let missedCheckoutWarning = null
     if (yesterdayRecord && yesterdayRecord.check_in_time && !yesterdayRecord.check_out_time) {
       // Auto check-out the previous day at 11:59 PM
+      const yesterdayDate = new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split("T")[0]
       const autoCheckoutTime = new Date(`${yesterdayDate}T23:59:59`)
       const checkInTime = new Date(yesterdayRecord.check_in_time)
       const workHours = (autoCheckoutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
@@ -253,40 +247,14 @@ export async function POST(request: NextRequest) {
       districtName = district?.name
     }
 
+    // Update or create device session for tracking (optimized)
     let deviceSessionId = null
     if (device_info?.device_id) {
-      // First try to find existing session
-      const { data: existingSession } = await supabase
+      // Use upsert to avoid checking then inserting (reduces 2 queries to 1)
+      const { data: deviceSession, error: sessionError } = await supabase
         .from("device_sessions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("device_id", device_info.device_id)
-        .maybeSingle()
-
-      if (existingSession) {
-        // Update existing session
-        const { data: updatedSession } = await supabase
-          .from("device_sessions")
-          .update({
-            device_name: device_info.device_name || null,
-            device_type: device_info.device_type || null,
-            browser_info: device_info.browser_info || null,
-            ip_address: request.ip || null,
-            is_active: true,
-            last_activity: new Date().toISOString(),
-          })
-          .eq("id", existingSession.id)
-          .select("id")
-          .maybeSingle()
-
-        if (updatedSession) {
-          deviceSessionId = updatedSession.id
-        }
-      } else {
-        // Create new session only if we have a valid device_id
-        const { data: newSession, error: sessionError } = await supabase
-          .from("device_sessions")
-          .insert({
+        .upsert(
+          {
             user_id: user.id,
             device_id: device_info.device_id,
             device_name: device_info.device_name || null,
@@ -295,20 +263,16 @@ export async function POST(request: NextRequest) {
             ip_address: request.ip || null,
             is_active: true,
             last_activity: new Date().toISOString(),
-          })
-          .select("id")
-          .maybeSingle()
+          },
+          { onConflict: "device_id,user_id" }
+        )
+        .select("id")
+        .maybeSingle()
 
-        if (sessionError) {
-          console.error("[v0] Device session creation error:", sessionError)
-          // Continue without device session - it's optional
-        } else if (newSession) {
-          deviceSessionId = newSession.id
-        }
+      if (!sessionError && deviceSession) {
+        deviceSessionId = deviceSession.id
       }
     }
-
-    // Check if check-in is after 9:00 AM (late arrival)
     const checkInTime = new Date()
     const checkInHour = checkInTime.getHours()
     const checkInMinutes = checkInTime.getMinutes()
