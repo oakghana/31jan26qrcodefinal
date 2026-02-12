@@ -1,5 +1,3 @@
-"use client"
-
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
@@ -13,7 +11,8 @@ import { Clock, Calendar, Users, TrendingUp, UserCheck, AlertCircle, Activity, L
 import Link from "next/link"
 import { MobileAppDownload } from "@/components/ui/mobile-app-download"
 
-export default function DashboardOverviewPage() {
+function OverviewContent() {
+  "use client"
   const supabase = createClient()
   const [profile, setProfile] = useState<any>(null)
   const [todayAttendance, setTodayAttendance] = useState<any>(null)
@@ -206,6 +205,14 @@ export default function DashboardOverviewPage() {
         </Card>
       </div>
       <MobileAppDownload variant="dashboard" />
+    </DashboardLayout>
+  )
+}
+
+export default function DashboardOverviewPage() {
+  return (
+    <DashboardLayout>
+      <OverviewContent />
     </DashboardLayout>
   )
 }

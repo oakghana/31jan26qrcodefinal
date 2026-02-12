@@ -328,10 +328,10 @@ export default function LeaveNotificationsManagementPage() {
                   </div>
                 )}
               </TabsContent>
-            </div>
-          </Tabs>
-        )}
-      </div>
+            </Tabs>
+          )}
+        </div>
+      </DashboardLayout>
 
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent>
