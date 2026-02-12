@@ -226,17 +226,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: locationData, error: locationError } = await supabase
-      .from("geofence_locations")
-      .select("name, address, district_id")
-      .eq("id", location_id)
-      .single()
-
-    if (locationError) {
-      console.error("Location lookup error:", locationError)
-    }
-
-    // Get district name separately if needed
+    // Get district name separately if needed (using already-fetched locationData from Promise.all)
     let districtName = null
     if (locationData?.district_id) {
       const { data: district } = await supabase
@@ -246,69 +236,6 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
       districtName = district?.name
     }
-
-    // Update or create device session for tracking (optimized)
-    let deviceSessionId = null
-    if (device_info?.device_id) {
-      // Use upsert to avoid checking then inserting (reduces 2 queries to 1)
-      const { data: deviceSession, error: sessionError } = await supabase
-        .from("device_sessions")
-        .upsert(
-          {
-            user_id: user.id,
-            device_id: device_info.device_id,
-            device_name: device_info.device_name || null,
-            device_type: device_info.device_type || null,
-            browser_info: device_info.browser_info || null,
-            ip_address: request.ip || null,
-            is_active: true,
-            last_activity: new Date().toISOString(),
-          },
-          { onConflict: "device_id,user_id" }
-        )
-        .select("id")
-        .maybeSingle()
-
-      if (!sessionError && deviceSession) {
-        deviceSessionId = deviceSession.id
-      }
-    }
-    const checkInTime = new Date()
-    const checkInHour = checkInTime.getHours()
-    const checkInMinutes = checkInTime.getMinutes()
-    const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
-
-    const attendanceData = {
-      user_id: user.id,
-      check_in_time: checkInTime.toISOString(),
-      check_in_location_id: location_id,
-      device_session_id: deviceSessionId,
-      status: isLateArrival ? "late" : "present",
-      check_in_method: qr_code_used ? "qr_code" : "gps",
-      check_in_location_name: locationData?.name || null,
-      is_remote_location: false, // Will be calculated based on user's assigned location
-    }
-
-    // Add GPS coordinates only if available
-    if (latitude && longitude) {
-      attendanceData.check_in_latitude = latitude
-      attendanceData.check_in_longitude = longitude
-    }
-
-    // Add QR code timestamp if used
-    if (qr_code_used && qr_timestamp) {
-      attendanceData.qr_check_in_timestamp = qr_timestamp
-    }
-
-    if (userProfile?.assigned_location_id && userProfile.assigned_location_id !== location_id) {
-      attendanceData.is_remote_location = true
-    }
-
-    const { data: attendanceRecord, error: attendanceError } = await supabase
-      .from("attendance_records")
-      .insert(attendanceData)
-      .select("*")
-      .single()
 
     // Calculate check-in position for the location today
     let checkInPosition = null

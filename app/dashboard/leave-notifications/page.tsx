@@ -1,20 +1,19 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Calendar,
   Loader2,
@@ -24,9 +23,9 @@ import {
   Clock,
   Users,
   Bell,
-} from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
-import { LeaveNotificationCard, type LeaveNotification } from "@/components/leave/leave-notification-card"
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { LeaveNotificationCard, type LeaveNotification } from '@/components/leave/leave-notification-card'
 
 export default function LeaveNotificationsManagementPage() {
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -154,27 +153,23 @@ export default function LeaveNotificationsManagementPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading leave notifications...</p>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading leave notifications...</p>
         </div>
-      </DashboardLayout>
+      </div>
     )
   }
 
-  if (!["admin", "regional_manager", "department_head"].includes(userRole || "")) {
+  if (!['admin', 'regional_manager', 'department_head'].includes(userRole || '')) {
     return (
-      <DashboardLayout>
-        <Alert className="border-amber-200 bg-amber-50">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <AlertDescription className="text-amber-800">
-            You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
-          </AlertDescription>
-        </Alert>
-      </DashboardLayout>
+      <Alert className="border-amber-200 bg-amber-50">
+        <AlertCircle className="h-5 w-5 text-amber-600" />
+        <AlertDescription className="text-amber-800">
+          You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
+        </AlertDescription>
+      </Alert>
     )
   }
 
@@ -189,26 +184,25 @@ export default function LeaveNotificationsManagementPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Bell className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">
-                Leave Notifications
-              </h1>
-              <p className="text-lg text-muted-foreground font-medium mt-1">
-                Manage leave requests from your team
-              </p>
-            </div>
-            <Badge className={`ml-auto ${roleBadge[userRole as keyof typeof roleBadge]?.color || ""} border font-semibold`}>
-              {roleBadge[userRole as keyof typeof roleBadge]?.label}
-            </Badge>
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Bell className="h-6 w-6 text-primary" />
           </div>
+          <div>
+            <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">
+              Leave Notifications
+            </h1>
+            <p className="text-lg text-muted-foreground font-medium mt-1">
+              Manage leave requests from your team
+            </p>
+          </div>
+          <Badge className={`ml-auto ${roleBadge[userRole as keyof typeof roleBadge]?.color || ''} border font-semibold`}>
+            {roleBadge[userRole as keyof typeof roleBadge]?.label}
+          </Badge>
         </div>
+      </div>
 
         {notifications.length === 0 ? (
           <Card className="border-0 shadow-sm">
@@ -386,6 +380,6 @@ export default function LeaveNotificationsManagementPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

@@ -134,8 +134,6 @@ export function AttendanceReports() {
     setLoading(true)
     setExportError(null)
     try {
-      console.log("[v0] Fetching report with dates:", startDate, endDate)
-
       const params = new URLSearchParams({
         start_date: startDate,
         end_date: endDate,
@@ -146,12 +144,10 @@ export function AttendanceReports() {
       if (selectedLocation !== "all") params.append("location_id", selectedLocation)
       if (selectedDistrict !== "all") params.append("district_id", selectedDistrict)
 
-      console.log("[v0] API call URL:", `/api/admin/reports/attendance?${params}`)
-
       const response = await fetch(`/api/admin/reports/attendance?${params}`)
       const result = await response.json()
 
-      console.log("[v0] API response:", result)
+      console.log("[v0] Fetching report with filters...")
 
       if (result.success) {
         setRecords(result.data.records || [])
@@ -287,7 +283,7 @@ export function AttendanceReports() {
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
-        console.log("[v0] CSV export completed successfully")
+        console.log(`[v0] CSV export completed`)
       } else {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
@@ -335,7 +331,7 @@ export function AttendanceReports() {
         a.click()
         document.body.removeChild(a)
         window.URL.revokeObjectURL(url)
-        console.log(`[v0] ${format} export completed successfully`)
+        console.log(`[v0] ${format} export completed`)
       }
     } catch (error) {
       console.error("[v0] Export error:", error)
@@ -427,27 +423,22 @@ export function AttendanceReports() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Enhanced Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Advanced Attendance Analytics & Export
-          </CardTitle>
-          <CardDescription>
-            Comprehensive attendance reports with location and district filtering, plus Excel/PDF export
-          </CardDescription>
+    <div className="space-y-2 md:space-y-3 overflow-x-auto w-full min-h-screen">
+      {/* Compact Filter Card */}
+      <Card className="overflow-hidden border-0 shadow-sm">
+        <CardHeader className="pb-2 md:pb-3">
+          <CardTitle className="text-lg md:text-xl font-semibold">Filters</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-2 md:pt-3 px-3 md:px-4">
           {exportError && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{exportError}</AlertDescription>
+            <Alert variant="destructive" className="mb-2 md:mb-3 text-xs md:text-sm py-2">
+              <AlertTriangle className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
+              <AlertDescription className="text-xs ml-2">{exportError}</AlertDescription>
             </Alert>
           )}
 
-          <div className="grid gap-4 md:grid-cols-7">
+          {/* Mobile scrollable filter row */}
+          <div className="grid gap-1 md:gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-max">
             <div>
               <Label htmlFor="startDate">Start Date</Label>
               <input
@@ -711,27 +702,27 @@ export function AttendanceReports() {
         </div>
       )}
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="departments">Departments</TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
+      <Tabs defaultValue="overview" className="space-y-3">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto py-1">
+          <TabsTrigger value="overview" className="text-xs md:text-sm py-2">Overview</TabsTrigger>
+          <TabsTrigger value="trends" className="text-xs md:text-sm py-2">Trends</TabsTrigger>
+          <TabsTrigger value="departments" className="text-xs md:text-sm py-2 hidden md:block">Departments</TabsTrigger>
+          <TabsTrigger value="details" className="text-xs md:text-sm py-2 hidden md:block">Details</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Attendance by Department</CardTitle>
-                <CardDescription>Total attendance records per department</CardDescription>
+        <TabsContent value="overview" className="space-y-3">
+          <div className="grid gap-3 md:gap-4 md:grid-cols-2">
+            <Card className="p-3 md:p-4">
+              <CardHeader className="p-0 mb-2">
+                <CardTitle className="text-sm md:text-base">Attendance by Department</CardTitle>
+                <CardDescription className="text-xs">Records per department</CardDescription>
               </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+              <CardContent className="p-0">
+                <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={departmentChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip />
                     <Bar dataKey="count" fill="#4B8B3B" />
                   </BarChart>
