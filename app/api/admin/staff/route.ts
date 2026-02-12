@@ -16,8 +16,6 @@ function createJsonResponse(data: any, status = 200) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("[v0] Staff API - Starting GET request")
-
     const startTime = Date.now()
 
     let createClient
@@ -62,16 +60,12 @@ export async function GET(request: NextRequest) {
       return createJsonResponse({ success: false, error: "Authentication required", data: [] }, 401)
     }
 
-    console.log("[v0] Staff API - User authenticated:", user.id)
-
     const searchParams = request.nextUrl.searchParams
     const searchTerm = searchParams.get("search")
     const departmentFilter = searchParams.get("department")
     const roleFilter = searchParams.get("role")
     const sortBy = searchParams.get("sortBy") || "created_at"
     const sortOrder = searchParams.get("sortOrder") || "desc"
-
-    console.log("[v0] Staff API - Filters:", { searchTerm, departmentFilter, roleFilter, sortBy, sortOrder })
 
     let query = supabase.from("user_profiles").select(`
         id,
@@ -147,9 +141,6 @@ export async function GET(request: NextRequest) {
           : null,
       })) || []
 
-    console.log("[v0] Staff API - Fetched", enrichedStaff.length, "staff members")
-    console.log("[v0] Staff API - Response time:", Date.now() - startTime, "ms")
-
     return createJsonResponse({
       success: true,
       data: enrichedStaff,
@@ -171,8 +162,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[v0] Staff API - Starting POST request")
-
     let supabase, adminSupabase
     try {
       const supabaseModule = await import("@/lib/supabase/server")
@@ -193,8 +182,6 @@ export async function POST(request: NextRequest) {
           persistSession: false,
         },
       })
-
-      console.log("[v0] Staff API - Admin client created successfully")
     } catch (clientError) {
       console.error("[v0] Staff API POST - Client creation error:", clientError)
       return createJsonResponse(
@@ -242,7 +229,6 @@ export async function POST(request: NextRequest) {
     const userExists = existingAuthUser.users.find((u) => u.email === email)
 
     if (userExists) {
-      console.log("[v0] Staff API - User with email already exists:", email)
       return createJsonResponse(
         {
           success: false,
@@ -276,8 +262,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Staff API - Auth user created successfully:", authUser.user.id)
-
     const { data: existingProfile } = await adminSupabase
       .from("user_profiles")
       .select("id")
@@ -287,7 +271,6 @@ export async function POST(request: NextRequest) {
     let newProfile, insertError
 
     if (existingProfile) {
-      console.log("[v0] Staff API - Updating existing profile:", authUser.user.id)
       // Update existing profile
       const { data, error } = await adminSupabase
         .from("user_profiles")
@@ -313,7 +296,6 @@ export async function POST(request: NextRequest) {
       newProfile = data
       insertError = error
     } else {
-      console.log("[v0] Staff API - Creating new profile:", authUser.user.id)
       // Insert new profile
       const { data, error } = await adminSupabase
         .from("user_profiles")
@@ -354,7 +336,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[v0] Staff API - Staff member created successfully")
     return createJsonResponse(
       {
         success: true,

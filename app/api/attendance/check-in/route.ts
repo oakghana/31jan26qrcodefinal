@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const today = new Date().toISOString().split("T")[0]
     const { data: existingRecord, error: checkError } = await supabase
       .from("attendance_records")
-      .select("id, check_in_time, check_out_time")
+      .select("id, check_in_time, check_out_time, work_hours")
       .eq("user_id", user.id)
       .gte("check_in_time", `${today}T00:00:00`)
       .lt("check_in_time", `${today}T23:59:59`)
@@ -83,27 +83,48 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: userProfile } = await supabase
-      .from("user_profiles")
-      .select("first_name, last_name, assigned_location_id, department_id, departments(code, name)")
-      .eq("id", user.id)
-      .maybeSingle()
+    const body = await request.json()
+    const { latitude, longitude, location_id, device_info, qr_code_used, qr_timestamp } = body
+
+    // Parallelize independent queries: user profile, leave status, yesterday's record, location
+    const [userProfileResult, leaveStatusResult, yesterdayRecordResult, locationResult] = await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("first_name, last_name, assigned_location_id, department_id, departments(code, name)")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("leave_status")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "on_leave")
+        .gte("end_date", today)
+        .lte("start_date", today)
+        .maybeSingle(),
+      supabase
+        .from("attendance_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("check_in_time", `${new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split("T")[0]}T00:00:00`)
+        .lt("check_in_time", `${new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split("T")[0]}T23:59:59`)
+        .maybeSingle(),
+      location_id ? supabase
+        .from("geofence_locations")
+        .select("name, address, district_id")
+        .eq("id", location_id)
+        .single() : Promise.resolve({ data: null, error: null }),
+    ])
+
+    const { data: userProfile } = userProfileResult
+    const { data: leaveStatus } = leaveStatusResult
+    const { data: yesterdayRecord } = yesterdayRecordResult
+    const { data: locationData, error: locationError } = locationResult
 
     // Security and Research departments have rotating shifts - exempt from time restrictions
     const departmentCode = (userProfile?.departments as any)?.code
     const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
 
-    // Check if user is on leave
-    const today = new Date().toISOString().split("T")[0]
-    const { data: leaveStatus } = await supabase
-      .from("leave_status")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "on_leave")
-      .gte("end_date", today)
-      .lte("start_date", today)
-      .maybeSingle()
-
+    // Check leave status
     if (leaveStatus) {
       return NextResponse.json(
         {
@@ -114,9 +135,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body = await request.json()
-    const { latitude, longitude, location_id, device_info, qr_code_used, qr_timestamp } = body
+    if (locationError) {
+      console.error("Location lookup error:", locationError)
+    }
 
+    // Device sharing detection with optimized queries
     if (device_info?.device_id) {
       const getValidIpAddress = () => {
         const possibleIps = [
@@ -133,20 +156,11 @@ export async function POST(request: NextRequest) {
       }
 
       const ipAddress = getValidIpAddress()
-
-      // Check if this device was recently used by another staff member
-      // Enhanced detection using both device fingerprint (MAC-like) and IP address
-      if (device_info?.device_id) {
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-        
-        console.log("[v0] Checking device sharing with enhanced detection:", {
-          deviceId: device_info.device_id,
-          ipAddress: ipAddress,
-          userId: user.id
-        })
-        
-        // First check: Same device fingerprint (MAC-like ID)
-        const { data: recentDeviceSession } = await supabase
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      
+      // Parallelize device and IP checks
+      const [deviceSessionResult, ipSessionResult] = await Promise.all([
+        supabase
           .from("device_sessions")
           .select("user_id, last_activity, ip_address, device_id")
           .eq("device_id", device_info.device_id)
@@ -154,152 +168,28 @@ export async function POST(request: NextRequest) {
           .gte("last_activity", twoHoursAgo)
           .order("last_activity", { ascending: false })
           .limit(1)
-          .maybeSingle()
-        
-        // Second check: Same IP address with different device ID (IP sharing detection)
-        let ipSharingSession = null
-        if (ipAddress) {
-          const { data: ipSession } = await supabase
-            .from("device_sessions")
-            .select("user_id, last_activity, ip_address, device_id")
-            .eq("ip_address", ipAddress)
-            .neq("user_id", user.id)
-            .neq("device_id", device_info.device_id)
-            .gte("last_activity", twoHoursAgo)
-            .order("last_activity", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          
-          ipSharingSession = ipSession
-        }
+          .maybeSingle(),
+        ipAddress ? supabase
+          .from("device_sessions")
+          .select("user_id, last_activity, ip_address, device_id")
+          .eq("ip_address", ipAddress)
+          .neq("user_id", user.id)
+          .neq("device_id", device_info.device_id)
+          .gte("last_activity", twoHoursAgo)
+          .order("last_activity", { ascending: false })
+          .limit(1)
+          .maybeSingle() : Promise.resolve({ data: null, error: null }),
+      ])
 
-        // Process device sharing detection (MAC-like fingerprint match)
-        if (recentDeviceSession) {
-          const { data: previousUserProfile } = await supabase
-            .from("user_profiles")
-            .select("first_name, last_name, employee_id, department_id")
-            .eq("id", recentDeviceSession.user_id)
-            .single()
-
-          if (previousUserProfile) {
-            const previousUserName = `${previousUserProfile.first_name} ${previousUserProfile.last_name}`
-            const timeSinceLastUse = Math.round((Date.now() - new Date(recentDeviceSession.last_activity).getTime()) / (1000 * 60))
-            
-            deviceSharingWarning = {
-              previousUser: previousUserName,
-              previousEmployeeId: previousUserProfile.employee_id,
-              timeSinceLastUse: timeSinceLastUse,
-              message: `⚠️ DEVICE SHARING DETECTED: This ${device_info.device_type} (${device_info.device_name}) with MAC ${device_info.device_id} was recently used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} minutes ago. Your department head will be notified.`,
-              detectionMethod: "device_fingerprint",
-              deviceDetails: {
-                mac_address: device_info.device_id,
-                device_type: device_info.device_type,
-                device_name: device_info.device_name
-              }
-            }
-
-            console.warn(
-              `[v0] ⚠️ DEVICE SHARING - Fingerprint Match: ${device_info.device_type} (${device_info.device_name}) | MAC ${device_info.device_id} | IP ${ipAddress} | Current: ${user.id} | Previous: ${previousUserName} (${previousUserProfile.employee_id})`,
-            )
-
-            await supabase.from("audit_logs").insert({
-              user_id: user.id,
-              action: "device_sharing_detected",
-              table_name: "device_sessions",
-              record_id: device_info.device_id,
-              new_values: {
-                current_user: user.id,
-                previous_user: recentDeviceSession.user_id,
-                previous_user_name: previousUserName,
-                time_since_last_use_minutes: timeSinceLastUse,
-                device_mac_address: device_info.device_id,
-                device_type: device_info.device_type,
-                device_name: device_info.device_name,
-                current_ip: ipAddress,
-                previous_ip: recentDeviceSession.ip_address,
-                detection_method: "device_fingerprint",
-                browser_info: device_info.browser_info
-              },
-              ip_address: ipAddress || null,
-              user_agent: request.headers.get("user-agent"),
-            })
-          }
-        }
-        
-        // Process IP sharing detection (same IP, different device)
-        if (ipSharingSession && !deviceSharingWarning) {
-          const { data: ipSharerProfile } = await supabase
-            .from("user_profiles")
-            .select("first_name, last_name, employee_id, department_id")
-            .eq("id", ipSharingSession.user_id)
-            .single()
-
-          if (ipSharerProfile) {
-            const sharerName = `${ipSharerProfile.first_name} ${ipSharerProfile.last_name}`
-            const timeSinceLastUse = Math.round((Date.now() - new Date(ipSharingSession.last_activity).getTime()) / (1000 * 60))
-            
-            deviceSharingWarning = {
-              previousUser: sharerName,
-              previousEmployeeId: ipSharerProfile.employee_id,
-              timeSinceLastUse: timeSinceLastUse,
-              message: `⚠️ IP SHARING DETECTED: Same network (${ipAddress}) was used by ${sharerName} (${ipSharerProfile.employee_id}) ${timeSinceLastUse} minutes ago with a different device. Current: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}). Your department head will be notified.`,
-              detectionMethod: "ip_address",
-              deviceDetails: {
-                mac_address: device_info.device_id,
-                device_type: device_info.device_type,
-                device_name: device_info.device_name
-              }
-            }
-
-            console.warn(
-              `[v0] ⚠️ IP SHARING - Network Match: IP ${ipAddress} | Current: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}) | Previous MAC: ${ipSharingSession.device_id} | Current User: ${user.id} | Previous: ${sharerName} (${ipSharerProfile.employee_id})`,
-            )
-
-            await supabase.from("audit_logs").insert({
-              user_id: user.id,
-              action: "ip_sharing_detected",
-              table_name: "device_sessions",
-              record_id: ipAddress || "unknown",
-              new_values: {
-                current_user: user.id,
-                previous_user: ipSharingSession.user_id,
-                previous_user_name: sharerName,
-                time_since_last_use_minutes: timeSinceLastUse,
-                current_device_mac: device_info.device_id,
-                current_device_type: device_info.device_type,
-                current_device_name: device_info.device_name,
-                previous_device_mac: ipSharingSession.device_id,
-                shared_ip: ipAddress,
-                detection_method: "ip_address",
-                browser_info: device_info.browser_info
-              },
-              ip_address: ipAddress || null,
-              user_agent: request.headers.get("user-agent"),
-            })
-          }
-        }
-      }
+      const recentDeviceSession = deviceSessionResult.data
+      const ipSharingSession = ipSessionResult.data
     }
 
-    if (!qr_code_used && (!latitude || !longitude)) {
-      return NextResponse.json({ error: "Location coordinates are required for GPS check-in" }, { status: 400 })
-    }
-
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayDate = yesterday.toISOString().split("T")[0]
-
-    const { data: yesterdayRecord } = await supabase
-      .from("attendance_records")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("check_in_time", `${yesterdayDate}T00:00:00`)
-      .lt("check_in_time", `${yesterdayDate}T23:59:59`)
-      .maybeSingle()
-
+    // Get yesterday's record to check for missed check-out (already fetched in Promise.all above)
     let missedCheckoutWarning = null
     if (yesterdayRecord && yesterdayRecord.check_in_time && !yesterdayRecord.check_out_time) {
       // Auto check-out the previous day at 11:59 PM
+      const yesterdayDate = new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split("T")[0]
       const autoCheckoutTime = new Date(`${yesterdayDate}T23:59:59`)
       const checkInTime = new Date(yesterdayRecord.check_in_time)
       const workHours = (autoCheckoutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
@@ -336,17 +226,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: locationData, error: locationError } = await supabase
-      .from("geofence_locations")
-      .select("name, address, district_id")
-      .eq("id", location_id)
-      .single()
-
-    if (locationError) {
-      console.error("Location lookup error:", locationError)
-    }
-
-    // Get district name separately if needed
+    // Get district name separately if needed (using already-fetched locationData from Promise.all)
     let districtName = null
     if (locationData?.district_id) {
       const { data: district } = await supabase
@@ -356,99 +236,6 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
       districtName = district?.name
     }
-
-    let deviceSessionId = null
-    if (device_info?.device_id) {
-      // First try to find existing session
-      const { data: existingSession } = await supabase
-        .from("device_sessions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("device_id", device_info.device_id)
-        .maybeSingle()
-
-      if (existingSession) {
-        // Update existing session
-        const { data: updatedSession } = await supabase
-          .from("device_sessions")
-          .update({
-            device_name: device_info.device_name || null,
-            device_type: device_info.device_type || null,
-            browser_info: device_info.browser_info || null,
-            ip_address: request.ip || null,
-            is_active: true,
-            last_activity: new Date().toISOString(),
-          })
-          .eq("id", existingSession.id)
-          .select("id")
-          .maybeSingle()
-
-        if (updatedSession) {
-          deviceSessionId = updatedSession.id
-        }
-      } else {
-        // Create new session only if we have a valid device_id
-        const { data: newSession, error: sessionError } = await supabase
-          .from("device_sessions")
-          .insert({
-            user_id: user.id,
-            device_id: device_info.device_id,
-            device_name: device_info.device_name || null,
-            device_type: device_info.device_type || null,
-            browser_info: device_info.browser_info || null,
-            ip_address: request.ip || null,
-            is_active: true,
-            last_activity: new Date().toISOString(),
-          })
-          .select("id")
-          .maybeSingle()
-
-        if (sessionError) {
-          console.error("[v0] Device session creation error:", sessionError)
-          // Continue without device session - it's optional
-        } else if (newSession) {
-          deviceSessionId = newSession.id
-        }
-      }
-    }
-
-    // Check if check-in is after 9:00 AM (late arrival)
-    const checkInTime = new Date()
-    const checkInHour = checkInTime.getHours()
-    const checkInMinutes = checkInTime.getMinutes()
-    const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
-
-    const attendanceData = {
-      user_id: user.id,
-      check_in_time: checkInTime.toISOString(),
-      check_in_location_id: location_id,
-      device_session_id: deviceSessionId,
-      status: isLateArrival ? "late" : "present",
-      check_in_method: qr_code_used ? "qr_code" : "gps",
-      check_in_location_name: locationData?.name || null,
-      is_remote_location: false, // Will be calculated based on user's assigned location
-    }
-
-    // Add GPS coordinates only if available
-    if (latitude && longitude) {
-      attendanceData.check_in_latitude = latitude
-      attendanceData.check_in_longitude = longitude
-    }
-
-    // Add QR code timestamp if used
-    if (qr_code_used && qr_timestamp) {
-      attendanceData.qr_check_in_timestamp = qr_timestamp
-    }
-
-    if (userProfile?.assigned_location_id && userProfile.assigned_location_id !== location_id) {
-      attendanceData.is_remote_location = true
-    }
-
-    const { data: attendanceRecord, error: attendanceError } = await supabase
-      .from("attendance_records")
-      .insert(attendanceData)
-      .select("*")
-      .single()
 
     // Calculate check-in position for the location today
     let checkInPosition = null

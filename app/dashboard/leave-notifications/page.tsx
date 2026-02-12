@@ -1,20 +1,19 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Calendar,
   Loader2,
@@ -24,9 +23,9 @@ import {
   Clock,
   Users,
   Bell,
-} from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
-import { LeaveNotificationCard, type LeaveNotification } from "@/components/leave/leave-notification-card"
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { LeaveNotificationCard, type LeaveNotification } from '@/components/leave/leave-notification-card'
 
 export default function LeaveNotificationsManagementPage() {
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -63,7 +62,6 @@ export default function LeaveNotificationsManagementPage() {
 
       setUserRole(profile.role)
 
-      // Only fetch for managers
       if (!["admin", "regional_manager", "department_head"].includes(profile.role)) {
         setLoading(false)
         return
@@ -154,27 +152,27 @@ export default function LeaveNotificationsManagementPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-muted-foreground">Loading leave notifications...</p>
           </div>
         </div>
-      </DashboardLayout>
+      </>
     )
   }
 
-  if (!["admin", "regional_manager", "department_head"].includes(userRole || "")) {
+  if (!['admin', 'regional_manager', 'department_head'].includes(userRole || '')) {
     return (
-      <DashboardLayout>
+      <>
         <Alert className="border-amber-200 bg-amber-50">
           <AlertCircle className="h-5 w-5 text-amber-600" />
           <AlertDescription className="text-amber-800">
-            You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
+            You don't have permission to manage leave notifications.
           </AlertDescription>
         </Alert>
-      </DashboardLayout>
+      </>
     )
   }
 
@@ -189,203 +187,138 @@ export default function LeaveNotificationsManagementPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Bell className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">
-                Leave Notifications
-              </h1>
-              <p className="text-lg text-muted-foreground font-medium mt-1">
-                Manage leave requests from your team
-              </p>
-            </div>
-            <Badge className={`ml-auto ${roleBadge[userRole as keyof typeof roleBadge]?.color || ""} border font-semibold`}>
-              {roleBadge[userRole as keyof typeof roleBadge]?.label}
-            </Badge>
+    <div className="space-y-8 p-4 md:p-6">
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Bell className="h-6 w-6 text-primary" />
           </div>
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold">Leave Notifications</h1>
+            <p className="text-muted-foreground">Manage leave requests from your team</p>
+          </div>
+          <Badge className={`ml-auto ${roleBadge[userRole as keyof typeof roleBadge]?.color || ''} border`}>
+            {roleBadge[userRole as keyof typeof roleBadge]?.label}
+          </Badge>
         </div>
-
-        {notifications.length === 0 ? (
-          <Card className="border-0 shadow-sm">
-            <CardContent className="pt-12 pb-12">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Bell className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <p className="text-lg font-medium text-muted-foreground">No leave notifications</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  All leave requests have been processed or there are currently no pending requests.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Tabs defaultValue="pending" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 lg:w-fit">
-              <TabsTrigger className="flex items-center gap-2" value="pending">
-                <Clock className="h-4 w-4" />
-                <span className="hidden sm:inline">Pending</span>
-                {pendingNotifications.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {pendingNotifications.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger className="flex items-center gap-2" value="approved">
-                <CheckCircle2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Approved</span>
-                {approvedNotifications.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {approvedNotifications.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger className="flex items-center gap-2" value="rejected">
-                <XCircle className="h-4 w-4" />
-                <span className="hidden sm:inline">Rejected</span>
-                {rejectedNotifications.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {rejectedNotifications.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
-
-            <div className="mt-6">
-              <TabsContent value="pending" className="space-y-4">
-                {pendingNotifications.length === 0 ? (
-                  <Card className="border-0 shadow-sm">
-                    <CardContent className="pt-12 pb-12">
-                      <div className="text-center">
-                        <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">No pending leave requests</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid gap-4">
-                    {pendingNotifications.map((notif) => (
-                      <div key={notif.id} onClick={() => console.log(notif)}>
-                        <LeaveNotificationCard
-                          notification={notif}
-                          isManager={true}
-                          onApprove={() => handleApprove(notif.id)}
-                          onReject={() => {
-                            setSelectedNotifId(notif.id)
-                            setShowRejectDialog(true)
-                          }}
-                          onDismiss={handleDismiss}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="approved" className="space-y-4">
-                {approvedNotifications.length === 0 ? (
-                  <Card className="border-0 shadow-sm">
-                    <CardContent className="pt-12 pb-12">
-                      <div className="text-center">
-                        <CheckCircle2 className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">No approved leave requests</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid gap-4">
-                    {approvedNotifications.map((notif) => (
-                      <LeaveNotificationCard
-                        key={notif.id}
-                        notification={notif}
-                        isManager={true}
-                        onDismiss={handleDismiss}
-                      />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="rejected" className="space-y-4">
-                {rejectedNotifications.length === 0 ? (
-                  <Card className="border-0 shadow-sm">
-                    <CardContent className="pt-12 pb-12">
-                      <div className="text-center">
-                        <XCircle className="h-8 w-8 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">No rejected leave requests</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid gap-4">
-                    {rejectedNotifications.map((notif) => (
-                      <LeaveNotificationCard
-                        key={notif.id}
-                        notification={notif}
-                        isManager={true}
-                        onDismiss={handleDismiss}
-                      />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-            </div>
-          </Tabs>
-        )}
       </div>
+
+      {notifications.length === 0 ? (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="pt-12 pb-12">
+            <div className="text-center">
+              <Bell className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-lg font-medium text-muted-foreground">No leave notifications</p>
+              <p className="text-sm text-muted-foreground mt-2">All requests have been processed.</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs defaultValue="pending" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="pending" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span>Pending</span>
+              <Badge variant="secondary" className="ml-2">{pendingNotifications.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Approved</span>
+              <Badge variant="secondary" className="ml-2">{approvedNotifications.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="flex items-center gap-2">
+              <XCircle className="h-4 w-4" />
+              <span>Rejected</span>
+              <Badge variant="secondary" className="ml-2">{rejectedNotifications.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="space-y-4 mt-6">
+            {pendingNotifications.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No pending notifications</p>
+              </Card>
+            ) : (
+              pendingNotifications.map(notification => (
+                <LeaveNotificationCard
+                  key={notification.id}
+                  notification={notification}
+                  onApprove={() => handleApprove(notification.id)}
+                  onReject={() => {
+                    setSelectedNotifId(notification.id)
+                    setShowRejectDialog(true)
+                  }}
+                  isProcessing={processingId === notification.id}
+                />
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="approved" className="space-y-4 mt-6">
+            {approvedNotifications.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No approved notifications</p>
+              </Card>
+            ) : (
+              approvedNotifications.map(notification => (
+                <LeaveNotificationCard
+                  key={notification.id}
+                  notification={notification}
+                  onDismiss={() => handleDismiss(notification.id)}
+                  isProcessing={processingId === notification.id}
+                />
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="rejected" className="space-y-4 mt-6">
+            {rejectedNotifications.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No rejected notifications</p>
+              </Card>
+            ) : (
+              rejectedNotifications.map(notification => (
+                <LeaveNotificationCard
+                  key={notification.id}
+                  notification={notification}
+                  onDismiss={() => handleDismiss(notification.id)}
+                  isProcessing={processingId === notification.id}
+                />
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
 
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reject Leave Request</DialogTitle>
-            <DialogDescription>
-              Provide a reason for rejecting this leave request. The staff member will be notified.
-            </DialogDescription>
+            <DialogDescription>Provide a reason for rejecting this leave request.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              placeholder="Enter reason for rejection (optional)"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              className="min-h-[100px]"
-            />
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowRejectDialog(false)
-                  setRejectionReason("")
-                  setSelectedNotifId(null)
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleReject}
-                disabled={processingId === selectedNotifId}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {processingId === selectedNotifId ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Rejecting...
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject Request
-                  </>
-                )}
-              </Button>
-            </div>
+          <Textarea
+            placeholder="Enter rejection reason..."
+            value={rejectionReason}
+            onChange={(e) => setRejectionReason(e.target.value)}
+            className="min-h-[100px]"
+          />
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleReject} disabled={processingId === selectedNotifId}>
+              {processingId === selectedNotifId ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                'Reject'
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
   )
 }

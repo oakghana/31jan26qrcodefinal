@@ -90,7 +90,6 @@ export function StaffManagement() {
 
   const fetchStaff = useCallback(async () => {
     try {
-      console.log("[v0] Fetching staff with filters:", { searchTerm, selectedDepartment, selectedRole })
       const params = new URLSearchParams()
       if (searchTerm) params.append("search", searchTerm)
       if (selectedDepartment !== "all") params.append("department", selectedDepartment)
@@ -98,18 +97,15 @@ export function StaffManagement() {
 
       const response = await fetch(`/api/admin/staff?${params}`)
       const result = await response.json()
-      console.log("[v0] Staff fetch result:", result)
 
       if (result.success) {
         setStaff(result.data)
         setError(null)
       } else {
-        console.error("[v0] Failed to fetch staff:", result.error)
-        setError(result.error)
+        setError(result.error || "Failed to load staff members")
       }
     } catch (error) {
-      console.error("[v0] Staff fetch exception:", error)
-      setError("Failed to fetch staff")
+      setError("Unable to connect to staff management service")
     } finally {
       setLoading(false)
     }
@@ -134,56 +130,43 @@ export function StaffManagement() {
 
   const fetchDepartments = async () => {
     try {
-      console.log("[v0] Fetching departments...")
       const response = await fetch("/api/admin/departments")
       const result = await response.json()
-      console.log("[v0] Departments fetch result:", result)
 
       if (result.success || Array.isArray(result.departments) || Array.isArray(result.data)) {
         setDepartments(result.departments || result.data || [])
       } else {
-        console.warn("[v0] No departments returned, using empty array")
         setDepartments([])
       }
     } catch (error) {
-      console.error("[v0] Departments fetch exception:", error)
       setDepartments([])
     }
   }
 
   const fetchLocations = async () => {
     try {
-      console.log("[v0] Fetching locations...")
       const response = await fetch("/api/admin/locations")
       const result = await response.json()
-      console.log("[v0] Locations fetch result:", result)
 
       if (result.success) {
         setLocations(result.data || [])
       } else {
-        console.error("[v0] Failed to fetch locations:", result.error)
-        showError("Failed to load locations")
+        showError("Failed to load locations", "Location Error")
       }
     } catch (error) {
-      console.error("[v0] Locations fetch exception:", error)
-      showError("Error loading locations")
+      showError("Unable to connect to location service", "Connection Error")
     }
   }
 
   const fetchCurrentUserRole = async () => {
     try {
-      console.log("[v0] Fetching current user role...")
       const response = await fetch("/api/auth/current-user")
       const result = await response.json()
-      console.log("[v0] Current user role fetch result:", result)
       if (result.success && result.user) {
-        console.log("[v0] Setting current user role to:", result.user.role)
         setCurrentUserRole(result.user.role)
-      } else {
-        console.error("[v0] Failed to fetch user role - response:", result)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch current user role:", error)
+      // Silently fail - use default role
     }
   }
 
@@ -204,7 +187,6 @@ export function StaffManagement() {
         return
       }
 
-      console.log("[v0] Adding new staff:", newStaff)
       const response = await fetch("/api/admin/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -212,7 +194,6 @@ export function StaffManagement() {
       })
 
       const result = await response.json()
-      console.log("[v0] Add staff result:", result)
 
       if (result.success) {
         showSuccess("Staff member added successfully", "Staff Added")
@@ -235,8 +216,7 @@ export function StaffManagement() {
         setError(result.error)
       }
     } catch (error) {
-      console.error("[v0] Add staff exception:", error)
-      const errorMessage = "Failed to add staff member"
+      const errorMessage = "Unable to add staff member. Please try again."
       showError(errorMessage, "Add Staff Error")
       setError(errorMessage)
     }
@@ -245,7 +225,6 @@ export function StaffManagement() {
   const handleUpdateStaff = async (staffId: string, updates: Partial<StaffMember>) => {
     try {
       setError(null)
-      console.log("[v0] Updating staff member:", staffId, updates)
       const response = await fetch(`/api/admin/staff/${staffId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +232,6 @@ export function StaffManagement() {
       })
 
       const result = await response.json()
-      console.log("[v0] Update staff result:", result)
 
       if (result.success) {
         showSuccess("Staff member updated successfully", "Staff Updated")
@@ -264,8 +242,7 @@ export function StaffManagement() {
         setError(result.error)
       }
     } catch (error) {
-      console.error("[v0] Update exception:", error)
-      const errorMessage = "Failed to update staff member"
+      const errorMessage = "Unable to update staff member. Please try again."
       showError(errorMessage, "Update Error")
       setError(errorMessage)
     }
@@ -291,7 +268,7 @@ export function StaffManagement() {
         setError(result.error)
       }
     } catch (error) {
-      const errorMessage = "Failed to deactivate staff member"
+      const errorMessage = "Unable to deactivate staff member. Please try again."
       showError(errorMessage, "Deactivation Error")
       setError(errorMessage)
     }
@@ -323,24 +300,18 @@ export function StaffManagement() {
         assigned_location_id: editingStaff.assigned_location_id,
       }
 
-      console.log("[v0] Updating staff member:", editingStaff.id, updateData)
-
       const response = await fetch(`/api/admin/staff/${editingStaff.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updateData),
       })
 
-      console.log("[v0] Update response status:", response.status)
-
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("[v0] Update response error:", errorText)
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
+        throw new Error(`Failed with status ${response.status}`)
       }
 
       const result = await response.json()
-      console.log("[v0] Update response data:", result)
 
       if (result.success) {
         showSuccess("Staff member updated successfully", "Staff Updated")
@@ -348,14 +319,12 @@ export function StaffManagement() {
         setEditingStaff(null)
         fetchStaff()
       } else {
-        console.error("[v0] Update failed:", result.error)
         const errorMessage = result.error || "Failed to update staff member"
         showError(errorMessage, "Update Failed")
         setError(errorMessage)
       }
     } catch (error) {
-      console.error("[v0] Update exception:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to update staff member"
+      const errorMessage = error instanceof Error ? error.message : "Unable to update staff member. Please try again."
       showError(errorMessage, "Update Error")
       setError(errorMessage)
     }
