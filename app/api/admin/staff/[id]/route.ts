@@ -4,8 +4,6 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    console.log("[v0] Staff update API called for ID:", params.id)
-
     const supabase = await createClient()
 
     const adminSupabase = createSupabaseClient(
@@ -26,19 +24,16 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      console.log("[v0] Authentication failed:", authError)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
     if (!profile || !["admin", "it-admin", "department_head"].includes(profile.role)) {
-      console.log("[v0] Insufficient permissions for user:", profile?.role)
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
     const body = await request.json()
-    console.log("[v0] Update request body:", body)
 
     const {
       first_name,
@@ -94,12 +89,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       if (locationExists) {
         locationId = assigned_location_id
       } else {
-        console.log("[v0] Invalid location ID provided:", assigned_location_id)
         return NextResponse.json({ error: "Invalid location selected" }, { status: 400 })
       }
     }
-
-    console.log("[v0] Processed location ID:", locationId)
 
     const updateData = {
       first_name,
@@ -115,7 +107,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     if (email) {
       try {
-        console.log("[v0] Attempting to update email for user:", params.id)
         const { error: emailUpdateError } = await adminSupabase.auth.admin.updateUserById(params.id, {
           email: email,
         })
@@ -125,7 +116,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           console.log("[v0] Email update failed, continuing with profile update")
         } else {
           updateData.email = email
-          console.log("[v0] Email updated successfully")
         }
       } catch (emailError) {
         console.error("[v0] Email update exception:", emailError)
@@ -155,8 +145,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         { status: 500 },
       )
     }
-
-    console.log("[v0] Staff updated successfully:", updatedProfile)
 
     // Log the action
     await supabase.from("audit_logs").insert({
