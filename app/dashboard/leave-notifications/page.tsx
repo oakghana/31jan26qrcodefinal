@@ -153,23 +153,27 @@ export default function LeaveNotificationsManagementPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading leave notifications...</p>
+      <>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Loading leave notifications...</p>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   if (!['admin', 'regional_manager', 'department_head'].includes(userRole || '')) {
     return (
-      <Alert className="border-amber-200 bg-amber-50">
-        <AlertCircle className="h-5 w-5 text-amber-600" />
-        <AlertDescription className="text-amber-800">
-          You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
-        </AlertDescription>
-      </Alert>
+      <>
+        <Alert className="border-amber-200 bg-amber-50">
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            You don't have permission to manage leave notifications. Only admins, regional managers, and department heads can access this page.
+          </AlertDescription>
+        </Alert>
+      </>
     )
   }
 
