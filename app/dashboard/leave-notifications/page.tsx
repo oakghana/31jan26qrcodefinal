@@ -204,44 +204,44 @@ export default function LeaveNotificationsManagementPage() {
         </div>
       </div>
 
-        {notifications.length === 0 ? (
-          <Card className="border-0 shadow-sm">
-            <CardContent className="pt-12 pb-12">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Bell className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <p className="text-lg font-medium text-muted-foreground">No leave notifications</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  All leave requests have been processed or there are currently no pending requests.
-                </p>
+      {notifications.length === 0 ? (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="pt-12 pb-12">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-muted/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Bell className="h-8 w-8 text-muted-foreground" />
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Tabs defaultValue="pending" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 lg:w-fit">
-              <TabsTrigger className="flex items-center gap-2" value="pending">
-                <Clock className="h-4 w-4" />
-                <span className="hidden sm:inline">Pending</span>
-                {pendingNotifications.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {pendingNotifications.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger className="flex items-center gap-2" value="approved">
-                <CheckCircle2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Approved</span>
-                {approvedNotifications.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {approvedNotifications.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger className="flex items-center gap-2" value="rejected">
-                <XCircle className="h-4 w-4" />
-                <span className="hidden sm:inline">Rejected</span>
+              <p className="text-lg font-medium text-muted-foreground">No leave notifications</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                All leave requests have been processed or there are currently no pending requests.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs defaultValue="pending" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 lg:w-fit">
+            <TabsTrigger className="flex items-center gap-2" value="pending">
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">Pending</span>
+              {pendingNotifications.length > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {pendingNotifications.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger className="flex items-center gap-2" value="approved">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Approved</span>
+              {approvedNotifications.length > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {approvedNotifications.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger className="flex items-center gap-2" value="rejected">
+              <XCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">Rejected</span>
                 {rejectedNotifications.length > 0 && (
                   <Badge variant="secondary" className="ml-2">
                     {rejectedNotifications.length}
