@@ -1,66 +1,14 @@
-"use client"
-
-import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Calendar,
-  Loader2,
-  AlertCircle,
-  Plus,
-  Send,
-} from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
-import { format } from "date-fns"
+import { LeaveManagementClient } from "@/components/leave/leave-management-client"
 
-interface LeaveRequest {
-  id: string
-  user_id: string
-  start_date: string
-  end_date: string
-  reason: string
-  leave_type: string
-  status: "pending" | "approved" | "dismissed"
-  created_at: string
-  user_name?: string
-  department?: string
+export default async function LeaveManagementPage() {
+  return (
+    <DashboardLayout>
+      <LeaveManagementClient />
+    </DashboardLayout>
+  )
 }
 
-interface LeaveNotification {
-  id: string
-  leave_request_id: string
-  user_id: string
-  status: "pending" | "approved" | "dismissed"
-  leave_requests: LeaveRequest
-}
-
-export default function LeaveManagementPage() {
-  const [userRole, setUserRole] = useState<string | null>(null)
   const [userDepartment, setUserDepartment] = useState<string | null>(null)
   const [staffRequests, setStaffRequests] = useState<LeaveRequest[]>([])
   const [managerNotifications, setManagerNotifications] = useState<LeaveNotification[]>([])
