@@ -20,12 +20,7 @@ export default async function ReportsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-primary">Reports & Analytics</h1>
-          <p className="text-muted-foreground mt-2">Comprehensive attendance reports and insights</p>
-        </div>
-
+      <div className="space-y-3">
         <AttendanceReports />
       </div>
     </DashboardLayout>
