@@ -184,6 +184,7 @@ export default function LeaveNotificationsManagementPage() {
   }
 
   return (
+    <DashboardLayout>
     <div className="space-y-8">
       <div className="space-y-3">
         <div className="flex items-center gap-3">
@@ -381,5 +382,6 @@ export default function LeaveNotificationsManagementPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </DashboardLayout>
   )
 }
