@@ -40,11 +40,24 @@ const nextConfig = {
     optimizeCss: false, // Disabled to avoid critters dependency
   },
   webpack: (config, { isServer }) => {
+    // Optimize webpack cache to avoid big string serialization issues
+    config.cache = {
+      type: 'filesystem',
+      cacheDirectory: '.next/cache',
+      buildDependencies: {
+        config: [__filename],
+      },
+      maxMemoryGenerations: 1,
+    };
+
     if (!isServer) {
       config.optimization = {
         ...config.optimization,
         splitChunks: {
           chunks: 'all',
+          maxAsyncRequests: 30,
+          maxInitialRequests: 30,
+          minSize: 20000,
           cacheGroups: {
             default: false,
             vendors: false,

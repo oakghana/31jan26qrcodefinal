@@ -147,12 +147,7 @@ export function AttendanceReports() {
       const response = await fetch(`/api/admin/reports/attendance?${params}`)
       const result = await response.json()
 
-      console.log("[v0] Fetching report with filters...")
-
-      if (result.success) {
-        setRecords(result.data.records || [])
-        setSummary(result.data.summary || null)
-        console.log("[v0] Successfully loaded", result.data.records?.length || 0, "records")
+      console.log(`[v0] Loaded ${result.data.records?.length || 0} records`)
       } else {
         console.error("[v0] API error:", result.error)
         setExportError(result.error || "Failed to fetch report data")
@@ -167,35 +162,27 @@ export function AttendanceReports() {
 
   const fetchDepartments = async () => {
     try {
-      console.log("[v0] Fetching departments...")
       const response = await fetch("/api/admin/departments")
       const result = await response.json()
-      console.log("[v0] Departments response:", result)
 
       if (result.success) {
         setDepartments(result.data || [])
-      } else {
-        console.error("[v0] Departments error:", result.error)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch departments:", error)
+      console.error("Failed to fetch departments:", error)
     }
   }
 
   const fetchUsers = async () => {
     try {
-      console.log("[v0] Fetching users...")
       const response = await fetch("/api/admin/users")
       const result = await response.json()
-      console.log("[v0] Users response:", result)
 
       if (result.success) {
         setUsers(result.data || [])
-      } else {
-        console.error("[v0] Users error:", result.error)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch users:", error)
+      console.error("Failed to fetch users:", error)
     }
   }
 
