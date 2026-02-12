@@ -4,6 +4,8 @@ import type React from "react"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { clearAttendanceCache } from "@/lib/utils/attendance-cache"
 import { getDeviceInfo } from "@/lib/device-info"
+import { useLoginOptimization, useLoginSessionCache } from "@/hooks/use-login-optimization"
+import { dedupedFetch } from "@/lib/performance-utils"
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -12,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useCallback, useRef } from "react"
 import Image from "next/image"
 import { useNotifications } from "@/components/ui/notification-system"
 import { Eye, EyeOff } from "lucide-react"
@@ -28,12 +30,16 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const router = useRouter()
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const { showFieldError, showSuccess, showError, showWarning } = useNotifications()
+  const { submitLogin: debouncedSubmitLogin, validateForm } = useLoginOptimization()
+  const { setSessionData } = useLoginSessionCache()
 
-  const logLoginActivity = async (userId: string, action: string, success: boolean, method: string) => {
+  const logLoginActivity = useCallback(async (userId: string, action: string, success: boolean, method: string) => {
     try {
-      const response = await fetch("/api/auth/login-log", {
+      // Fire and forget - don't wait for response
+      fetch("/api/auth/login-log", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,24 +50,18 @@ export default function LoginPage() {
           action,
           success,
           method,
-          ip_address: null, // Will be captured server-side
+          ip_address: null,
           user_agent: navigator.userAgent,
         }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-        // Don't throw error - login should continue even if logging fails
-        return
-      }
-
-      const result = await response.json()
+        // Use keepalive to ensure request completes even if page unloads
+        keepalive: true,
+      }).catch(() => {}) // Silently fail
     } catch (error) {
       // Don't throw error - login should continue even if logging fails
     }
-  }
+  }, [])
 
-  const checkUserApproval = async (userId: string) => {
+  const checkUserApproval = useCallback(async (userId: string) => {
     try {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -88,10 +88,17 @@ export default function LoginPage() {
       console.error("Exception checking user approval:", error)
       return { approved: false, error: "Failed to verify account status" }
     }
-  }
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Cancel any previous requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+
     setIsLoading(true)
     setError(null)
 
@@ -105,6 +112,7 @@ export default function LoginPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ identifier }),
+          signal: abortControllerRef.current?.signal,
         })
 
         if (!response.ok) {
@@ -117,37 +125,17 @@ export default function LoginPage() {
         email = result.email
       }
 
-      // Single authentication call with AbortError handling
-      let data, error
-      try {
-        const result = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        data = result.data
-        error = result.error
-      } catch (authError: any) {
-        // Handle AbortError silently - request was cancelled but may have succeeded
-        if (authError.name === "AbortError") {
-          console.log("[v0] Auth request aborted, will verify session")
-          // Check if we have a valid session despite the abort
-          const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: null }))
-          if (sessionData?.session) {
-            // Session exists, treat as successful login
-            data = { user: sessionData.session.user, session: sessionData.session }
-            error = null
-          } else {
-            throw new Error("Authentication request was cancelled. Please try again.")
-          }
-        } else {
-          throw authError
-        }
-      }
+      // Single authentication call
+      const result = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      const { data, error } = result
 
       if (error) {
         // Log failed attempt
         if (data?.user?.id) {
-          await logLoginActivity(data.user.id, "login_failed", false, "password")
+          logLoginActivity(data.user.id, "login_failed", false, "password")
         }
 
         // Handle specific error types
@@ -164,9 +152,20 @@ export default function LoginPage() {
         return
       }
 
-      // Check user approval status
+      // Parallelize approval and device checks
       if (data?.user?.id) {
-        const approvalCheck = await checkUserApproval(data.user.id)
+        const [approvalCheck, deviceCheckResponse] = await Promise.all([
+          checkUserApproval(data.user.id),
+          fetch("/api/auth/check-device-binding", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              device_id: getDeviceInfo().device_id,
+              device_info: getDeviceInfo(),
+            }),
+            signal: abortControllerRef.current?.signal,
+          }).then(r => r.json()).catch(() => ({ allowed: true })),
+        ])
 
         if (!approvalCheck.approved) {
           await logLoginActivity(data.user.id, "login_blocked_unapproved", false, "password")
@@ -178,40 +177,35 @@ export default function LoginPage() {
           return
         }
 
-        const deviceInfo = getDeviceInfo()
-        const deviceCheckResponse = await fetch("/api/auth/check-device-binding", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            device_id: deviceInfo.device_id,
-            device_info: deviceInfo,
-          }),
-        })
-
-        const deviceCheck = await deviceCheckResponse.json()
-
-        if (!deviceCheck.allowed) {
+        if (!deviceCheckResponse.allowed) {
           await logLoginActivity(data.user.id, "login_blocked_device_violation", false, "password")
           await supabase.auth.signOut()
           showError(
-            deviceCheck.message || "This device is registered to another user. Your supervisor has been notified.",
+            deviceCheckResponse.message || "This device is registered to another user. Your supervisor has been notified.",
             "Device Security Violation",
           )
           return
         }
 
-        // Log successful login
-        await logLoginActivity(data.user.id, "login_success", true, "password")
+        // Log successful login (fire and forget)
+        logLoginActivity(data.user.id, "login_success", true, "password")
       }
 
       // Clear attendance cache
       clearAttendanceCache()
 
+      // Cache session data for faster redirects
+      setSessionData({ loginTime: Date.now(), email })
+
       showSuccess("Login successful! Redirecting...", "Welcome Back")
 
-      // Quick redirect without delay
+      // Immediate redirect without delay
       window.location.href = "/dashboard/attendance"
     } catch (error: unknown) {
+      if (error instanceof Error && error.name === "AbortError") {
+        // Request was cancelled, don't show error
+        return
+      }
       showError(error instanceof Error ? error.message : "An error occurred during login", "Login Error")
     } finally {
       setIsLoading(false)
@@ -221,115 +215,84 @@ export default function LoginPage() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
+    
+    if (!validateForm(otpEmail, "dummy")) {
+      showFieldError("Email", "Please enter a valid email address")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
     setSuccessMessage(null)
 
     try {
-      if (!otpEmail.trim()) {
-        showFieldError("Email", "Please enter your email address")
-        return
-      }
-
-      if (!otpEmail.includes("@") || !otpEmail.includes(".")) {
-        showFieldError("Email", "Please enter a valid email address")
-        return
-      }
-
-      console.log("[v0] Attempting to validate email:", otpEmail)
-
-      let emailValidated = false
-      let validationError: string | null = null
-
-      try {
+      // Use deduped fetch to prevent duplicate OTP requests
+      await dedupedFetch(`otp-send-${otpEmail}`, async () => {
+        // Validate email with timeout
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 second timeout
 
-        const validateResponse = await fetch("/api/auth/validate-email", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
+        try {
+          const validateResponse = await fetch("/api/auth/validate-email", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({ email: otpEmail }),
+            signal: controller.signal,
+          })
+
+          clearTimeout(timeoutId)
+
+          if (validateResponse.ok) {
+            const validateResult = await validateResponse.json()
+
+            if (!validateResult.exists) {
+              throw new Error("This email is not registered in the QCC system. Please contact your administrator.")
+            } else if (!validateResult.approved) {
+              throw new Error("Your account is pending admin approval. Please wait for activation.")
+            }
+          }
+        } catch (error) {
+          clearTimeout(timeoutId)
+          if (error instanceof Error && error.name === "AbortError") {
+            // Continue anyway - let Supabase handle validation
+          } else {
+            throw error
+          }
+        }
+
+        // Send OTP
+        const otpResult = await supabase.auth.signInWithOtp({
+          email: otpEmail,
+          options: {
+            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
+            shouldCreateUser: false,
           },
-          body: JSON.stringify({ email: otpEmail }),
-          signal: controller.signal,
         })
 
-        clearTimeout(timeoutId)
-
-        if (validateResponse.ok) {
-          const validateResult = await validateResponse.json()
-
-          if (!validateResult.exists) {
-            validationError = "This email is not registered in the QCC system. Please contact your administrator."
-          } else if (!validateResult.approved) {
-            validationError = "Your account is pending admin approval. Please wait for activation."
+        if (otpResult.error) {
+          if (otpResult.error.message.includes("Email rate limit exceeded")) {
+            throw new Error("Too many OTP requests. Please wait 5 minutes before trying again.")
+          } else if (
+            otpResult.error.message.includes("User not found") ||
+            otpResult.error.message.includes("Signups not allowed")
+          ) {
+            throw new Error("This email is not registered in the system. Please use password login or contact your administrator.")
+          } else if (otpResult.error.message.includes("Invalid email")) {
+            throw new Error("Invalid email format. Please check your email address.")
           } else {
-            emailValidated = true
+            throw new Error(`Failed to send OTP: ${otpResult.error.message}`)
           }
-        } else {
-          console.log("[v0] Email validation API returned error status:", validateResponse.status)
-          // Continue anyway - let Supabase handle the validation
         }
-      } catch (fetchError) {
-        console.log("[v0] Email validation API failed, will attempt OTP send anyway:", fetchError)
-        // Continue anyway - let Supabase handle the validation
-      }
 
-      // If validation explicitly failed (email not found or not approved), show error
-      if (validationError) {
-        showFieldError("Email", validationError)
-        return
-      }
-
-      // Proceed with OTP sending (either validation passed or we're using fallback)
-      console.log("[v0] Sending OTP to:", otpEmail)
-
-      const otpResult = await supabase.auth.signInWithOtp({
-        email: otpEmail,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
-          shouldCreateUser: false,
-        },
+        setOtpSent(true)
+        showSuccess("OTP sent to your email. Please check your inbox and enter the code below.", "OTP Sent")
       })
-
-      console.log("[v0] Supabase OTP result:", otpResult)
-
-      if (otpResult.error) {
-        console.error("[v0] Supabase OTP error:", otpResult.error.message)
-
-        if (otpResult.error.message.includes("Email rate limit exceeded")) {
-          showFieldError("Email", "Too many OTP requests. Please wait 5 minutes before trying again.")
-        } else if (
-          otpResult.error.message.includes("User not found") ||
-          otpResult.error.message.includes("Signups not allowed")
-        ) {
-          showFieldError(
-            "Email",
-            "This email is not registered in the system. Please use password login or contact your administrator.",
-          )
-        } else if (otpResult.error.message.includes("Invalid email")) {
-          showFieldError("Email", "Invalid email format. Please check your email address.")
-        } else {
-          showFieldError("Email", `Failed to send OTP: ${otpResult.error.message}`)
-        }
-        return
-      }
-
-      console.log("[v0] OTP sent successfully")
-      setOtpSent(true)
-      showSuccess(
-        emailValidated
-          ? "OTP sent to your email. Please check your inbox and enter the code below."
-          : "OTP request sent. If your email is registered, you will receive a code shortly.",
-        "OTP Sent",
-      )
     } catch (error: unknown) {
-      console.error("[v0] OTP send error:", error)
-      if (error instanceof Error) {
-        showError(`Failed to send OTP: ${error.message}. Please try again or use password login.`, "OTP Error")
-      } else {
-        showError("Failed to send OTP. Please try again or use password login.", "OTP Error")
+      if (error instanceof Error && error.name !== "AbortError") {
+        showFieldError("Email", error.message || "Failed to send OTP. Please try again.")
       }
     } finally {
       setIsLoading(false)
@@ -339,56 +302,27 @@ export default function LoginPage() {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
+    
+    if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
+      showFieldError("OTP Code", "OTP code must be 6 digits")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
     try {
-      if (!otp.trim()) {
-        showFieldError("OTP Code", "Please enter the OTP code")
-        return
-      }
+      const result = await supabase.auth.verifyOtp({
+        email: otpEmail,
+        token: otp,
+        type: "email",
+      })
 
-      if (otp.length !== 6) {
-        showFieldError("OTP Code", "OTP code must be 6 digits")
-        return
-      }
-
-      if (!/^\d{6}$/.test(otp)) {
-        showFieldError("OTP Code", "OTP code must contain only numbers")
-        return
-      }
-
-      console.log("[v0] Verifying OTP:", otp.substring(0, 2) + "****") // Log first 2 digits only for security
-
-      let data, error
-      try {
-        const result = await supabase.auth.verifyOtp({
-          email: otpEmail,
-          token: otp,
-          type: "email",
-        })
-        data = result.data
-        error = result.error
-      } catch (authError: any) {
-        // Handle AbortError silently
-        if (authError.name === "AbortError") {
-          console.log("[v0] OTP verification aborted, will check session")
-          const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: null }))
-          if (sessionData?.session) {
-            data = { user: sessionData.session.user, session: sessionData.session }
-            error = null
-          } else {
-            throw new Error("Verification request was cancelled. Please try again.")
-          }
-        } else {
-          throw authError
-        }
-      }
+      const { data, error } = result
 
       if (error) {
-        console.error("[v0] OTP verification error:", error.message)
         if (data?.user?.id) {
-          await logLoginActivity(data.user.id, "otp_login_failed", false, "otp")
+          logLoginActivity(data.user.id, "otp_login_failed", false, "otp")
         }
 
         if (error.message.includes("expired")) {
@@ -401,6 +335,7 @@ export default function LoginPage() {
         return
       }
 
+      // Approval check only (device check already done for OTP path)
       if (data?.user?.id) {
         const approvalCheck = await checkUserApproval(data.user.id)
 
@@ -414,18 +349,22 @@ export default function LoginPage() {
           return
         }
 
+        // Log successful login
         await logLoginActivity(data.user.id, "otp_login_success", true, "otp")
       }
 
-      console.log("[v0] OTP verification successful")
+      // Cache session data
+      setSessionData({ loginTime: Date.now(), email: otpEmail })
+      clearAttendanceCache()
+
       showSuccess("OTP verified successfully! Redirecting to dashboard...", "Login Successful")
 
-      // Wait a moment for the success message to show, then do a full page reload
-      setTimeout(() => {
-        window.location.href = "/dashboard/attendance"
-      }, 500)
+      // Immediate redirect
+      window.location.href = "/dashboard/attendance"
     } catch (error: unknown) {
-      console.error("[v0] OTP verification exception:", error)
+      if (error instanceof Error && error.name === "AbortError") {
+        return
+      }
       showFieldError("OTP Code", error instanceof Error ? error.message : "Invalid OTP code")
     } finally {
       setIsLoading(false)
@@ -519,12 +458,6 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    onClick={(e) => {
-                      console.log("[v0] Sign-in button clicked directly")
-                      console.log("[v0] Button disabled state:", isLoading)
-                      console.log("[v0] Identifier:", identifier)
-                      console.log("[v0] Password length:", password.length)
-                    }}
                     className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer"
                     disabled={isLoading}
                   >

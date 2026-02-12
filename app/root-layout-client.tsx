@@ -3,6 +3,7 @@
 import type React from "react"
 import { NotificationProvider } from "@/components/ui/notification-system"
 import { TimeBasedThemeProvider } from "@/components/theme/time-based-theme-provider"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { PWAComponents } from "./pwa-components"
 
 export default function RootLayoutClient({
@@ -11,9 +12,12 @@ export default function RootLayoutClient({
   children: React.ReactNode
 }) {
   return (
-    <TimeBasedThemeProvider>
-      <NotificationProvider>{children}</NotificationProvider>
-      <PWAComponents />
-    </TimeBasedThemeProvider>
+    <ErrorBoundary>
+      <TimeBasedThemeProvider>
+        <NotificationProvider>{children}</NotificationProvider>
+        <PWAComponents />
+      </TimeBasedThemeProvider>
+    </ErrorBoundary>
   )
 }
+

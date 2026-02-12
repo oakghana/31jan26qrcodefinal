@@ -141,12 +141,135 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
+@layer components {
+  /* Touch-friendly button sizing for mobile - minimum 44x44px */
+  .touch-button {
+    @apply min-h-11 min-w-11 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
   }
+
+  /* Mobile-optimized containers */
+  .mobile-safe-area {
+    @apply p-4 sm:p-6 md:p-8;
+  }
+
+  /* Responsive grid utilities */
+  .responsive-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6;
+  }
+
+  .responsive-grid-2 {
+    @apply grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6;
+  }
+
+  /* Mobile-first form layouts */
+  .form-stack {
+    @apply space-y-4 sm:space-y-6;
+  }
+
+  /* Responsive card container */
+  .card-container {
+    @apply mx-auto w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl;
+  }
+
+  /* Mobile-optimized header */
+  .header-responsive {
+    @apply flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  /* Touch-friendly spacing on mobile */
+  .touch-padding {
+    @apply p-3 sm:p-4 md:p-6;
+  }
+
+  /* Responsive text sizing */
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl md:text-2xl;
+  }
+
+  .text-responsive-md {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+
+  .text-responsive-sm {
+    @apply text-sm sm:text-base md:text-lg;
+  }
+
+  /* Mobile-first button */
+  .btn-mobile {
+    @apply w-full sm:w-auto touch-button;
+  }
+
+  /* Responsive table container with horizontal scroll on mobile */
+  .table-responsive {
+    @apply overflow-x-auto sm:overflow-x-visible;
+  }
+
+  /* Mobile-first modal/dialog */
+  .modal-responsive {
+    @apply max-h-[90vh] sm:max-h-screen w-full sm:max-w-md md:max-w-lg;
+  }
+
+  /* Responsive flex layout - stack on mobile, row on desktop */
+  .flex-responsive {
+    @apply flex flex-col sm:flex-row gap-4 sm:gap-6;
+  }
+
+  /* Responsive sidebar spacing */
+  .sidebar-item {
+    @apply px-3 py-2 sm:px-4 sm:py-3 cursor-pointer touch-button;
+  }
+
+  /* Mobile-optimized alert spacing */
+  .alert-responsive {
+    @apply p-3 sm:p-4 md:p-6 rounded-lg;
+  }
+
+  /* Responsive gap utilities */
+  .gap-responsive {
+    @apply gap-3 sm:gap-4 md:gap-6;
+  }
+}
+
+/* Ensure mobile inputs are properly sized and zoomable */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  font-size: 16px; /* Prevents iOS auto-zoom on focus */
+}
+
+/* Mobile viewport optimization */
+@media (max-width: 640px) {
   body {
-    @apply bg-background text-foreground;
+    @apply overflow-x-hidden;
+  }
+
+  /* Ensure full width on mobile without overflow */
+  main,
+  .main-content {
+    @apply w-full overflow-x-hidden;
+  }
+
+  /* Touch-friendly navigation */
+  nav a,
+  nav button {
+    @apply min-h-10 min-w-10;
+  }
+}
+
+/* Tablet optimization */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .tablet-optimize {
+    @apply px-4 py-4;
+  }
+}
+
+/* Large desktop optimization */
+@media (min-width: 1024px) {
+  .desktop-optimize {
+    @apply px-8 py-6;
   }
 }
 
