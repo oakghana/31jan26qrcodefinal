@@ -41,14 +41,13 @@ export async function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10">
       <Sidebar user={data.user} profile={profile} />
       <div className="lg:pl-64">
-        <main className="p-6 pb-24 lg:p-12 lg:pb-12 max-w-7xl mx-auto">
+        <main className="p-3 pb-20 lg:p-6 lg:pb-8 max-w-full">
           <div className="relative">
             {children}
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-accent/[0.02] pointer-events-none -z-10 rounded-3xl" />
           </div>
         </main>
-      </div>
-
+      </div>      
       {/* Floating Home Button for quick navigation */}
       <FloatingHomeButton />
       

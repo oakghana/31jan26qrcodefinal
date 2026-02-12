@@ -309,7 +309,7 @@ export function AttendanceReports() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Header row with title, quick dates, exports */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -464,7 +464,7 @@ export function AttendanceReports() {
       )}
 
       {/* Tabs: charts + details */}
-      <Tabs defaultValue="overview" className="space-y-2">
+        <Tabs defaultValue="overview" className="space-y-1.5">
         <TabsList className="h-8 p-0.5">
           <TabsTrigger value="overview" className="h-7 text-xs px-3 gap-1"><BarChart3 className="h-3 w-3" />Overview</TabsTrigger>
           <TabsTrigger value="trends" className="h-7 text-xs px-3 gap-1"><TrendingUp className="h-3 w-3" />Trends</TabsTrigger>
@@ -472,8 +472,8 @@ export function AttendanceReports() {
           <TabsTrigger value="details" className="h-7 text-xs px-3 gap-1"><FileText className="h-3 w-3" />Details</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-0 space-y-2">
-          <div className="grid gap-2 md:grid-cols-2">
+        <TabsContent value="overview" className="mt-0 space-y-1.5">
+          <div className="grid gap-1.5 md:grid-cols-2">
             <Card>
               <CardHeader className="p-3 pb-1">
                 <CardTitle className="text-sm">By Department</CardTitle>
@@ -521,8 +521,8 @@ export function AttendanceReports() {
           </div>
         </TabsContent>
 
-        <TabsContent value="trends" className="mt-0 space-y-2">
-          <div className="grid gap-2 md:grid-cols-2">
+        <TabsContent value="trends" className="mt-0 space-y-1.5">
+          <div className="grid gap-1.5 md:grid-cols-2">
             <Card>
               <CardHeader className="p-3 pb-1">
                 <CardTitle className="text-sm">Attendance Trend</CardTitle>
@@ -566,7 +566,7 @@ export function AttendanceReports() {
             <CardContent className="p-3 pt-1">
               <div className="divide-y divide-border">
                 {Object.entries(summary?.departmentStats || {}).map(([dept, stats]) => (
-                  <div key={dept} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
+                  <div key={dept} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
                     <div>
                       <p className="text-sm font-medium text-foreground">{dept}</p>
                       <p className="text-[10px] text-muted-foreground">{stats.count} records</p>
