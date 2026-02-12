@@ -16,13 +16,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already checked in today IMMEDIATELY at the start
-    const today = new Date().toISOString().split("T")[0]
+    const todayDate = new Date().toISOString().split("T")[0]
     const { data: existingRecord, error: checkError } = await supabase
       .from("attendance_records")
       .select("id, check_in_time, check_out_time")
       .eq("user_id", user.id)
-      .gte("check_in_time", `${today}T00:00:00`)
-      .lt("check_in_time", `${today}T23:59:59`)
+      .gte("check_in_time", `${todayDate}T00:00:00`)
+      .lt("check_in_time", `${todayDate}T23:59:59`)
       .maybeSingle()
 
     if (checkError) {
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     const isShiftDepartment = departmentCode === 'SEC' || departmentCode === 'RES'
 
     // Check if user is on leave
-    const today = new Date().toISOString().split("T")[0]
+    const today = todayDate
     const { data: leaveStatus } = await supabase
       .from("leave_status")
       .select("*")

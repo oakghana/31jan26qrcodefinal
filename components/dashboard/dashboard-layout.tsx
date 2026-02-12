@@ -1,6 +1,6 @@
+"use client"
+
 import type React from "react"
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
 import { Sidebar } from "./sidebar"
 import { OfflineIndicator } from "@/components/ui/offline-indicator"
 import { PWAUpdateNotification } from "@/components/ui/pwa-update-notification"
@@ -11,35 +11,10 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-export async function DashboardLayout({ children }: DashboardLayoutProps) {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.auth.getUser()
-  if (error || !data?.user) {
-    redirect("/auth/login")
-  }
-
-  // Get user profile with department info - optimized query with specific fields
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select(`
-      id,
-      first_name,
-      last_name,
-      employee_id,
-      role,
-      profile_image_url,
-      departments (
-        name,
-        code
-      )
-    `)
-    .eq("id", data.user.id)
-    .single()
-
+export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background/98 to-muted/10">
-      <Sidebar user={data.user} profile={profile} />
+      <Sidebar />
       <div className="lg:pl-64">
         <main className="p-3 pb-20 lg:p-6 lg:pb-8 max-w-full">
           <div className="relative">
