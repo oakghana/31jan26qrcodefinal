@@ -641,6 +641,6 @@ export async function POST(request: NextRequest) {
     console.error("Check-in error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
+
+
 }
-
-
