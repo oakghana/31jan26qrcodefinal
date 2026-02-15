@@ -548,8 +548,8 @@ export async function POST(request: NextRequest) {
         },
       },
     )
-  } catch (error) {
-    console.error("Check-in error:", error)
+  } catch (error: unknown) {
+    console.error("Check-in error:", error instanceof Error ? error.message : String(error))
     return NextResponse.json(
       { error: "Internal server error" },
       {
