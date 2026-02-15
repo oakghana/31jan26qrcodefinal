@@ -64,16 +64,21 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Staff API - User authenticated:", user.id)
 
-    const searchParams = request.nextUrl.searchParams
-    const searchTerm = searchParams.get("search")
-    const departmentFilter = searchParams.get("department")
-    const roleFilter = searchParams.get("role")
-    const sortBy = searchParams.get("sortBy") || "created_at"
-    const sortOrder = searchParams.get("sortOrder") || "desc"
+    const urlParams = request.nextUrl.searchParams
+    const searchTerm = urlParams.get("search")
+    const departmentFilter = urlParams.get("department")
+    const roleFilter = urlParams.get("role")
+    const sortBy = urlParams.get("sortBy") || "created_at"
+    const sortOrder = urlParams.get("sortOrder") || "desc"
+    const page = parseInt(urlParams.get("page") || "1", 10)
+    const limit = Math.min(parseInt(urlParams.get("limit") || "50", 10), 200) // sane max
 
-    console.log("[v0] Staff API - Filters:", { searchTerm, departmentFilter, roleFilter, sortBy, sortOrder })
+    console.log("[v0] Staff API - Filters:", { searchTerm, departmentFilter, roleFilter, sortBy, sortOrder, page, limit })
 
-    let query = supabase.from("user_profiles").select(`
+    // Build a server-side query with pagination and optional filters (returns count)
+    let query = supabase
+      .from("user_profiles")
+      .select(`
         id,
         employee_id,
         first_name,
@@ -89,7 +94,7 @@ export async function GET(request: NextRequest) {
         profile_image_url,
         created_at,
         updated_at
-      `)
+      `, { count: 'exact' })
 
     if (departmentFilter && departmentFilter !== "all") {
       query = query.eq("department_id", departmentFilter)
@@ -99,29 +104,32 @@ export async function GET(request: NextRequest) {
       query = query.eq("role", roleFilter)
     }
 
+    // Server-side search (use ILIKE for case-insensitive partial match)
+    if (searchTerm) {
+      const pattern = `%${searchTerm.replace(/%/g, '\\%')}%`
+      // Search across first_name, last_name, email, employee_id
+      query = query.or(
+        `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},employee_id.ilike.${pattern}`,
+      )
+    }
+
     const orderColumn = sortBy === "department" ? "department_id" : sortBy === "role" ? "role" : "created_at"
     const ascending = sortOrder === "asc"
 
-    // Execute query
-    const { data: staff, error: staffError } = await query.order(orderColumn, { ascending })
+    // Apply ordering and pagination
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+    query = query.order(orderColumn, { ascending }).range(from, to)
+
+    // Execute paginated query with exact count
+    const { data: staffPage, error: staffError, count: totalCount } = await query
 
     if (staffError) {
       console.error("[v0] Staff API - Query error:", staffError)
-      return createJsonResponse({ success: false, error: "Failed to fetch staff", data: [] }, 500)
+      return createJsonResponse({ success: false, error: "Failed to fetch staff", data: [], pagination: null }, 500)
     }
 
-    let filteredStaff = staff || []
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase()
-      filteredStaff = filteredStaff.filter(
-        (member) =>
-          member.first_name?.toLowerCase().includes(searchLower) ||
-          member.last_name?.toLowerCase().includes(searchLower) ||
-          member.email?.toLowerCase().includes(searchLower) ||
-          member.employee_id?.toLowerCase().includes(searchLower) ||
-          `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchLower),
-      )
-    }
+    const filteredStaff = staffPage || []
 
     const departmentIds = [...new Set(filteredStaff?.map((s) => s.department_id).filter(Boolean))]
     const locationIds = [...new Set(filteredStaff?.map((s) => s.assigned_location_id).filter(Boolean))]
@@ -138,7 +146,7 @@ export async function GET(request: NextRequest) {
     const departmentsMap = new Map(departmentsResult.data?.map((d) => [d.id, d]) || [])
     const locationsMap = new Map(locationsResult.data?.map((l) => [l.id, l]) || [])
 
-    const enrichedStaff =
+    let enrichedStaff =
       filteredStaff?.map((staffMember) => ({
         ...staffMember,
         departments: staffMember.department_id ? departmentsMap.get(staffMember.department_id) || null : null,
@@ -147,12 +155,61 @@ export async function GET(request: NextRequest) {
           : null,
       })) || []
 
-    console.log("[v0] Staff API - Fetched", enrichedStaff.length, "staff members")
+    // Attach last modifier (who last changed the staff record) using audit_logs if available
+    try {
+      const staffIds = enrichedStaff.map((s) => s.id)
+      if (staffIds.length > 0) {
+        const { data: audits } = await supabase
+          .from("audit_logs")
+          .select("user_id, action, record_id, created_at")
+          .in("record_id", staffIds)
+          .in("action", ["update_staff", "deactivate_staff", "create_staff"])
+          .order("created_at", { ascending: false })
+
+        const latestByRecord = new Map<string, any>()
+        ;(audits || []).forEach((a: any) => {
+          if (!latestByRecord.has(a.record_id)) latestByRecord.set(a.record_id, a)
+        })
+
+        const actorIds = [...new Set((audits || []).map((a: any) => a.user_id).filter(Boolean))]
+        let actors: any[] = []
+        if (actorIds.length > 0) {
+          const { data: actorProfiles } = await supabase.from("user_profiles").select("id, first_name, last_name, role").in("id", actorIds)
+          actors = actorProfiles || []
+        }
+
+        const actorMap = new Map((actors || []).map((p: any) => [p.id, p]))
+
+        enrichedStaff = enrichedStaff.map((s) => {
+          const latest = latestByRecord.get(s.id)
+          if (latest) {
+            const actor = actorMap.get(latest.user_id)
+            return {
+              ...s,
+              last_modified_by: actor
+                ? { id: actor.id, name: `${actor.first_name} ${actor.last_name}`, role: actor.role, at: latest.created_at }
+                : { id: latest.user_id, name: "Unknown", role: "unknown", at: latest.created_at },
+            }
+          }
+          return s
+        })
+      }
+    } catch (err) {
+      console.error("[v0] Staff API - Failed to attach last_modified_by:", err)
+    }
+
+    console.log("[v0] Staff API - Fetched page", page, "count", (enrichedStaff || []).length)
     console.log("[v0] Staff API - Response time:", Date.now() - startTime, "ms")
 
     return createJsonResponse({
       success: true,
       data: enrichedStaff,
+      pagination: {
+        page,
+        limit,
+        total: totalCount || 0,
+        totalPages: Math.ceil((totalCount || 0) / limit),
+      },
       message: "Staff fetched successfully",
     })
   } catch (error) {
@@ -354,6 +411,23 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error("[v0] Staff API - Profile insert/update error:", insertError)
+
+      // Detect role enumeration constraint missing (common when adding new role values)
+      if (String(insertError.message || "").toLowerCase().includes("role_check") || String(insertError.details || "").toLowerCase().includes("role_check") || String(insertError.message || "").toLowerCase().includes("audit_staff")) {
+        // Clean up auth user
+        await adminSupabase.auth.admin.deleteUser(authUser.user.id)
+        return createJsonResponse(
+          {
+            success: false,
+            error:
+              "Database constraint prevents the 'audit_staff' role from being saved. Please add 'audit_staff' to your user_profiles role constraint or run the migration provided in the admin docs.",
+            details:
+              "Suggested SQL (Postgres):\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;\nALTER TABLE user_profiles ADD CONSTRAINT user_profiles_role_check CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff'));",
+          },
+          400,
+        )
+      }
+
       // Clean up auth user if profile creation fails
       await adminSupabase.auth.admin.deleteUser(authUser.user.id)
       return createJsonResponse(
@@ -367,6 +441,22 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[v0] Staff API - Staff member created successfully")
+
+    // write an audit log for creation
+    try {
+      await adminSupabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "create_staff",
+        table_name: "user_profiles",
+        record_id: authUser.user.id,
+        new_values: newProfile,
+        ip_address: null,
+        user_agent: null,
+      })
+    } catch (auditErr) {
+      console.error("[v0] Staff API - Failed to write audit log for create_staff:", auditErr)
+    }
+
     return createJsonResponse(
       {
         success: true,

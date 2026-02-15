@@ -300,7 +300,7 @@
  * 1. Cleanup on Unmount:
  *    ```typescript
  *    useEffect(() => {
- *      const handleLocationUpdate = () => { /* ... */ }
+ *      const handleLocationUpdate = () => { }
  *      window.addEventListener('location', handleLocationUpdate)
  *      
  *      return () => {

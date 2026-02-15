@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Download, X, Smartphone, Monitor, Tablet } from "lucide-react"
+import { Download, X } from "lucide-react"
 import { usePWA } from "@/hooks/use-pwa"
 
 export function PWAInstallToast() {
@@ -70,68 +70,45 @@ export function PWAInstallToast() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50 animate-in slide-in-from-bottom-5 duration-300">
-      <div className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground rounded-xl shadow-2xl p-4 border border-primary/20">
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 p-2 bg-white/20 rounded-lg">
-            <Download className="h-6 w-6" />
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-base mb-1">
-              Install QCC Attendance App
-            </h3>
-            <p className="text-sm text-primary-foreground/90 mb-3">
-              Get quick access from your home screen. Works offline!
-            </p>
-            
-            <div className="flex items-center gap-2 text-xs text-primary-foreground/80 mb-3">
-              <Smartphone className="h-3.5 w-3.5" />
-              <span>Mobile</span>
-              <span className="text-primary-foreground/40">•</span>
-              <Tablet className="h-3.5 w-3.5" />
-              <span>Tablet</span>
-              <span className="text-primary-foreground/40">•</span>
-              <Monitor className="h-3.5 w-3.5" />
-              <span>Desktop</span>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleInstall}
-                className="bg-white text-primary hover:bg-white/90 font-semibold shadow-sm"
-              >
-                <Download className="h-4 w-4 mr-1.5" />
-                Install Now
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleDismiss}
-                className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-white/10"
-              >
-                Maybe Later
-              </Button>
-            </div>
-          </div>
-
-          <button
-            onClick={handleDismiss}
-            className="flex-shrink-0 p-1 hover:bg-white/10 rounded-full transition-colors"
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
+    <div className="fixed bottom-5 left-4 right-4 md:right-6 md:left-auto md:w-80 z-50 animate-in slide-in-from-bottom-5 duration-300">
+      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl shadow-lg p-3.5 flex items-center gap-3">
+        {/* app icon */}
+        <div className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-600 text-white shadow-sm">
+          <Download className="w-5 h-5" />
         </div>
 
-        {/* Progress bar showing auto-dismiss countdown */}
-        <div className="mt-3 h-1 bg-white/20 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-white/60 rounded-full animate-[shrink_5s_linear_1s_forwards]"
-            style={{ width: "100%" }}
-          />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="truncate">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">QCC Attendance</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">Add to your home screen for faster access & offline use</p>
+            </div>
+            <div className="ml-2 flex items-center gap-2">
+              <button
+                onClick={handleDismiss}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded-full transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <Button size="sm" onClick={handleInstall} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm px-3 py-1.5">
+              Install
+            </Button>
+
+            <button onClick={handleDismiss} className="text-sm text-slate-500 dark:text-slate-400 hover:underline px-2 py-1">
+              Not now
+            </button>
+          </div>
+
+          <div className="mt-3">
+            <div className="h-0.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-300 dark:bg-emerald-500 animate-[shrink_5s_linear_1s_forwards]" style={{ width: "100%" }} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

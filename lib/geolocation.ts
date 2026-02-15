@@ -8,11 +8,12 @@ export interface LocationData {
 // Cache location for stable validation (reduces GPS fluctuation issues)
 let cachedLocation: LocationData | null = null
 let cacheTimestamp = 0
-const CACHE_DURATION = 30000 // 30 seconds cache
+const CACHE_DURATION = 10000 // 10 seconds cache (reduced from 30)
 
 export interface GeofenceLocation {
   id: string
   name: string
+  address?: string
   latitude: number
   longitude: number
   radius_meters: number
@@ -50,6 +51,15 @@ export class GeolocationError extends Error {
     super(message)
     this.name = "GeolocationError"
   }
+}
+
+/**
+ * Clears the cached geolocation data to force fresh readings
+ */
+export function clearGeolocationCache(): void {
+  cachedLocation = null
+  cacheTimestamp = 0
+  console.log("[v0] Geolocation cache cleared")
 }
 
 export function detectWindowsLocationCapabilities(): {
@@ -171,13 +181,19 @@ export async function getBrowserTolerance(geoSettings?: GeoSettings): Promise<nu
   }
 }
 
-function detectDevice(): { isMobile: boolean; isTablet: boolean; isDesktop: boolean } {
+function detectDevice(): { isMobile: boolean; isTablet: boolean; isDesktop: boolean; isLaptop: boolean; device_type: string; device_name: string; browser_info: string } {
   const ua = navigator.userAgent.toLowerCase()
   const isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)
   const isTablet = /ipad|android(?!.*mobile)|tablet/i.test(ua)
   const isDesktop = !isMobile && !isTablet
 
-  return { isMobile, isTablet, isDesktop }
+  // Basic heuristics for laptop and device metadata (keeps typing consistent)
+  const isLaptop = isDesktop && !/macintosh|mac os x|windows nt/i.test(ua) ? false : isDesktop
+  const device_type = isMobile ? "mobile" : isTablet ? "tablet" : isLaptop ? "laptop" : "desktop"
+  const device_name = (navigator.platform || "").toString()
+  const browser_info = detectBrowser().name
+
+  return { isMobile, isTablet, isDesktop, isLaptop, device_type, device_name, browser_info }
 }
 
 /**
@@ -237,81 +253,130 @@ export async function getCurrentLocation(useCache = false): Promise<LocationData
       attempts++
       console.log(`[v0] Location attempt ${attempts}/${maxAttempts} with options:`, options)
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const accuracy = position.coords.accuracy
-          console.log("[v0] Location acquired:", {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: accuracy,
-            attempt: attempts,
-            source: capabilities.isWindows ? "Windows Location Services" : "Browser Geolocation",
-          })
+      // Before making the call, probe permission state (if available) to fail fast when denied
+      try {
+        if (navigator.permissions && (navigator.permissions as any).query) {
+          ;(navigator.permissions as any)
+            .query({ name: "geolocation" })
+            .then((status: any) => {
+              if (status && status.state === "denied") {
+                const deniedMessage = capabilities.isWindows
+                  ? "Location access denied. Please enable Windows Location Services and allow the browser to use location."
+                  : "Location access denied. Please enable geolocation permissions in your browser."
+                import("./logger").then(({ logger }) => {
+                  logger.warn('[v0] Geolocation permission denied (permissions API)', { state: status.state }, 'geolocation')
+                })
+                reject(new Error(deniedMessage))
+                return
+              }
 
-          // Keep track of best position
-          if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
-            bestPosition = position
-          }
+              // Permission not denied — proceed with geolocation call
+              invokeGeolocationCall(options)
+            })
+            .catch((permErr: any) => {
+              console.debug("[v0] Permissions API unavailable or errored:", permErr)
+              // Proceed to geolocation call
+              invokeGeolocationCall(options)
+            })
+          return
+        }
+      } catch (permErr) {
+        console.debug("[v0] Permissions API unavailable or errored:", permErr)
+      }
 
-          // If accuracy is still poor and we have attempts left, try again
-          if (accuracy > 1000 && attempts < maxAttempts) {
-            console.log("[v0] Poor accuracy detected, retrying with different settings...")
-            // Alternate between high accuracy and network-based
-            const retryOptions: PositionOptions = attempts % 2 === 0 
-              ? {
-                  enableHighAccuracy: true,
-                  timeout: 20000,
-                  maximumAge: 0,
-                }
-              : {
-                  enableHighAccuracy: false, // Use network-based location
-                  timeout: 10000,
-                  maximumAge: 3000,
-                }
-            setTimeout(() => tryGetLocation(retryOptions), 1500)
-            return
-          }
+      // If permissions API not available or probe failed, proceed
+      invokeGeolocationCall(options)
 
-          // Use best position we got
-          const finalPosition = bestPosition || position
-          console.log("[v0] Using final position with accuracy:", finalPosition.coords.accuracy)
+      function invokeGeolocationCall(options: PositionOptions) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const accuracy = position.coords.accuracy
+            console.log("[v0] Location acquired:", {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: accuracy,
+              attempt: attempts,
+              source: capabilities.isWindows ? "Windows Location Services" : "Browser Geolocation",
+            })
 
-          const locationData: LocationData = {
-            latitude: finalPosition.coords.latitude,
-            longitude: finalPosition.coords.longitude,
-            accuracy: finalPosition.coords.accuracy,
-            timestamp: Date.now(),
-          }
-
-          // Cache the location for stable validation
-          cachedLocation = locationData
-          cacheTimestamp = Date.now()
-
-          resolve(locationData)
-        },
-        (error) => {
-          console.error(`[v0] Location error on attempt ${attempts}:`, error)
-
-          if (attempts < maxAttempts) {
-            console.log("[v0] Retrying with fallback settings...")
-            const fallbackOptions: PositionOptions = {
-              enableHighAccuracy: false,
-              timeout: 8000,
-              maximumAge: 5000,
+            // Keep track of best position
+            if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+              bestPosition = position
             }
-            setTimeout(() => tryGetLocation(fallbackOptions), 1000)
-            return
-          }
 
-          // After all attempts failed, provide detailed error
-          let message = "Unknown error occurred"
-          let guidance = ""
+            // If accuracy is still poor and we have attempts left, try again
+            if (accuracy > 1000 && attempts < maxAttempts) {
+              console.log("[v0] Poor accuracy detected, retrying with different settings...")
+              // Alternate between high accuracy and network-based
+              const retryOptions: PositionOptions = attempts % 2 === 0
+                ? {
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 0,
+                  }
+                : {
+                    enableHighAccuracy: false, // Use network-based location
+                    timeout: 10000,
+                    maximumAge: 3000,
+                  }
+              setTimeout(() => tryGetLocation(retryOptions), 1500)
+              return
+            }
 
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              if (capabilities.isWindows) {
-                message = "Location access denied. Please enable location permissions."
-                guidance = `
+            // Use best position we got
+            const finalPosition = bestPosition || position
+            console.log("[v0] Using final position with accuracy:", finalPosition.coords.accuracy)
+
+            const locationData: LocationData = {
+              latitude: finalPosition.coords.latitude,
+              longitude: finalPosition.coords.longitude,
+              accuracy: finalPosition.coords.accuracy,
+              timestamp: Date.now(),
+            }
+
+            // Cache the location for stable validation
+            cachedLocation = locationData
+            cacheTimestamp = Date.now()
+
+            resolve(locationData)
+          },
+          (error) => {
+            // Normalize error object to avoid empty `{}` in logs on some platforms
+            const normalizedError: any = {
+              code: (error as any)?.code ?? undefined,
+              name: (error as any)?.name || 'GeolocationError',
+              message: (error as any)?.message || JSON.stringify(error) || String(error) || 'Unknown geolocation error',
+              raw: error,
+            }
+
+            // Use structured logger for better telemetry and ensure non-empty output
+            import("./logger").then(({ logger }) => {
+              logger.warn(`[v0] Location error on attempt ${attempts}`, normalizedError, 'geolocation')
+            }).catch(() => {
+              console.error(`[v0] Location error on attempt ${attempts}:`, normalizedError)
+            })
+
+            if (attempts < maxAttempts) {
+              console.log("[v0] Retrying with fallback settings...")
+              const fallbackOptions: PositionOptions = {
+                enableHighAccuracy: false,
+                timeout: 8000,
+                maximumAge: 5000,
+              }
+              setTimeout(() => tryGetLocation(fallbackOptions), 1000)
+              return
+            }
+
+            // After all attempts failed, provide detailed error
+            let message = "Unknown error occurred"
+            let guidance = ""
+
+            // Prefer code from normalizedError if raw error has no enumerable properties
+            switch (normalizedError.code) {
+              case 1:
+                if (capabilities.isWindows) {
+                  message = "Location access denied. Please enable location permissions."
+                  guidance = `
 Windows Location Setup:
 1. Open Windows Settings → Privacy & Security → Location
 2. Turn ON "Location services" 
@@ -320,29 +385,29 @@ Windows Location Setup:
 5. Refresh this page and try again
 
 Alternative: Use the QR code option for attendance.`
-              } else {
-                message =
-                  "Location access denied. Please enable location permissions in your browser settings and try again, or use the QR code option instead."
-              }
-              break
-            case error.POSITION_UNAVAILABLE:
-              if (capabilities.isWindows) {
-                message = "Windows Location Services unavailable."
-                guidance = `
+                } else {
+                  message =
+                    "Location access denied. Please enable location permissions in your browser settings and try again, or use the QR code option instead."
+                }
+                break
+              case 2:
+                if (capabilities.isWindows) {
+                  message = "Windows Location Services unavailable."
+                  guidance = `
 Troubleshooting:
 1. Check if Windows Location Services are enabled in Settings
 2. Ensure you have an active internet connection for Wi-Fi positioning
 3. Try moving to a location with better GPS signal (near a window)
 4. Use the QR code option as an alternative`
-              } else {
-                message =
-                  "Location information is unavailable. Please check your GPS settings or use the QR code option."
-              }
-              break
-            case error.TIMEOUT:
-              if (capabilities.isWindows) {
-                message = "Windows Location Services timed out."
-                guidance = `
+                } else {
+                  message =
+                    "Location information is unavailable. Please check your GPS settings or use the QR code option."
+                }
+                break
+              case 3:
+                if (capabilities.isWindows) {
+                  message = "Windows Location Services timed out."
+                  guidance = `
 Quick fix: Use the QR code option below for instant check-in/check-out
 
 If you prefer GPS:
@@ -350,17 +415,23 @@ If you prefer GPS:
 2. Ensure internet connection is active
 3. Move near a window for better signal
 4. Try again`
-              } else {
-                message = "Location request timed out. Please use the QR code option below or try again."
-              }
-              break
-          }
+                } else {
+                  message = "Location request timed out. Please use the QR code option below or try again."
+                }
+                break
+              default:
+                // If the platform returned a message, include it to aid debugging
+                if (normalizedError.message) {
+                  message = normalizedError.message
+                }
+            }
 
-          const fullMessage = guidance ? `${message}\n\n${guidance}` : message
-          reject(new Error(fullMessage))
-        },
-        options,
-      )
+            const fullMessage = guidance ? `${message}\n\n${guidance}` : message
+            reject(new Error(fullMessage))
+          },
+          options,
+        )
+      }
     }
 
     // Start with high accuracy attempt
@@ -403,8 +474,11 @@ export function calculateDistanceMemoized(lat1: number, lon1: number, lat2: numb
 
   // Keep cache size bounded
   if (distanceCache.size >= MAX_CACHE_ENTRIES) {
-    const firstKey = distanceCache.keys().next().value
-    distanceCache.delete(firstKey)
+    const iteratorResult = distanceCache.keys().next()
+    const firstKey = iteratorResult && !iteratorResult.done ? iteratorResult.value : undefined
+    if (firstKey) {
+      distanceCache.delete(firstKey)
+    }
   }
 
   distanceCache.set(key, distance)
@@ -687,10 +761,11 @@ export function validateCheckoutLocation(
   // Use device-specific radius (location radius is ignored)
   const baseProximity = deviceProximityBase
 
-  // More lenient validation: if accuracy is poor but distance is reasonable, still allow
-  const effectiveProximity = userLocation.accuracy > 1000 
-    ? baseProximity + userLocation.accuracy * 0.5 // Add 50% of accuracy as buffer
-    : baseProximity
+  // More lenient validation: if accuracy is poor, allow a small capped buffer to avoid overly permissive ranges
+  const MAX_ACCURACY_BUFFER = 500 // meters - safety cap to avoid huge buffers from coarse IP location
+  const accuracyBuffer = userLocation.accuracy > 1000 ? Math.min(userLocation.accuracy * 0.5, MAX_ACCURACY_BUFFER) : 0
+
+  const effectiveProximity = baseProximity + accuracyBuffer
 
   console.log("[v0] Check-out validation:", {
     location: nearest.location.name,
@@ -699,7 +774,19 @@ export function validateCheckoutLocation(
     baseProximity,
     effectiveProximity,
     userAccuracy: userLocation.accuracy,
+    accuracyBuffer,
   })
+
+  // If accuracy is extremely poor (e.g., > 5000m), treat as untrusted and require QR code instead
+  if (userLocation.accuracy > 5000) {
+    return {
+      canCheckOut: false,
+      nearestLocation: nearest.location,
+      distance: nearest.distance,
+      message:
+        "Cannot validate location due to extremely poor GPS accuracy. Please use the QR code option or ensure you have a better GPS signal.",
+    }
+  }
 
   const canCheckOut = nearest.distance <= effectiveProximity
 

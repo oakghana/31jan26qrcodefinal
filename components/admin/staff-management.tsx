@@ -43,6 +43,14 @@ interface StaffMember {
     name: string
     address: string
   }
+  updated_at?: string
+  // optional information about who last modified this record
+  last_modified_by?: {
+    id: string
+    name: string
+    role: string
+    at: string
+  }
 }
 
 interface Department {
@@ -67,6 +75,9 @@ export function StaffManagement() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedDepartment, setSelectedDepartment] = useState("all")
   const [selectedRole, setSelectedRole] = useState("all")
+  const [page, setPage] = useState(1)
+  const [limit] = useState(50)
+  const [totalPages, setTotalPages] = useState(1)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -95,6 +106,8 @@ export function StaffManagement() {
       if (searchTerm) params.append("search", searchTerm)
       if (selectedDepartment !== "all") params.append("department", selectedDepartment)
       if (selectedRole !== "all") params.append("role", selectedRole)
+      params.append("page", String(page))
+      params.append("limit", String(limit))
 
       const response = await fetch(`/api/admin/staff?${params}`)
       const result = await response.json()
@@ -102,6 +115,7 @@ export function StaffManagement() {
 
       if (result.success) {
         setStaff(result.data)
+        setTotalPages(result.pagination?.totalPages || 1)
         setError(null)
       } else {
         console.error("[v0] Failed to fetch staff:", result.error)
@@ -120,13 +134,13 @@ export function StaffManagement() {
     fetchDepartments()
     fetchLocations()
     fetchCurrentUserRole()
-  }, [fetchStaff])
+  }, [fetchStaff, page])
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (searchTerm !== "") {
-        fetchStaff()
-      }
+      // when search term changes, reset to first page
+      setPage(1)
+      fetchStaff()
     }, 300) // Wait 300ms after user stops typing
 
     return () => clearTimeout(debounceTimer)
@@ -170,6 +184,8 @@ export function StaffManagement() {
     }
   }
 
+  const [supabaseConfigMissing, setSupabaseConfigMissing] = useState(false)
+
   const fetchCurrentUserRole = async () => {
     try {
       console.log("[v0] Fetching current user role...")
@@ -184,6 +200,18 @@ export function StaffManagement() {
       }
     } catch (error) {
       console.error("[v0] Failed to fetch current user role:", error)
+    }
+
+    // Also probe server-side supabase config to detect misconfiguration early
+    try {
+      const cfg = await fetch('/api/admin/supabase-config')
+      const data = await cfg.json()
+      if (!data.hasServiceKey) {
+        console.warn('[v0] Server missing SUPABASE_SERVICE_ROLE_KEY')
+        setSupabaseConfigMissing(true)
+      }
+    } catch (err) {
+      console.error('[v0] Failed to fetch supabase config:', err)
     }
   }
 
@@ -231,8 +259,15 @@ export function StaffManagement() {
         })
         fetchStaff()
       } else {
-        showError(result.error || "Failed to add staff member", "Add Staff Failed")
-        setError(result.error)
+        // Detect DB role enumeration error and show actionable guidance
+        if (result.error && String(result.error).toLowerCase().includes("database constraint prevents the 'audit_staff'")) {
+          const guidance = result.details || "Please add 'audit_staff' to user_profiles role constraint"
+          showError(`Failed to create Audit Staff: ${guidance}`, "DB Constraint")
+          setError(`DB Constraint: ${guidance}`)
+        } else {
+          showError(result.error || "Failed to add staff member", "Add Staff Failed")
+          setError(result.error)
+        }
       }
     } catch (error) {
       console.error("[v0] Add staff exception:", error)
@@ -334,9 +369,27 @@ export function StaffManagement() {
       console.log("[v0] Update response status:", response.status)
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error("[v0] Update response error:", errorText)
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
+        const text = await response.text()
+        let parsed: any = null
+        try {
+          parsed = JSON.parse(text)
+        } catch {
+          parsed = { error: text }
+        }
+
+        // Prefer a non-empty details object, otherwise fall back to error or raw text
+        const hasDetails = parsed.details && typeof parsed.details === "object" && Object.keys(parsed.details).length > 0
+        const errorDetail = hasDetails ? parsed.details : (parsed.error || text || `HTTP ${response.status}`)
+
+        console.error("[v0] Update response error:", errorDetail)
+
+        // Show a user-friendly message for common misconfiguration
+        if (String(errorDetail).toLowerCase().includes("supabase") || String(parsed.error).toLowerCase().includes("supabase")) {
+          throw new Error("Server misconfiguration: Supabase is not properly configured. Please contact your administrator.")
+        }
+
+        const errorString = typeof errorDetail === "object" ? JSON.stringify(errorDetail) : String(errorDetail)
+        throw new Error(`HTTP ${response.status}: ${errorString}`)
       }
 
       const result = await response.json()
@@ -349,13 +402,28 @@ export function StaffManagement() {
         fetchStaff()
       } else {
         console.error("[v0] Update failed:", result.error)
-        const errorMessage = result.error || "Failed to update staff member"
-        showError(errorMessage, "Update Failed")
-        setError(errorMessage)
+        if (result.error && String(result.error).toLowerCase().includes("database constraint prevents the 'audit_staff'")) {
+          const guidance = result.details || "Please add 'audit_staff' to user_profiles role constraint"
+          showError(`Failed to update role: ${guidance}`, "DB Constraint")
+          setError(`DB Constraint: ${guidance}`)
+        } else {
+          const errorMessage = result.error || "Failed to update staff member"
+          showError(errorMessage, "Update Failed")
+          setError(errorMessage)
+        }
       }
     } catch (error) {
       console.error("[v0] Update exception:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to update staff member"
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      // Friendly handling for network errors
+      if (String(errorMessage).toLowerCase().includes("failed to fetch") || String(errorMessage).toLowerCase().includes("network")) {
+        const friendly = "Network error: Unable to reach the server. Check the dev server and environment configuration."
+        showError(friendly, "Network Error")
+        setError(friendly)
+        return
+      }
+
       showError(errorMessage, "Update Error")
       setError(errorMessage)
     }
@@ -374,6 +442,12 @@ export function StaffManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {supabaseConfigMissing && currentUserRole === 'admin' && (
+            <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
+              <AlertDescription className="font-medium">Server misconfiguration detected: <strong>SUPABASE_SERVICE_ROLE_KEY</strong> is missing. Admin actions (email updates, role changes) will fail. Please set the environment variable on the server.</AlertDescription>
+            </Alert>
+          )}
+
           {error && (
             <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
               <AlertDescription className="font-medium">{error}</AlertDescription>
@@ -421,6 +495,7 @@ export function StaffManagement() {
                   <SelectItem value="regional_manager">Regional Manager</SelectItem>
                   <SelectItem value="it-admin">IT-Admin</SelectItem>
                   <SelectItem value="department_head">Department Head</SelectItem>
+                  <SelectItem value="audit_staff">Audit Staff</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
                   <SelectItem value="nsp">NSP</SelectItem>
                   <SelectItem value="intern">Intern</SelectItem>
@@ -563,6 +638,7 @@ export function StaffManagement() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="staff">Staff</SelectItem>
+                          <SelectItem value="audit_staff">Audit Staff</SelectItem>
                           <SelectItem value="department_head">Department Head</SelectItem>
                           {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                           {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
@@ -723,6 +799,7 @@ export function StaffManagement() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="audit_staff">Audit Staff</SelectItem>
                         <SelectItem value="department_head">Department Head</SelectItem>
                         {currentUserRole === "admin" && <SelectItem value="regional_manager">Regional Manager</SelectItem>}
                         {(currentUserRole === "admin" || currentUserRole === "it-admin") && (
@@ -789,6 +866,7 @@ export function StaffManagement() {
                   <TableHead className="font-semibold text-foreground">Role</TableHead>
                   <TableHead className="font-semibold text-foreground">Assigned Location</TableHead>
                   <TableHead className="font-semibold text-foreground">Status</TableHead>
+                  <TableHead className="font-semibold text-foreground">Last modified</TableHead>
                   <TableHead className="font-semibold text-foreground">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -830,13 +908,15 @@ export function StaffManagement() {
                               ? "default"
                               : member.role === "department_head"
                                 ? "secondary"
-                                : member.role === "nsp"
-                                  ? "default"
-                                  : member.role === "intern"
-                                    ? "outline"
-                                    : member.role === "contract"
-                                      ? "destructive"
-                                      : "outline"
+                                : member.role === "audit_staff"
+                                  ? "secondary"
+                                  : member.role === "nsp"
+                                    ? "default"
+                                    : member.role === "intern"
+                                      ? "outline"
+                                      : member.role === "contract"
+                                        ? "destructive"
+                                        : "outline"
                           }
                           className="font-medium"
                         >
@@ -859,6 +939,18 @@ export function StaffManagement() {
                         <Badge variant={member.is_active ? "default" : "destructive"} className="font-medium">
                           {member.is_active ? "Active" : "Inactive"}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {member.last_modified_by ? (
+                          <div className="text-sm">
+                            <div className="font-medium">{member.last_modified_by.name}</div>
+                            <div className="text-xs text-muted-foreground">{member.last_modified_by.role} • {new Date(member.last_modified_by.at).toLocaleString()}</div>
+                          </div>
+                        ) : member.updated_at ? (
+                          <div className="text-sm text-muted-foreground">Updated • {new Date(member.updated_at).toLocaleString()}</div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">No recent changes</div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -899,6 +991,17 @@ export function StaffManagement() {
                 )}
               </TableBody>
             </Table>
+
+            {/* Simple pagination controls */}
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                Prev
+              </Button>
+              <div className="text-sm text-muted-foreground">Page {page} / {totalPages}</div>
+              <Button size="sm" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

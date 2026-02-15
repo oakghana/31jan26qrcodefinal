@@ -58,11 +58,27 @@ export function WarningsArchive({ userRole, departmentId, userId }: WarningsArch
 
       const response = await fetch(`/api/admin/warnings-archive?${params}`)
 
+      console.log("[v0] Warnings archive response status:", response.status)
+
       if (!response.ok) {
-        throw new Error("Failed to fetch warnings archive")
+        let serverMsg = `Failed to fetch warnings archive (status ${response.status})`
+        const contentType = response.headers.get("content-type") || ""
+        if (contentType.includes("application/json")) {
+          try {
+            const errBody = await response.json()
+            serverMsg = errBody?.error || JSON.stringify(errBody)
+          } catch (e) {
+            serverMsg = await response.text()
+          }
+        } else {
+          serverMsg = await response.text()
+        }
+        console.error("[v0] Warnings archive error:", serverMsg)
+        throw new Error(serverMsg)
       }
 
       const data = await response.json()
+      console.log("[v0] Warnings archive data count:", (data.warnings || []).length)
       setWarnings(data.warnings || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load warnings archive")

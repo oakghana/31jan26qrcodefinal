@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to verify user permissions" }, { status: 500 })
     }
 
-    if (!profile || profile.role !== "admin") {
-      console.log("[v0] Non-admin user attempted to access audit logs:", user.id)
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    if (!profile || (profile.role !== "admin" && profile.role !== "audit_staff")) {
+      console.log("[v0] Non-authorized user attempted to access audit logs:", user.id)
+      return NextResponse.json({ error: "Admin or Audit Staff access required" }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -58,6 +58,19 @@ export async function GET(request: NextRequest) {
     }
     if (endDate) {
       query = query.lte("created_at", endDate)
+    }
+
+    // Additional filters for module/table and status if provided
+    const table = searchParams.get("table")
+    const status = searchParams.get("status")
+
+    if (table && table !== "all") {
+      query = query.eq("table_name", table)
+    }
+
+    if (status && status !== "all") {
+      // Assume audit_logs has a `result` or `status` column; if not, this will be ignored
+      query = query.eq("status", status)
     }
 
     // Apply pagination

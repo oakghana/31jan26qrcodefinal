@@ -7,6 +7,7 @@ export interface DeviceInfo {
   isMobile: boolean
   isTablet: boolean
   isDesktop: boolean
+  isLaptop?: boolean
 }
 
 export function generateDeviceId(): string {
@@ -33,7 +34,7 @@ export function generateDeviceId(): string {
     new Date().getTimezoneOffset(),
     canvas.toDataURL(),
     navigator.hardwareConcurrency || 0, // CPU cores
-    navigator.deviceMemory || 0, // RAM in GB (if available)
+    (navigator as any).deviceMemory || 0, // RAM in GB (if available)
     navigator.maxTouchPoints || 0, // Touch support
     (navigator as any).connection?.effectiveType || "", // Network type
     navigator.platform,
@@ -101,14 +102,16 @@ export function getDeviceInfo(): DeviceInfo {
   const isMobile = /Mobi|Android/i.test(navigator.userAgent)
   const isTablet = /Tablet|iPad/i.test(navigator.userAgent)
   const isDesktop = !isMobile && !isTablet
+  const isLaptop = isDesktop // Heuristic: treat desktops as laptops for broader compatibility
 
   return {
     device_id: deviceId,
     device_name: deviceName,
-    device_type: isMobile ? "mobile" : isTablet ? "tablet" : "desktop",
+    device_type: isMobile ? "mobile" : isTablet ? "tablet" : isLaptop ? "laptop" : "desktop",
     browser_info: navigator.userAgent,
     isMobile,
     isTablet,
     isDesktop,
+    isLaptop,
   }
 }

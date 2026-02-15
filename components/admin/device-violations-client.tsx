@@ -14,6 +14,8 @@ interface Violation {
   ip_address: string
   attempted_user_id: string
   bound_user_id: string
+  attempted_user?: UserProfile
+  bound_user?: UserProfile
   violation_type: string
   created_at: string
   department_notified: boolean
@@ -69,19 +71,19 @@ export default function DeviceViolationsClient({
 
       // If we have violations, fetch user profiles separately
       if (data && data.length > 0) {
-        const userIds = [...new Set([...data.map((v) => v.attempted_user_id), ...data.map((v) => v.bound_user_id)])]
+        const userIds = [...new Set([...data.map((v: any) => v.attempted_user_id), ...data.map((v: any) => v.bound_user_id)])]
 
         const { data: profiles } = await supabase.from("user_profiles").select("*").in("id", userIds)
 
-        const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+        const profileMap = new Map((profiles as any[])?.map((p: any) => [p.id, p]) || [])
 
-        const enrichedViolations = data
-          .map((v) => ({
+        const enrichedViolations = (data as any[])
+          .map((v: any) => ({
             ...v,
             attempted_user: profileMap.get(v.attempted_user_id),
             bound_user: profileMap.get(v.bound_user_id),
           }))
-          .filter((v) => v.attempted_user && v.bound_user) // Filter out any missing profiles
+          .filter((v: any) => v.attempted_user && v.bound_user) // Filter out any missing profiles
 
         // Filter by department for department heads
         if (userRole === "department_head" && departmentId) {

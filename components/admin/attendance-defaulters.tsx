@@ -149,9 +149,20 @@ export function AttendanceDefaulters({ userRole, departmentId }: AttendanceDefau
       console.log("[v0] Send warnings response status:", response.status)
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error("[v0] Send warnings error:", errorText)
-        throw new Error(`Failed to send warnings: ${errorText}`)
+        let errorMsg = "Failed to send warnings"
+        const contentType = response.headers.get("content-type") || ""
+        if (contentType.includes("application/json")) {
+          try {
+            const errBody = await response.json()
+            errorMsg = errBody?.error || JSON.stringify(errBody)
+          } catch (e) {
+            errorMsg = await response.text()
+          }
+        } else {
+          errorMsg = await response.text()
+        }
+        console.error("[v0] Send warnings error:", errorMsg)
+        throw new Error(errorMsg)
       }
 
       const data = await response.json()
@@ -293,6 +304,12 @@ ${senderLabel}`
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={selectAll} disabled={defaulters.length === 0}>
                 Select All ({defaulters.length})
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setSelectedStaff(noCheckIn.map(s => s.id))} disabled={noCheckIn.length === 0}>
+                Select All Check‑In ({noCheckIn.length})
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setSelectedStaff(noCheckOut.map(s => s.id))} disabled={noCheckOut.length === 0}>
+                Select All Check‑Out ({noCheckOut.length})
               </Button>
               <Button size="sm" variant="outline" onClick={clearSelection} disabled={selectedStaff.length === 0}>
                 Clear ({selectedStaff.length})

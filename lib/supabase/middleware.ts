@@ -38,8 +38,10 @@ export async function updateSession(request: NextRequest) {
       },
     })
 
+    // Exclude static and PWA assets from auth redirects (service worker must be fetchable at /sw.js)
     if (
       request.nextUrl.pathname !== "/" &&
+      request.nextUrl.pathname !== "/sw.js" &&
       !request.nextUrl.pathname.startsWith("/auth") &&
       !request.nextUrl.pathname.startsWith("/_next") &&
       !request.nextUrl.pathname.startsWith("/favicon") &&

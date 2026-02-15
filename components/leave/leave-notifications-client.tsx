@@ -139,6 +139,8 @@ export function LeaveNotificationsClient() {
       setUserRole(profile?.role || null)
 
       // Build query for leave requests
+      // NOTE: DB column is `approved_by` so the FK constraint is `leave_requests_approved_by_fkey`.
+      // The previous name `leave_requests_approver_id_fkey` caused schema-cache misses in PostgREST/Supabase.
       let query = supabase
         .from("leave_requests")
         .select(`
@@ -151,7 +153,7 @@ export function LeaveNotificationsClient() {
               name
             )
           ),
-          approver:user_profiles!leave_requests_approver_id_fkey (
+          approver:user_profiles!leave_requests_approved_by_fkey (
             first_name,
             last_name
           )

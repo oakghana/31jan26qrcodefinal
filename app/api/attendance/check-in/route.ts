@@ -1,9 +1,14 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { requiresLatenessReason } from "@/lib/attendance-utils"
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+
+    const getClientIp = () => {
+      return (request as any).ip || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null
+    }
 
     // Get authenticated user
     const {
@@ -85,7 +90,13 @@ export async function POST(request: NextRequest) {
 
     const { data: userProfile } = await supabase
       .from("user_profiles")
-      .select("first_name, last_name, assigned_location_id")
+      .select(`
+        first_name,
+        last_name,
+        role,
+        assigned_location_id,
+        departments(code, name)
+      `)
       .eq("id", user.id)
       .maybeSingle()
 
@@ -123,7 +134,64 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { latitude, longitude, location_id, device_info, qr_code_used, qr_timestamp, lateness_reason } = body
+    const { latitude, longitude, location_id, device_info, qr_code_used, qr_timestamp, lateness_reason, accuracy, location_timestamp, location_source } = body
+
+    // Fetch geo settings from system settings for server-side enforcement
+    const { data: sysSettings } = await supabase.from("system_settings").select("geo_settings").maybeSingle()
+    const geoSettings = (sysSettings && (sysSettings as any).geo_settings) || {}
+    const maxLocationAge = Number(geoSettings?.maxLocationAge ?? geoSettings?.max_location_age ?? 300000) // ms
+    const requireHighAccuracy = geoSettings?.requireHighAccuracy ?? geoSettings?.require_high_accuracy ?? true
+    const allowedAccuracy = requireHighAccuracy ? 100 : 500 // meters
+
+    // Validate location timestamp and accuracy to reduce spoofing/stale readings
+    if (!qr_code_used && latitude && longitude) {
+      if (!location_timestamp) {
+        console.warn("[v0] Missing location timestamp - rejecting GPS check-in")
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          action: "gps_missing_timestamp",
+          table_name: "attendance_records",
+          record_id: null,
+          new_values: { latitude, longitude, accuracy: accuracy ?? null, location_source: location_source ?? null },
+          ip_address: request.ip || null,
+          user_agent: request.headers.get("user-agent"),
+        }).catch(() => {})
+
+        return NextResponse.json({ error: "Stale or missing GPS timestamp. Please retry using a fresh location reading or use the QR code option." }, { status: 400 })
+      }
+
+      const ts = Number(location_timestamp)
+      const age = Date.now() - ts
+      if (age > maxLocationAge) {
+        console.warn("[v0] Stale location reading detected (age ms):", age)
+        await supabase.from("device_security_violations").insert({
+          device_id: device_info?.device_id || null,
+          ip_address: request.ip || null,
+          attempted_user_id: user.id,
+          bound_user_id: user.id,
+          violation_type: "stale_location",
+          device_info: device_info || null,
+          details: { latitude, longitude, age_ms: age, max_allowed_ms: maxLocationAge },
+        }).catch(() => {})
+
+        return NextResponse.json({ error: "Stale GPS reading. Please try again and ensure your device provides a fresh GPS fix (enable high accuracy)." }, { status: 400 })
+      }
+
+      if (typeof accuracy === "number" && accuracy > allowedAccuracy) {
+        console.warn("[v0] Low accuracy reading detected (m):", accuracy)
+        await supabase.from("device_security_violations").insert({
+          device_id: device_info?.device_id || null,
+          ip_address: request.ip || null,
+          attempted_user_id: user.id,
+          bound_user_id: user.id,
+          violation_type: "low_accuracy",
+          device_info: device_info || null,
+          details: { latitude, longitude, accuracy, allowed_accuracy: allowedAccuracy },
+        }).catch(() => {})
+
+        return NextResponse.json({ error: "GPS accuracy is too low. Move to an open area or enable high-accuracy location and try again, or use the QR code option." }, { status: 400 })
+      }
+    }
 
     if (device_info?.device_id) {
       const getValidIpAddress = () => {
@@ -163,7 +231,7 @@ export async function POST(request: NextRequest) {
           .order("last_activity", { ascending: false })
           .limit(1)
           .maybeSingle()
-        
+
         // Second check: Same IP address with different device ID (IP sharing detection)
         let ipSharingSession = null
         if (ipAddress) {
@@ -180,118 +248,138 @@ export async function POST(request: NextRequest) {
           
           ipSharingSession = ipSession
         }
+      }
+    } // close device_info?.device_id outer block
 
-        // Process device sharing detection (MAC-like fingerprint match)
-        if (recentDeviceSession) {
-          const { data: previousUserProfile } = await supabase
-            .from("user_profiles")
-            .select("first_name, last_name, employee_id, department_id")
-            .eq("id", recentDeviceSession.user_id)
-            .single()
+    // --- Server-side proximity validation to prevent client-side spoofing ---
+    if (!qr_code_used && latitude && longitude) {
+      // Fetch active QCC locations and device radius settings
+      const [{ data: qccLocations }, { data: deviceRadiusSettings }] = await Promise.all([
+        supabase.from("geofence_locations").select("id, name, latitude, longitude, radius_meters, is_active").eq("is_active", true),
+        supabase.from("device_radius_settings").select("device_type, check_in_radius_meters").eq("is_active", true),
+      ])
 
-          if (previousUserProfile) {
-            const previousUserName = `${previousUserProfile.first_name} ${previousUserProfile.last_name}`
-            const timeSinceLastUse = Math.round((Date.now() - new Date(recentDeviceSession.last_activity).getTime()) / (1000 * 60))
-            
-            deviceSharingWarning = {
-              previousUser: previousUserName,
-              previousEmployeeId: previousUserProfile.employee_id,
-              timeSinceLastUse: timeSinceLastUse,
-              message: `⚠️ DEVICE SHARING DETECTED: This ${device_info.device_type} (${device_info.device_name}) with MAC ${device_info.device_id} was recently used by ${previousUserName} (${previousUserProfile.employee_id}) ${timeSinceLastUse} minutes ago. Your department head will be notified.`,
-              detectionMethod: "device_fingerprint",
-              deviceDetails: {
-                mac_address: device_info.device_id,
-                device_type: device_info.device_type,
-                device_name: device_info.device_name
-              }
-            }
+      if (!qccLocations || qccLocations.length === 0) {
+        return NextResponse.json({ error: "No active QCC locations found" }, { status: 400 })
+      }
 
-            console.warn(
-              `[v0] ⚠️ DEVICE SHARING - Fingerprint Match: ${device_info.device_type} (${device_info.device_name}) | MAC ${device_info.device_id} | IP ${ipAddress} | Current: ${user.id} | Previous: ${previousUserName} (${previousUserProfile.employee_id})`,
-            )
+      // Determine device type and radius
+      const deviceType = device_info?.device_type || "desktop"
+      let deviceCheckInRadius = 400 // safe default
+      if (deviceRadiusSettings && deviceRadiusSettings.length > 0) {
+        const s = deviceRadiusSettings.find((r: any) => r.device_type === deviceType)
+        if (s) deviceCheckInRadius = s.check_in_radius_meters
+      }
 
-            await supabase.from("audit_logs").insert({
-              user_id: user.id,
-              action: "device_sharing_detected",
-              table_name: "device_sessions",
-              record_id: device_info.device_id,
-              new_values: {
-                current_user: user.id,
-                previous_user: recentDeviceSession.user_id,
-                previous_user_name: previousUserName,
-                time_since_last_use_minutes: timeSinceLastUse,
-                device_mac_address: device_info.device_id,
-                device_type: device_info.device_type,
-                device_name: device_info.device_name,
-                current_ip: ipAddress,
-                previous_ip: recentDeviceSession.ip_address,
-                detection_method: "device_fingerprint",
-                browser_info: device_info.browser_info
+      // Haversine distance calculation (meters)
+      const toRad = (deg: number) => (deg * Math.PI) / 180
+      const distanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371e3
+        const φ1 = toRad(lat1)
+        const φ2 = toRad(lat2)
+        const Δφ = toRad(lat2 - lat1)
+        const Δλ = toRad(lon2 - lon1)
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return Math.round(R * c)
+      }
+
+      // Find nearest location and distance
+      const distances = qccLocations.map((loc: any) => ({ loc, distance: distanceMeters(latitude, longitude, loc.latitude, loc.longitude) }))
+      distances.sort((a: any, b: any) => a.distance - b.distance)
+      const nearest = distances[0]
+
+      // If user provided a location_id ensure it matches the computed nearest and is within radius
+      if (location_id) {
+        const providedLoc = qccLocations.find((l: any) => l.id === location_id)
+        if (providedLoc) {
+          const providedDistance = distanceMeters(latitude, longitude, providedLoc.latitude, providedLoc.longitude)
+          // Cap any client-reported accuracy buffer on server - inaccurate data should not expand radius
+          const MAX_ACCURACY_BUFFER = 500
+
+          if (providedDistance > deviceCheckInRadius + MAX_ACCURACY_BUFFER) {
+            // Log suspicious attempt
+            await supabase.from("device_security_violations").insert({
+              device_id: device_info?.device_id || null,
+              ip_address: getClientIp() || null,
+              attempted_user_id: user.id,
+              bound_user_id: user.id,
+              violation_type: "geofence_mismatch",
+              device_info: device_info || null,
+              details: {
+                provided_location: location_id,
+                computed_distance_m: providedDistance,
+                allowed_radius_m: deviceCheckInRadius,
               },
-              ip_address: ipAddress || null,
-              user_agent: request.headers.get("user-agent"),
-            })
+            }).catch(() => {})
+
+            return NextResponse.json({ error: "Your device appears to be outside the allowed proximity for the selected location. Please move closer or use the QR code option." }, { status: 400 })
           }
         }
+      } else {
+        // If no location_id was provided, ensure the nearest location is within the allowed radius
+        if (nearest && nearest.distance > deviceCheckInRadius + 500) {
+          return NextResponse.json({ error: "You are too far from any registered QCC location to check in. Please move closer or use the QR code." }, { status: 400 })
+        }
+      }
+
+      // Check for suspicious location changes (potential cached location spoofing)
+      if (!qr_code_used && latitude && longitude) {
+        const sevenDaysAgo = new Date()
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
         
-        // Process IP sharing detection (same IP, different device)
-        if (ipSharingSession && !deviceSharingWarning) {
-          const { data: ipSharerProfile } = await supabase
-            .from("user_profiles")
-            .select("first_name, last_name, employee_id, department_id")
-            .eq("id", ipSharingSession.user_id)
-            .single()
-
-          if (ipSharerProfile) {
-            const sharerName = `${ipSharerProfile.first_name} ${ipSharerProfile.last_name}`
-            const timeSinceLastUse = Math.round((Date.now() - new Date(ipSharingSession.last_activity).getTime()) / (1000 * 60))
+        const { data: recentCheckIns } = await supabase
+          .from("attendance_records")
+          .select("check_in_latitude, check_in_longitude, check_in_time")
+          .eq("user_id", user.id)
+          .gte("check_in_time", sevenDaysAgo.toISOString())
+          .not("check_in_latitude", "is", null)
+          .not("check_in_longitude", "is", null)
+          .order("check_in_time", { ascending: false })
+          .limit(5)
+        
+        if (recentCheckIns && recentCheckIns.length > 0) {
+          // Calculate average location from recent check-ins
+          const avgLat = recentCheckIns.reduce((sum, record) => sum + record.check_in_latitude, 0) / recentCheckIns.length
+          const avgLng = recentCheckIns.reduce((sum, record) => sum + record.check_in_longitude, 0) / recentCheckIns.length
+          
+          // Check if current location is suspiciously far from average
+          const distanceFromAverage = distanceMeters(latitude, longitude, avgLat, avgLng)
+          
+          // If more than 100km from average location, flag as suspicious
+          if (distanceFromAverage > 100000) { // 100km
+            console.warn("[v0] Suspicious location change detected:", {
+              userId: user.id,
+              currentLat: latitude,
+              currentLng: longitude,
+              avgLat,
+              avgLng,
+              distance: distanceFromAverage,
+              recentLocations: recentCheckIns.length
+            })
             
-            deviceSharingWarning = {
-              previousUser: sharerName,
-              previousEmployeeId: ipSharerProfile.employee_id,
-              timeSinceLastUse: timeSinceLastUse,
-              message: `⚠️ IP SHARING DETECTED: Same network (${ipAddress}) was used by ${sharerName} (${ipSharerProfile.employee_id}) ${timeSinceLastUse} minutes ago with a different device. Current: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}). Your department head will be notified.`,
-              detectionMethod: "ip_address",
-              deviceDetails: {
-                mac_address: device_info.device_id,
-                device_type: device_info.device_type,
-                device_name: device_info.device_name
-              }
-            }
-
-            console.warn(
-              `[v0] ⚠️ IP SHARING - Network Match: IP ${ipAddress} | Current: ${device_info.device_type} (${device_info.device_name}, MAC ${device_info.device_id}) | Previous MAC: ${ipSharingSession.device_id} | Current User: ${user.id} | Previous: ${sharerName} (${ipSharerProfile.employee_id})`,
-            )
-
+            // Log security violation
             await supabase.from("audit_logs").insert({
               user_id: user.id,
-              action: "ip_sharing_detected",
-              table_name: "device_sessions",
-              record_id: ipAddress || "unknown",
+              action: "suspicious_location_change",
+              table_name: "attendance_records",
+              record_id: null,
               new_values: {
-                current_user: user.id,
-                previous_user: ipSharingSession.user_id,
-                previous_user_name: sharerName,
-                time_since_last_use_minutes: timeSinceLastUse,
-                current_device_mac: device_info.device_id,
-                current_device_type: device_info.device_type,
-                current_device_name: device_info.device_name,
-                previous_device_mac: ipSharingSession.device_id,
-                shared_ip: ipAddress,
-                detection_method: "ip_address",
-                browser_info: device_info.browser_info
+                latitude,
+                longitude,
+                distance_from_average: distanceFromAverage,
+                average_latitude: avgLat,
+                average_longitude: avgLng,
               },
-              ip_address: ipAddress || null,
+              ip_address: request.ip || null,
               user_agent: request.headers.get("user-agent"),
-            })
+            }).catch(() => {})
+            
+            // Allow check-in but log the anomaly
+            console.log("[v0] Allowing check-in despite suspicious location change")
           }
         }
       }
-    }
-
-    if (!qr_code_used && (!latitude || !longitude)) {
-      return NextResponse.json({ error: "Location coordinates are required for GPS check-in" }, { status: 400 })
-    }
 
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
@@ -424,10 +512,11 @@ export async function POST(request: NextRequest) {
     const checkInTime = new Date()
     const checkInHour = checkInTime.getHours()
     const checkInMinutes = checkInTime.getMinutes()
+    const isWeekend = checkInTime.getDay() === 0 || checkInTime.getDay() === 6
     const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
 
-    // Require lateness reason if arriving late
-    if (isLateArrival && (!lateness_reason || lateness_reason.trim().length === 0)) {
+    const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments, userProfile?.role)
+    if (isLateArrival && latenessRequired && (!lateness_reason || lateness_reason.trim().length === 0)) {
       return NextResponse.json({
         error: "Lateness reason is required when checking in after 9:00 AM",
         requiresLatenessReason: true,
@@ -540,53 +629,18 @@ export async function POST(request: NextRequest) {
     let checkInMessage = attendanceData.is_remote_location
       ? `Successfully checked in at ${locationData?.name} (different from your assigned location). Remember to check out at the end of your work today.`
       : `Successfully checked in at ${locationData?.name}. Remember to check out at the end of your work today.`
-    
+
     if (isLateArrival) {
       const arrivalTime = `${checkInHour}:${checkInMinutes.toString().padStart(2, '0')}`
       checkInMessage = `Late arrival detected - You checked in at ${arrivalTime} (after 9:00 AM). ${checkInMessage}`
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          ...attendanceRecord,
-          location_tracking: {
-            location_name: locationData?.name,
-            district_name: districtName,
-            is_remote_location: attendanceData.is_remote_location,
-            check_in_method: attendanceData.check_in_method,
-          },
-        },
-        message: checkInMessage,
-        checkInPosition,
-        isLateArrival,
-        lateArrivalTime: isLateArrival ? checkInTime.toLocaleTimeString() : null,
-        missedCheckoutWarning,
-        deviceSharingWarning,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate, private",
-          Pragma: "no-cache",
-          Expires: "0",
-          "X-Content-Type-Options": "nosniff",
-        },
-      },
-    )
-  } catch (error) {
-    console.error("Check-in error:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      {
-        status: 500,
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      },
-    )
+    return NextResponse.json({ success: true });
+  }
+  catch (error) {
+    console.error("Check-in error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+

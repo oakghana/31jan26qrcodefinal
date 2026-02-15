@@ -3,6 +3,7 @@
 import type React from "react"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { clearAttendanceCache } from "@/lib/utils/attendance-cache"
+import { clearGeolocationCache } from "@/lib/geolocation"
 import { getDeviceInfo } from "@/lib/device-info"
 
 import { createClient } from "@/lib/supabase/client"
@@ -204,8 +205,9 @@ export default function LoginPage() {
         await logLoginActivity(data.user.id, "login_success", true, "password")
       }
 
-      // Clear attendance cache
+      // Clear attendance and geolocation cache
       clearAttendanceCache()
+      clearGeolocationCache()
 
       showSuccess("Login successful! Redirecting...", "Welcome Back")
 
@@ -641,7 +643,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center border-t border-border pt-6">
             <p className="text-sm font-medium text-foreground">Quality Control Company Limited</p>
             <p className="text-xs text-muted-foreground mt-1">Intranet Portal - Powered by IT Department</p>
-            <p className="text-xs text-muted-foreground mt-2 font-mono text-center">V.2.1.23.26</p>
+            <p className="text-xs text-muted-foreground mt-2 font-mono text-center">V.2.2.15.26</p>
           </div>
           </CardContent>
         </Card>

@@ -31,17 +31,48 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 })
     }
 
-    const { data: recipients, error: fetchError } = await supabase
-      .from("user_profiles")
-      .select("id, first_name, last_name")
-      .in("id", recipient_ids)
+    // Use an admin (service-role) Supabase client for recipient lookup so RLS does not block
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (fetchError) {
-      console.error("[v0] Error fetching recipients:", fetchError)
-      return NextResponse.json({ error: "Failed to fetch recipient details" }, { status: 500 })
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("[v0] Send warnings: Missing Supabase credentials")
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
     }
 
-    // Filter out users who are on approved leave
+    // validate recipient_ids and normalize
+    const ids = Array.isArray(recipient_ids) ? Array.from(new Set(recipient_ids.map((i: any) => String(i).trim()))) : []
+
+    if (ids.length === 0) {
+      console.warn("[v0] Send warnings: invalid or empty recipient_ids", { recipient_ids })
+      return NextResponse.json({ error: "Invalid recipients list" }, { status: 400 })
+    }
+
+    const { createClient: createSupabaseClient } = await import("@supabase/supabase-js")
+    const supabaseAdminForLookup = createSupabaseClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    console.log("[v0] Send warnings: looking up recipients (count):", ids.length)
+
+    const { data: recipients, error: fetchError } = await supabaseAdminForLookup
+      .from("user_profiles")
+      .select("id, first_name, last_name")
+      .in("id", ids)
+
+    if (fetchError) {
+      // log full error server-side for debugging; return readable message to client
+      console.error("[v0] Error fetching recipients:", fetchError)
+      const msg = fetchError?.message || "Failed to fetch recipient details"
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+
+    if (!recipients || recipients.length === 0) {
+      console.warn("[v0] No recipients found for provided ids", { ids })
+      return NextResponse.json({ error: "Recipients not found" }, { status: 404 })
+    }
+
+    // Filter out users who are on approved leave (use RLS-aware regular client for leave_status)
     const today = new Date().toISOString().split("T")[0]
     const { data: usersOnLeave } = await supabase
       .from("leave_status")
@@ -74,39 +105,37 @@ export async function POST(request: Request) {
       }
     })
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("[v0] Send warnings: Missing Supabase credentials")
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+    // reuse admin client created for recipient lookup
+    const supabaseAdmin = supabaseAdminForLookup
 
     const { data, error } = await supabaseAdmin.from("staff_warnings").insert(warnings).select()
 
     if (error) {
-      console.error("[v0] Failed to send warnings:", error)
-      return NextResponse.json({ error: "Failed to send warnings" }, { status: 500 })
+      console.error("[v0] Failed to send warnings (insert error):", error)
+      const msg = error?.message || "Failed to send warnings"
+      return NextResponse.json({ error: msg }, { status: 500 })
     }
 
-    await supabase.from("audit_logs").insert({
-      user_id: user.id,
-      action: "send_staff_warnings",
-      table_name: "staff_warnings",
-      new_values: {
-        recipients: recipient_ids.length,
-        warning_type,
-        sender_role: profile.role,
-        timestamp: new Date().toISOString(),
-      },
-    })
+    // write audit log, but don't fail the whole request if audit logging fails
+    try {
+      const { error: auditErr } = await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: "send_staff_warnings",
+        table_name: "staff_warnings",
+        new_values: {
+          recipients: ids.length,
+          warning_type,
+          sender_role: profile.role,
+          timestamp: new Date().toISOString(),
+        },
+      })
+
+      if (auditErr) {
+        console.error("[v0] Warning: failed to write audit log:", auditErr)
+      }
+    } catch (auditException) {
+      console.error("[v0] Exception while writing audit log:", auditException)
+    }
 
     return NextResponse.json({
       success: true,

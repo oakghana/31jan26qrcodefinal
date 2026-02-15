@@ -40,15 +40,17 @@ import { QRScannerDialog } from "@/components/dialogs/qr-scanner-dialog"
 import { FlashMessage } from "@/components/notifications/flash-message"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
+import { ToastAction } from "@/components/ui/toast"
 import { clearAttendanceCache, shouldClearCache, setCachedDate } from "@/lib/utils/attendance-cache"
 import { cn } from "@/lib/utils" // Import cn
+import { requiresLatenessReason, requiresEarlyCheckoutReason } from "@/lib/attendance-utils"
 import { DeviceActivityHistory } from "@/components/attendance/device-activity-history"
 import { ActiveSessionTimer } from "@/components/attendance/active-session-timer"
 
 interface GeofenceLocation {
   id: string
   name: string
-  address: string
+  address?: string
   latitude: number
   longitude: number
   radius_meters: number
@@ -179,6 +181,17 @@ export function AttendanceRecorder({
   } | null>(null)
   const [showLatenessDialog, setShowLatenessDialog] = useState(false)
   const [latenessReason, setLatenessReason] = useState("")
+
+  // Helper: treat Security department as exempt from lateness / early-checkout reason prompts
+  const isSecurityStaff = useMemo(() => {
+    const deptName = userProfile?.departments?.name || ""
+    const deptCode = (userProfile?.departments?.code || "").toString()
+    return Boolean(
+      deptCode.toLowerCase() === "security" ||
+      deptName.toLowerCase().includes("security")
+    )
+  }, [userProfile]);
+
   const [pendingCheckInData, setPendingCheckInData] = useState<{
     location: LocationData | null
     nearestLocation: any
@@ -798,7 +811,28 @@ export function AttendanceRecorder({
         granted: false,
         message: errorMessage,
       })
+
+      // Show contextual help UI
       setShowLocationHelp(true)
+
+      // If this is a timeout / Windows Location Services failure, nudge the user to use QR code
+      try {
+        const lowered = (errorMessage || "").toString().toLowerCase()
+        if (lowered.includes("timed out") || lowered.includes("windows location services")) {
+          toast({
+            title: "GPS timed out",
+            description: "Use the QR code option for instant check-in/check-out or try GPS again.",
+            variant: "default",
+            action: (
+              <ToastAction onClick={() => setShowQRScanner(true)}>Open QR scanner</ToastAction>
+            ),
+            duration: 12000,
+          })
+        }
+      } catch (toastErr) {
+        console.error('[v0] Failed to show QR suggestion toast:', toastErr)
+      }
+
       return null
     } finally {
       setIsLoading(false)
@@ -914,10 +948,11 @@ export function AttendanceRecorder({
       const checkInHour = checkInTime.getHours()
       const checkInMinutes = checkInTime.getMinutes()
       const isLateArrival = checkInHour > 9 || (checkInHour === 9 && checkInMinutes > 0)
+      const latenessRequired = requiresLatenessReason(checkInTime, userProfile?.departments)
 
-      // If late, show dialog for reason instead of proceeding
-      if (isLateArrival) {
-        console.log("[v0] Late arrival detected - showing reason dialog")
+      // Require lateness reason only on weekdays and for non‑security staff
+      if (isLateArrival && latenessRequired) {
+        console.log("[v0] Late arrival detected (weekday & not exempt) - showing reason dialog")
         setPendingCheckInData({
           location: {
             latitude: checkInData.latitude,
@@ -933,6 +968,11 @@ export function AttendanceRecorder({
         setIsCheckInProcessing(false)
         setRecentCheckIn(false)
         return
+      }
+
+      // If late but user is exempt (Security or weekend), proceed
+      if (isLateArrival && !latenessRequired) {
+        console.log("[v0] Late arrival detected but user is exempt (Security or weekend) — proceeding without reason prompt")
       }
 
       // Use extracted check-in API function
@@ -1023,6 +1063,7 @@ export function AttendanceRecorder({
       const assignedLocation = realTimeLocations?.find(loc => loc.id === userProfile?.assigned_location_id)
       const checkOutEndTime = assignedLocation?.check_out_end_time || "17:00"
       const requireEarlyCheckoutReason = assignedLocation?.require_early_checkout_reason ?? true
+      const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(now, requireEarlyCheckoutReason)
       
       // Parse checkout end time (HH:MM format)
       const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -1037,6 +1078,7 @@ export function AttendanceRecorder({
         currentTime: `${checkoutHour}:${checkoutMinutes.toString().padStart(2, '0')}`,
         isBeforeCheckoutTime,
         requireEarlyCheckoutReason,
+        effectiveRequireEarlyCheckoutReason,
       })
 
       // Find nearest location first (reuse for both paths)
@@ -1063,10 +1105,10 @@ export function AttendanceRecorder({
         }
       }
 
-      // SMART LOGIC: If checkout time PASSED, skip modal and checkout immediately
+      // SMART LOGIC: If checkout time PASSED, no location rule, early-reason not required, OR user is Security — skip modal and checkout immediately
       // This is the "one-tap" optimization - no unnecessary modal delays
-      if (!isBeforeCheckoutTime || !requireEarlyCheckoutReason) {
-        console.log("[v0] SMART CHECKOUT: Checkout time passed or no reason needed - immediate checkout")
+      if (!isBeforeCheckoutTime || !requireEarlyCheckoutReason || isSecurityStaff) {
+        console.log("[v0] SMART CHECKOUT: Checkout time passed or no reason needed or Security staff - immediate checkout")
         await performCheckoutAPI(locationData, nearestLocation, "")
         return
       }
@@ -1152,6 +1194,9 @@ export function AttendanceRecorder({
         device_info: deviceInfo,
         latitude: locationData.latitude,
         longitude: locationData.longitude,
+        accuracy: locationData.accuracy,
+        location_timestamp: locationData.timestamp || Date.now(),
+        location_source: locationData.source || null,
         location_id: nearestLocation?.id,
         lateness_reason: reason || null,
       }
@@ -1495,14 +1540,14 @@ export function AttendanceRecorder({
         </div>
       )}
 
-      {localTodayAttendance?.device_sharing_warning && (
+      {(localTodayAttendance as any)?.device_sharing_warning && (
         <Alert className="bg-yellow-50 border-yellow-400 dark:bg-yellow-900/60 dark:border-yellow-500/50 mb-4">
           <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-300" />
           <AlertTitle className="text-yellow-800 dark:text-yellow-100 font-semibold">
             ⚠️ Shared Device Detected
           </AlertTitle>
           <AlertDescription className="text-yellow-700 dark:text-yellow-200">
-            {localTodayAttendance.device_sharing_warning}
+            {(localTodayAttendance as any).device_sharing_warning}
           </AlertDescription>
         </Alert>
       )}

@@ -1,15 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClientAndGetUser } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    // Create supabase client and fetch user, using helper which clears stale auth cookies
+    const { supabase, user, authError } = await createClientAndGetUser()
 
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

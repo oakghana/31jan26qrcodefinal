@@ -32,7 +32,7 @@ export function rateLimit(identifier: string, config: RateLimitConfig): boolean 
 
 export function getClientIdentifier(request: NextRequest): string {
   // Use IP address as identifier (in production, consider user ID for authenticated requests)
-  return request.ip || request.headers.get("x-forwarded-for") || "unknown"
+  return (request as any).ip || request.headers.get("x-forwarded-for") || "unknown"
 }
 
 export function sanitizeInput(input: string): string {

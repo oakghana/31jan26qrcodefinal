@@ -9,16 +9,26 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const supabase = await createClient()
 
-    const adminSupabase = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
+    // Validate critical server configuration for performing admin updates
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[v0] Supabase server config missing: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
+      return NextResponse.json(
+        {
+          error: "Server misconfiguration: Supabase admin credentials are not configured. Please set SUPABASE_SERVICE_ROLE_KEY and NEXT_PUBLIC_SUPABASE_URL in server environment variables.",
         },
-      },
-    )
+        { status: 500 },
+      )
+    }
+
+    let adminSupabase
+    try {
+      adminSupabase = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+    } catch (clientErr) {
+      console.error("[v0] Failed to initialize admin Supabase client:", clientErr)
+      return NextResponse.json({ error: "Failed to initialize admin client" }, { status: 500 })
+    }
 
     // Get authenticated user and check admin role
     const {
@@ -158,10 +168,58 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     if (updateError) {
       console.error("[v0] Update error:", updateError)
+
+      // Normalize for easier detection
+      const updateMessage = String((updateError as any)?.message || "").toLowerCase()
+      const updateDetails = String((updateError as any)?.details || "").toLowerCase()
+      const updateCode = String((updateError as any)?.code || "")
+
+      // Try to parse constraint name if present
+      const constraintMatch = String((updateError as any)?.message || (updateError as any)?.details || "").match(/constraint\s+"([^\"]+)"/i)
+      const constraintName = constraintMatch ? constraintMatch[1] : null
+
+      // Detect check-constraint violations (common Postgres code 23514) or messages mentioning audit_staff
+      if (
+        updateMessage.includes("role_check") ||
+        updateDetails.includes("role_check") ||
+        updateMessage.includes("audit_staff") ||
+        updateMessage.includes("violates check constraint") ||
+        updateMessage.includes("valid_role") ||
+        updateCode === "23514"
+      ) {
+        const safeSuggestedSQL = `-- Replace <constraint_name> if different. Example uses ${constraintName || 'user_profiles_role_check'}\nALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS ${constraintName || 'user_profiles_role_check'};\nALTER TABLE user_profiles ADD CONSTRAINT ${constraintName || 'user_profiles_role_check'} CHECK (role IN ('admin','it-admin','department_head','regional_manager','nsp','intern','contract','staff','audit_staff'));
+\n-- Alternatively, run the query to inspect current check constraints:\nSELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'user_profiles'::regclass AND contype = 'c';`
+
+        return NextResponse.json(
+          {
+            error:
+              "Database constraint prevents the 'audit_staff' role from being saved. Please add 'audit_staff' to your user_profiles role constraint or run the migration provided in the admin docs.",
+            details: {
+              message: (updateError as any)?.message || null,
+              code: (updateError as any)?.code || null,
+              constraint: constraintName,
+              suggested_sql: safeSuggestedSQL,
+            },
+          },
+          { status: 400 },
+        )
+      }
+
+      // Build a safe, serializable representation of the Supabase error
+      const safeDetails = typeof updateError === "object" && updateError !== null
+        ? {
+            message: (updateError as any).message || null,
+            details: (updateError as any).details || (updateError as any).hint || null,
+            code: (updateError as any).code || null,
+          }
+        : String(updateError)
+
+      console.error("[v0] Update error (safe):", safeDetails)
+
       return NextResponse.json(
         {
-          error: `Failed to update staff member: ${updateError.message}`,
-          details: updateError,
+          error: `Failed to update staff member: ${safeDetails.message || String(safeDetails)}`,
+          details: safeDetails,
         },
         { status: 500 },
       )
@@ -176,7 +234,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       table_name: "user_profiles",
       record_id: id,
       new_values: updatedProfile,
-      ip_address: request.ip || null,
+      ip_address: (request as any).ip || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null,
       user_agent: request.headers.get("user-agent"),
     })
 
@@ -242,7 +300,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       table_name: "user_profiles",
       record_id: id,
       new_values: deactivatedProfile,
-      ip_address: request.ip || null,
+      ip_address: (request as any).ip || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null,
       user_agent: request.headers.get("user-agent"),
     })
 

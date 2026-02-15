@@ -56,11 +56,13 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         check_in_location:geofence_locations!check_in_location_id (
+          id,
           name,
           address,
           district_id
         ),
         check_out_location:geofence_locations!check_out_location_id (
+          id,
           name,
           address,
           district_id
@@ -113,6 +115,7 @@ export async function GET(request: NextRequest) {
         department_id,
         assigned_location_id,
         departments (
+          id,
           name,
           code
         ),
@@ -165,8 +168,26 @@ export async function GET(request: NextRequest) {
 
     console.log("[v0] Reports API - After filtering:", filteredRecords.length, "records")
 
+    // Diagnostic: if we fetched records but filtering removed all of them, log helpful details
+    if ((attendanceRecords?.length || 0) > 0 && filteredRecords.length === 0) {
+      try {
+        console.warn("[v0] Reports API - Filtering removed all fetched records — diagnostic info:", {
+          userRole: profile?.role,
+          profileDepartmentId: profile?.department_id,
+          requestDepartmentId: departmentId,
+          requestDistrictId: districtId,
+          fetchedAttendanceCount: attendanceRecords.length,
+          attendanceUserIds: userIds,
+          foundUserProfilesCount: (userProfiles || []).length,
+          userProfilesPreview: (userProfiles || []).slice(0, 10).map((u: any) => ({ id: u.id, department_id: u.department_id, assigned_location_id: u.assigned_location_id }))
+        })
+      } catch (diagErr) {
+        console.error('[v0] Reports API - Diagnostic logging failed:', diagErr)
+      }
+    }
+
     const enrichedRecords = filteredRecords.map((record) => {
-      const userProfile = userMap.get(record.user_id)
+      const userProfile = userMap.get(record.user_id) || null
 
       // Determine if check-in/check-out was outside assigned location
       const isCheckInOutsideLocation =
@@ -179,13 +200,30 @@ export async function GET(request: NextRequest) {
 
       return {
         ...record,
-        user_profiles: userProfile || null,
+        user_profiles: userProfile,
         is_check_in_outside_location: isCheckInOutsideLocation,
         is_check_out_outside_location: isCheckOutOutsideLocation,
         // Keep backward compatibility
         geofence_locations: record.check_in_location,
       }
     })
+
+    // --- audit: if any attendance rows are missing user_profiles, write an audit log so admins can track and fix ---
+    const missingProfiles = enrichedRecords.filter((r) => !r.user_profiles)
+    if (missingProfiles.length > 0) {
+      try {
+        await supabase.from('audit_logs').insert({
+          user_id: user.id,
+          action: 'missing_user_profiles_detected',
+          table_name: 'attendance_records',
+          details: { missing_count: missingProfiles.length, examples: missingProfiles.slice(0,10).map(m => ({ id: m.id, user_id: m.user_id })) },
+          ip_address: (request as any).ip || request.headers.get('x-forwarded-for') || null,
+          user_agent: request.headers.get('user-agent')
+        })
+      } catch (auditErr) {
+        console.error('[v0] Reports API - Failed to write missing_user_profiles audit log:', auditErr)
+      }
+    }
 
     // Calculate summary statistics
     // Calculate total matching records (without pagination)

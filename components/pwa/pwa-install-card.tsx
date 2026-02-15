@@ -173,73 +173,73 @@ export function PWAInstallCard({ className, compact = false }: PWAInstallCardPro
 
   return (
     <Dialog open={showInstructions} onOpenChange={setShowInstructions}>
-      <Card className={cn("border-primary/20 bg-gradient-to-br from-primary/5 to-background", className)}>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-xl">
-                <Smartphone className="h-6 w-6 text-primary" />
+      <Card className={cn("bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl shadow-lg", className)}>
+        <CardHeader className="pt-6 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                <Download className="w-5 h-5" />
               </div>
-              <div>
-                <CardTitle className="text-xl">Install QCC Attendance App</CardTitle>
-                <CardDescription className="mt-1">
-                  Get faster access and work offline
-                </CardDescription>
+              <div className="min-w-0">
+                <CardTitle className="text-lg font-semibold leading-tight">Add QCC Attendance</CardTitle>
+                <CardDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">Faster access • Offline support • App-like experience</CardDescription>
               </div>
             </div>
-            <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-200">
-              Recommended
-            </Badge>
+
+            <div className="flex items-center gap-2">
+              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 text-sm">Recommended</Badge>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Benefits */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-              <Zap className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-medium">Instant Launch</span>
+
+        <CardContent className="pt-2 pb-6">
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+              <Zap className="w-4 h-4 text-amber-500" />
+              <div className="text-sm text-slate-700 dark:text-slate-300 font-medium">Instant Launch</div>
             </div>
-            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-              <Wifi className="h-4 w-4 text-blue-500" />
-              <span className="text-sm font-medium">Works Offline</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+              <Wifi className="w-4 h-4 text-sky-500" />
+              <div className="text-sm text-slate-700 dark:text-slate-300 font-medium">Offline Ready</div>
             </div>
-            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-              <Bell className="h-4 w-4 text-green-500" />
-              <span className="text-sm font-medium">Push Alerts</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+              <Bell className="w-4 h-4 text-emerald-500" />
+              <div className="text-sm text-slate-700 dark:text-slate-300 font-medium">Push Notifications</div>
             </div>
-            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-              <Monitor className="h-4 w-4 text-purple-500" />
-              <span className="text-sm font-medium">Full Screen</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+              <Monitor className="w-4 h-4 text-violet-500" />
+              <div className="text-sm text-slate-700 dark:text-slate-300 font-medium">Full Screen</div>
             </div>
           </div>
 
-          {/* Install Button */}
           <div className="flex flex-col gap-3">
             <Button
               onClick={handleInstall}
               size="lg"
-              className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-lg py-6 shadow-lg"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg shadow"
               disabled={isInstalling}
             >
               {isInstalling ? (
                 <>
-                  <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent inline-block align-middle" />
                   Installing...
                 </>
               ) : (
                 <>
-                  <Download className="w-5 h-5 mr-2" />
-                  Install Now - It's Free!
+                  <span className="inline-flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    <span className="font-semibold">Install</span>
+                  </span>
                 </>
               )}
             </Button>
 
-            <DialogTrigger asChild>
-              <Button variant="ghost" className="text-muted-foreground">
-                Need help? View installation steps
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            </DialogTrigger>
+            <div className="flex justify-between items-center">
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="text-sm text-slate-500 dark:text-slate-400 px-2 py-1">How to install</Button>
+              </DialogTrigger>
+              <div className="text-xs text-slate-400">Available on Mobile, Tablet & Desktop</div>
+            </div>
           </div>
         </CardContent>
       </Card>

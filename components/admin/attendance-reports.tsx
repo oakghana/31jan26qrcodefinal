@@ -62,6 +62,7 @@ interface AttendanceRecord {
     last_name: string
     employee_id: string
     departments?: {
+      id: string
       name: string
       code: string
     }
@@ -70,14 +71,17 @@ interface AttendanceRecord {
       address: string
     }
     districts?: {
+      id: string
       name: string
     }
   }
   check_in_location?: {
+    id: string
     name: string
     address: string
   }
   check_out_location?: {
+    id: string
     name: string
     address: string
   }
@@ -95,12 +99,31 @@ interface ReportSummary {
   departmentStats: Record<string, { count: number; totalHours: number }>
 }
 
+interface Department {
+  id: string
+  name: string
+  code: string
+}
+
+interface Location {
+  id: string
+  name: string
+  address: string
+}
+
+interface District {
+  id: string
+  name: string
+}
+
 const COLORS = ["#4B8B3B", "#8B5CF6", "#6b7280", "#f97316", "#ea580c"]
 
 export function AttendanceReports() {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [summary, setSummary] = useState<ReportSummary | null>(null)
   const [loading, setLoading] = useState(false)
+  const [compactMode, setCompactMode] = useState(false) // compact / landscape view for mobile
+
   const [startDate, setStartDate] = useState(() => {
     const date = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     return date.toISOString().split("T")[0]
@@ -109,8 +132,8 @@ export function AttendanceReports() {
     return new Date().toISOString().split("T")[0]
   })
   const [selectedDepartment, setSelectedDepartment] = useState("all")
-  const [locations, setLocations] = useState([])
-  const [districts, setDistricts] = useState([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [districts, setDistricts] = useState<District[]>([])
   const [selectedLocation, setSelectedLocation] = useState("all")
   const [selectedDistrict, setSelectedDistrict] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
@@ -131,6 +154,14 @@ export function AttendanceReports() {
 
   const visibleColumnCount = 9
 
+  // Helper to safely format user display values when user_profiles may be null
+  const formatUserName = (p: AttendanceRecord["user_profiles"] | null | undefined) =>
+    p ? `${p.first_name} ${p.last_name}` : "Unknown User"
+
+  const userInitials = (p: AttendanceRecord["user_profiles"] | null | undefined) =>
+    `${p?.first_name?.[0] || "?"}${p?.last_name?.[0] || "?"}`
+
+
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -142,7 +173,7 @@ export function AttendanceReports() {
     absenteeism: [],
   })
 
-  const [departments, setDepartments] = useState([])
+  const [departments, setDepartments] = useState<Department[]>([])
 
   useEffect(() => {
     fetchReport()
@@ -307,8 +338,8 @@ export function AttendanceReports() {
           ...records.map((record) =>
             [
               new Date(record.check_in_time).toLocaleDateString(),
-              `"${record.user_profiles.employee_id || "N/A"}"`,
-              `"${record.user_profiles.first_name} ${record.user_profiles.last_name}"`,
+              `"${record.user_profiles?.employee_id || "N/A"}"`,
+              `"${(record.user_profiles?.first_name || "") + (record.user_profiles?.last_name ? ' ' + record.user_profiles.last_name : '') || 'Unknown User'}"`,
               `"${record.user_profiles.departments?.name || "N/A"}"`,
               `"${record.user_profiles.assigned_location?.name || "N/A"}"`,
               `"${new Date(record.check_in_time).toLocaleTimeString()}"`,
@@ -386,10 +417,10 @@ export function AttendanceReports() {
       }
     } catch (error) {
       console.error("[v0] Export error:", error)
-      if (error.name === "AbortError") {
+      if (error instanceof Error && error.name === "AbortError") {
         setExportError("Export timed out. Please try again with a smaller date range.")
       } else {
-        setExportError(`Failed to export ${format.toUpperCase()} report: ${error.message}`)
+        setExportError(`Failed to export ${format.toUpperCase()} report: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     } finally {
       setExporting(false)
@@ -451,11 +482,11 @@ export function AttendanceReports() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
       filtered = filtered.filter((r) => {
-        const fullName = `${r.user_profiles.first_name} ${r.user_profiles.last_name}`.toLowerCase()
-        const employeeId = r.user_profiles.employee_id?.toLowerCase() || ""
-        const department = r.user_profiles.departments?.name?.toLowerCase() || ""
-        const assignedLocation = r.user_profiles.assigned_location?.name?.toLowerCase() || ""
-        const district = r.user_profiles.assigned_location?.districts?.name?.toLowerCase() || ""
+        const fullName = `${r.user_profiles?.first_name || ""} ${r.user_profiles?.last_name || ""}`.toLowerCase()
+        const employeeId = r.user_profiles?.employee_id?.toLowerCase() || ""
+        const department = r.user_profiles?.departments?.name?.toLowerCase() || ""
+        const assignedLocation = r.user_profiles?.assigned_location?.name?.toLowerCase() || ""
+        const district = r.user_profiles?.assigned_location?.districts?.name?.toLowerCase() || ""
 
         return (
           fullName.includes(query) ||
@@ -521,9 +552,9 @@ export function AttendanceReports() {
           case 'work_hours':
             return r.work_hours || 0
           case 'last_name':
-            return (r.user_profiles.last_name || '').toLowerCase()
+            return (r.user_profiles?.last_name || '').toLowerCase()
           case 'department':
-            return (r.user_profiles.departments?.name || '').toLowerCase()
+            return (r.user_profiles?.departments?.name || '').toLowerCase()
           case 'status':
             return (r.status || '').toLowerCase()
           default:
@@ -555,10 +586,10 @@ export function AttendanceReports() {
   const earlyPageItems = earlyList.slice(earlyStart, earlyStart + earlyPageSize)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Advanced Filters - Modern Design */}
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-          <div className="p-8">
+          <div className="p-3 sm:p-4 md:p-6">
             {exportError && (
               <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 rounded-xl p-4 mt-2">
                 <div className="flex items-center gap-3">
@@ -569,9 +600,9 @@ export function AttendanceReports() {
             )}
           </div>
 
-        <div className="p-8">
+        <div className="p-3 sm:p-4 md:p-6">
           {/* Primary Filters */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-4 items-end">
             <div className="space-y-3">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4 text-blue-600" />
@@ -581,7 +612,7 @@ export function AttendanceReports() {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white"
+                className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150 bg-gray-50 hover:bg-white text-sm"
               />
             </div>
 
@@ -594,7 +625,7 @@ export function AttendanceReports() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white"
+                className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150 bg-gray-50 hover:bg-white text-sm"
               />
             </div>
 
@@ -604,7 +635,7 @@ export function AttendanceReports() {
                 Location
               </label>
               <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-                <SelectTrigger className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white">
+                <SelectTrigger className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-150 bg-gray-50 hover:bg-white text-sm">
                   <SelectValue placeholder="All Locations" />
                 </SelectTrigger>
                 <SelectContent>
@@ -624,7 +655,7 @@ export function AttendanceReports() {
                 Department
               </label>
               <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white">
+                <SelectTrigger className={`w-full border border-gray-200 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-150 bg-gray-50 hover:bg-white ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}`}>
                   <SelectValue placeholder="All Departments" />
                 </SelectTrigger>
                 <SelectContent>
@@ -640,7 +671,7 @@ export function AttendanceReports() {
           </div>
 
           {/* Secondary Filters - simplified (search only) */}
-          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-1 mb-8">
+          <div className="grid gap-4 mb-4">
             <div className="space-y-3">
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Search className="h-4 w-4 text-pink-600" />
@@ -653,15 +684,15 @@ export function AttendanceReports() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by name, ID, department..."
-                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 bg-gray-50 hover:bg-white"
+                  className={`w-full pl-10 pr-4 ${compactMode ? 'py-1.5 text-xs' : 'py-2 text-sm'} border border-gray-200 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-150 bg-gray-50 hover:bg-white`}
                 />
               </div>
             </div>
           </div>
 
           {!loading && records.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <FileText className="h-12 w-12 text-gray-400" />
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Found</h3>
@@ -672,9 +703,9 @@ export function AttendanceReports() {
       </div>
 
       {summary && (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <div className="grid gap-3 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {/* Total Records Card - Primary */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="relative overflow-hidden rounded-xl p-2 text-white shadow-sm transition-all duration-200 transform hover:-translate-y-0.5 w-full bg-slate-800 border border-slate-700">
             <div className="absolute top-4 right-4">
               <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
                 <FileText className="w-3 h-3 mr-1" />
@@ -682,19 +713,19 @@ export function AttendanceReports() {
               </Badge>
             </div>
             <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-white/20 rounded-xl">
-                <FileText className="h-6 w-6" />
+              <div className="p-2 bg-white/20 rounded-md">
+                <FileText className="h-5 w-5" />
               </div>
             </div>
             <div className="space-y-1">
               <p className="text-white/80 text-sm font-medium">Total Records</p>
-              <p className="text-3xl font-bold">{summary.totalRecords.toLocaleString()}</p>
+              <p className={compactMode ? "text-lg font-semibold" : "text-2xl font-bold"}>{summary.totalRecords.toLocaleString()}</p>
               <p className="text-white/60 text-xs">Attendance entries</p>
             </div>
           </div>
 
           {/* Present Count Card */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="relative overflow-hidden rounded-xl p-2 text-white shadow-sm transition-all duration-200 transform hover:-translate-y-0.5 w-full bg-emerald-600 border border-emerald-700">
             <div className="absolute top-4 right-4">
               <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
                 <CheckCircle className="w-3 h-3 mr-1" />
@@ -708,13 +739,13 @@ export function AttendanceReports() {
             </div>
             <div className="space-y-1">
               <p className="text-white/80 text-sm font-medium">Present</p>
-              <p className="text-3xl font-bold">{presentCount.toLocaleString()}</p>
+              <p className={compactMode ? "text-lg font-semibold" : "text-2xl font-bold"}>{presentCount.toLocaleString()}</p>
               <p className="text-white/60 text-xs">On time arrivals</p>
             </div>
           </div>
 
           {/* Late Arrivals Card */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="relative overflow-hidden rounded-xl p-2 text-white shadow-sm transition-all duration-200 transform hover:-translate-y-0.5 w-full bg-amber-600 border border-amber-700">
             <div className="absolute top-4 right-4">
               <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
                 <AlertTriangle className="w-3 h-3 mr-1" />
@@ -728,13 +759,13 @@ export function AttendanceReports() {
             </div>
             <div className="space-y-1">
               <p className="text-white/80 text-sm font-medium">Late</p>
-              <p className="text-3xl font-bold">{summary.statusCounts.late || 0}</p>
+              <p className={compactMode ? "text-lg font-semibold" : "text-2xl font-bold"}>{summary.statusCounts.late || 0}</p>
               <p className="text-white/60 text-xs">Late arrivals</p>
             </div>
           </div>
 
           {/* Total Hours Card */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="relative overflow-hidden rounded-xl p-2 text-white shadow-sm transition-all duration-200 transform hover:-translate-y-0.5 w-full bg-indigo-600 border border-indigo-700">
             <div className="absolute top-4 right-4">
               <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
                 <Clock className="w-3 h-3 mr-1" />
@@ -748,13 +779,13 @@ export function AttendanceReports() {
             </div>
             <div className="space-y-1">
               <p className="text-white/80 text-sm font-medium">Total Hours</p>
-              <p className="text-3xl font-bold">{Math.round(summary.totalWorkHours).toLocaleString()}</p>
+              <p className={compactMode ? "text-lg font-semibold" : "text-2xl font-bold"}>{Math.round(summary.totalWorkHours).toLocaleString()}</p>
               <p className="text-white/60 text-xs">Work hours logged</p>
             </div>
           </div>
 
           {/* Departments Card */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="relative overflow-hidden rounded-xl p-2 text-white shadow-sm transition-all duration-200 transform hover:-translate-y-0.5 w-full bg-violet-600 border border-violet-700">
             <div className="absolute top-4 right-4">
               <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
                 <Users className="w-3 h-3 mr-1" />
@@ -768,13 +799,13 @@ export function AttendanceReports() {
             </div>
             <div className="space-y-1">
               <p className="text-white/80 text-sm font-medium">Departments</p>
-              <p className="text-3xl font-bold">{Object.keys(summary.departmentStats).length}</p>
+              <p className={compactMode ? "text-lg font-semibold" : "text-2xl font-bold"}>{Object.keys(summary.departmentStats).length}</p>
               <p className="text-white/60 text-xs">Active departments</p>
             </div>
           </div>
 
           {/* Locations Card */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-teal-600 to-teal-700 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+          <div className="relative overflow-hidden rounded-xl p-2 text-white shadow-sm transition-all duration-200 transform hover:-translate-y-0.5 w-full bg-teal-600 border border-teal-700">
             <div className="absolute top-4 right-4">
               <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
                 <MapPin className="w-3 h-3 mr-1" />
@@ -788,24 +819,23 @@ export function AttendanceReports() {
             </div>
             <div className="space-y-1">
               <p className="text-white/80 text-sm font-medium">Locations</p>
-              <p className="text-3xl font-bold">{locations.length}</p>
+              <p className={compactMode ? "text-lg font-semibold" : "text-2xl font-bold"}>{locations.length}</p>
               <p className="text-white/60 text-xs">Active locations</p>
             </div>
           </div>
 
-            {/* Quick Select Card */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-yellow-50 to-amber-50 rounded-2xl p-6 text-amber-800 shadow-md border border-amber-100">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-amber-100 rounded-xl">
-                  <CalendarIcon className="h-6 w-6 text-amber-600" />
+            {/* Quick Select (compact tab-style) */}
+            <div className="min-w-[220px] self-start">
+              <div className="flex items-center gap-3 border border-amber-100 bg-amber-50 rounded-md p-2 shadow-sm h-12">
+                <div className="flex items-center gap-2 pl-2 pr-3 border-r border-amber-100">
+                  <CalendarIcon className="h-5 w-5 text-amber-600" />
+                  <span className="text-amber-800 text-sm font-medium">Quick Select</span>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <p className="text-amber-800 text-sm font-medium">Quick Select</p>
-                <div className="flex flex-col gap-3">
-                  <Button variant="ghost" size="sm" onClick={() => setQuickDate('today')} className="text-amber-700 text-left">Today</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setQuickDate('week')} className="text-amber-700 text-left">This Week</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setQuickDate('month')} className="text-amber-700 text-left">This Month</Button>
+
+                <div className="flex gap-2 items-center">
+                  <Button variant={compactMode ? "ghost" : "outline"} size="sm" onClick={() => setQuickDate('today')} className="text-amber-700 px-3 py-1 text-xs">Today</Button>
+                  <Button variant={compactMode ? "ghost" : "outline"} size="sm" onClick={() => setQuickDate('week')} className="text-amber-700 px-3 py-1 text-xs">Week</Button>
+                  <Button variant={compactMode ? "ghost" : "outline"} size="sm" onClick={() => setQuickDate('month')} className="text-amber-700 px-3 py-1 text-xs">Month</Button>
                 </div>
               </div>
             </div>
@@ -813,12 +843,12 @@ export function AttendanceReports() {
       )}
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap gap-4 items-center justify-between pt-6 border-t border-gray-100">
-        <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-100">
+        <div className="flex gap-3 items-center">
           <Button
             onClick={fetchReport}
             disabled={loading}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+            className={`bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white ${compactMode ? 'px-3 py-1.5 text-sm' : 'px-4 py-2'} rounded-md shadow-sm hover:shadow-md transition-all duration-200`}
           >
             {loading ? (
               <>
@@ -833,12 +863,12 @@ export function AttendanceReports() {
             )}
           </Button>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <Button
               onClick={() => exportReport("excel")}
               variant="outline"
               disabled={exporting || records.length === 0 || loading}
-              className="border-green-200 text-green-700 hover:bg-green-50 px-6 py-3 rounded-xl transition-all duration-200"
+              className={`border-green-200 text-green-700 hover:bg-green-50 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 rounded-md'} transition-all duration-150 text-sm`}
             >
               {exporting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -851,16 +881,27 @@ export function AttendanceReports() {
               onClick={() => exportReport("csv")}
               variant="outline"
               disabled={exporting || records.length === 0 || loading}
-              className="border-blue-200 text-blue-700 hover:bg-blue-50 px-6 py-3 rounded-xl transition-all duration-200"
+              className={`border-blue-200 text-blue-700 hover:bg-blue-50 ${compactMode ? 'px-2 py-1 text-xs' : 'px-3 py-2 rounded-md'} transition-all duration-150 text-sm`}
             >
               {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               CSV
             </Button>
           </div>
+
+          {/* Compact / Landscape toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCompactMode((s) => !s)}
+            className={`h-8 ${compactMode ? 'bg-slate-800 text-white' : 'bg-white/5 text-gray-200'} rounded-md px-2 py-1 ml-2 text-sm`}
+            title="Toggle compact / landscape view (mobile)"
+          >
+            {compactMode ? 'Compact / Landscape' : 'Normal View'}
+          </Button>
         </div>
 
         {/* Quick Date Select */}
-        <div className="flex gap-2">
+        <div className="flex gap-2"> 
           <span className="text-sm font-medium text-gray-600 self-center mr-2">Quick:</span>
           {[
             { label: "Today", value: "today" },
@@ -873,7 +914,7 @@ export function AttendanceReports() {
               variant="ghost"
               size="sm"
               onClick={() => setQuickDate(option.value as any)}
-              className="text-gray-600 hover:text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all duration-200"
+              className="text-gray-600 hover:text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-md transition-all duration-150 text-sm"
             >
               {option.label}
             </Button>
@@ -886,8 +927,8 @@ export function AttendanceReports() {
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
         <div className="border-b border-gray-100">
           <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="details" className="w-full">
-            <div className="px-8 pt-6">
-              <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-2xl h-14">
+            <div className="px-4 pt-4">
+              <TabsList className={`grid w-full grid-cols-4 bg-gray-100 p-1 rounded-xl ${compactMode ? 'h-10' : 'h-12'}`}>
                 <TabsTrigger
                   value="details"
                   className="rounded-xl text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-200"
@@ -915,9 +956,9 @@ export function AttendanceReports() {
               </TabsList>
             </div>
 
-            <TabsContent value="overview" className="px-8 py-8 space-y-8">
-              <div className="grid gap-8 md:grid-cols-2">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100">
+            <TabsContent value="overview" className="px-4 py-4 space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 sm:p-4 md:p-6 border border-blue-100">
                   <div className="flex items-center gap-4 mb-6">
                     <div className="p-3 bg-blue-100 rounded-xl">
                       <BarChart3 className="h-6 w-6 text-blue-600" />
@@ -927,7 +968,7 @@ export function AttendanceReports() {
                       <p className="text-gray-600">Distribution of attendance records</p>
                     </div>
                   </div>
-                  <div className="h-80">
+                  <div className="h-48 md:h-80">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -959,7 +1000,7 @@ export function AttendanceReports() {
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 border border-green-100">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-3 sm:p-4 md:p-6 border border-green-100">
                   <div className="flex items-center gap-4 mb-6">
                     <div className="p-3 bg-green-100 rounded-xl">
                       <CheckCircle className="h-6 w-6 text-green-600" />
@@ -969,7 +1010,7 @@ export function AttendanceReports() {
                       <p className="text-gray-600">Breakdown of attendance statuses</p>
                     </div>
                   </div>
-                  <div className="h-80">
+                  <div className="h-48 md:h-80">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={Object.entries(summary?.statusCounts || {}).map(([status, count]) => ({
                         status: status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '),
@@ -1003,8 +1044,8 @@ export function AttendanceReports() {
               </div>
             </TabsContent>
 
-            <TabsContent value="trends" className="px-8 py-8 space-y-8">
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 border border-purple-100">
+            <TabsContent value="trends" className="px-4 py-4 space-y-6">
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-3 sm:p-4 md:p-6 border border-purple-100">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="p-3 bg-purple-100 rounded-xl">
                     <BarChart3 className="h-6 w-6 text-purple-600" />
@@ -1014,7 +1055,7 @@ export function AttendanceReports() {
                     <p className="text-gray-600">Daily attendance patterns over time</p>
                   </div>
                 </div>
-                <div className="h-96">
+                <div className="h-64 md:h-96">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={analyticsData.dailyTrends}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -1059,8 +1100,8 @@ export function AttendanceReports() {
               </div>
             </TabsContent>
 
-            <TabsContent value="departments" className="px-8 py-8 space-y-8">
-              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl p-8 border border-indigo-100">
+            <TabsContent value="departments" className="px-4 py-4 space-y-6">
+              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-6 sm:p-4 md:p-6 border border-indigo-100">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="p-3 bg-indigo-100 rounded-xl">
                     <Users className="h-6 w-6 text-indigo-600" />
@@ -1104,9 +1145,9 @@ export function AttendanceReports() {
               </div>
             </TabsContent>
 
-            <TabsContent value="details" className="px-8 py-8">
+            <TabsContent value="details" className="px-4 py-4">
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-slate-900 dark:border-slate-700">
-                <div className="p-6 border-b border-gray-200">
+                <div className="p-4 border-b border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100">Detailed Records</h3>
@@ -1120,53 +1161,53 @@ export function AttendanceReports() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="hidden sm:block overflow-x-auto">
                   <Table className="min-w-full text-sm text-gray-800 dark:text-slate-200">
                     <TableHeader>
                       <TableRow className="bg-gray-50 dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700">
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('check_in_time')}>Date</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('last_name')}>Employee</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('department')}>Department</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('check_in_time')}>Check In</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4">Check In Location</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('check_out_time')}>Check Out</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4">Check Out Location</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('work_hours')}>Hours</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4 cursor-pointer" onClick={() => toggleSort('status')}>Status</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4">Comment</TableHead>
-                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-4">Reason</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('check_in_time')}>Date</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('last_name')}>Employee</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('department')}>Department</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('check_in_time')}>Check In</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Check In Location</TableHead>
+                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('check_out_time')}>Check Out</TableHead>
+                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Check Out Location</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('work_hours')}>Hours</TableHead>
+                        <TableHead className="font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm cursor-pointer" onClick={() => toggleSort('status')}>Status</TableHead>
+                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Comment</TableHead>
+                        <TableHead className="hidden sm:table-cell font-semibold text-gray-700 dark:text-slate-200 py-2 text-sm">Reason</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {sortedRecords.map((record) => (
                         <TableRow key={record.id} className="bg-white dark:bg-slate-900 even:bg-gray-50 dark:even:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200">{new Date(record.check_in_time).toLocaleDateString()}</TableCell>
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200">
+                          <TableCell className={compactMode ? "py-1 text-gray-800 dark:text-slate-200 text-xs" : "py-2 text-gray-800 dark:text-slate-200 text-sm"}>{new Date(record.check_in_time).toLocaleDateString()}</TableCell>
+                          <TableCell className="py-2 text-gray-800 dark:text-slate-200 text-sm">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                                {record.user_profiles.first_name[0]}{record.user_profiles.last_name[0]}
+                                {userInitials(record.user_profiles)}
                               </div>
                               <div>
-                                <p className="font-medium text-gray-900 dark:text-slate-100">{record.user_profiles.first_name} {record.user_profiles.last_name}</p>
-                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles.employee_id}</p>
+                                <p className="font-medium text-gray-900 dark:text-slate-100">{formatUserName(record.user_profiles)}</p>
+                                <p className="text-sm text-gray-600 dark:text-slate-300">{record.user_profiles?.employee_id || 'N/A'}</p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="py-4"><Badge variant="outline" className="font-medium text-gray-700 dark:text-slate-200">{record.user_profiles.departments?.name || 'N/A'}</Badge></TableCell>
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200">{new Date(record.check_in_time).toLocaleTimeString()}</TableCell>
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300">{record.check_in_location_name || 'N/A'}</span></div></TableCell>
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200">{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : <span className="text-gray-400 dark:text-slate-400">-</span>}</TableCell>
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300">{record.check_out_location_name || 'N/A'}</span></div></TableCell>
-                          <TableCell className="py-4 text-gray-800 dark:text-slate-200"><span className="font-medium">{record.work_hours ? `${record.work_hours.toFixed(1)}h` : '-'}</span></TableCell>
-                          <TableCell className="py-4"><Badge
+                          <TableCell className={compactMode ? "py-1" : "py-2"}><Badge variant="outline" className={compactMode ? "font-medium text-gray-700 dark:text-slate-200 text-xs" : "font-medium text-gray-700 dark:text-slate-200 text-sm"}>{record.user_profiles.departments?.name || 'N/A'}</Badge></TableCell>
+                          <TableCell className={compactMode ? "py-1 text-gray-800 dark:text-slate-200 text-xs" : "py-2 text-gray-800 dark:text-slate-200 text-sm"}>{new Date(record.check_in_time).toLocaleTimeString()}</TableCell>
+                          <TableCell className="py-2 text-gray-800 dark:text-slate-200 text-sm"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300">{record.check_in_location_name || 'N/A'}</span></div></TableCell>
+                          <TableCell className={compactMode ? "hidden sm:table-cell py-1 text-gray-800 dark:text-slate-200 text-xs" : "hidden sm:table-cell py-2 text-gray-800 dark:text-slate-200 text-sm"}>{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : <span className="text-gray-400 dark:text-slate-400">-</span>}</TableCell>
+                          <TableCell className="hidden sm:table-cell py-2 text-gray-800 dark:text-slate-200 text-sm"><div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-gray-500 dark:text-slate-400" /><span className="text-sm text-gray-700 dark:text-slate-300">{record.check_out_location_name || 'N/A'}</span></div></TableCell>
+                          <TableCell className={compactMode ? "py-1 text-gray-800 dark:text-slate-200 text-xs" : "py-2 text-gray-800 dark:text-slate-200 text-sm"}><span className="font-medium">{record.work_hours ? `${record.work_hours.toFixed(1)}h` : '-'}</span></TableCell>
+                          <TableCell className="py-2"><Badge
                             variant={
                               record.status === 'present' ? 'default' :
                               record.status === 'late' ? 'secondary' :
                               record.status === 'absent' ? 'destructive' : 'outline'
                             }
-                            className="font-medium"
+                            className="font-medium text-sm"
                           >{record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}</Badge></TableCell>
-                          <TableCell className="py-4">
+                          <TableCell className="hidden sm:table-cell py-2">
                             <span className="text-sm text-gray-700 dark:text-slate-300">
                               {record.notes ? (
                                 <span className="max-w-xs truncate block" title={record.notes}>
@@ -1177,7 +1218,7 @@ export function AttendanceReports() {
                               )}
                             </span>
                           </TableCell>
-                          <TableCell className="py-4">
+                          <TableCell className="hidden sm:table-cell py-2">
                             <span className="text-sm text-gray-700 dark:text-slate-300">
                               {record.lateness_reason || record.early_checkout_reason ? (
                                 <div className="space-y-1">
@@ -1209,8 +1250,32 @@ export function AttendanceReports() {
                   </Table>
                 </div>
 
+                {/* Mobile condensed list */}
+                <div className={`${compactMode ? 'flex sm:hidden space-x-3 overflow-x-auto px-3 py-3' : 'block sm:hidden space-y-3 px-4 py-4'}`}>
+                  {sortedRecords.map((record) => (
+                    <div key={record.id} className="p-2 bg-white rounded-md shadow-sm border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{formatUserName(record.user_profiles)} <span className="text-xs text-gray-500">({record.user_profiles?.employee_id || 'N/A'})</span></p>
+                          <p className="text-xs text-gray-500">{new Date(record.check_in_time).toLocaleDateString()} • {new Date(record.check_in_time).toLocaleTimeString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">{record.work_hours ? `${record.work_hours.toFixed(1)}h` : '-'}</p>
+                          <div className="mt-1">
+                            <Badge variant="outline" className="text-xs">{record.status.charAt(0).toUpperCase() + record.status.slice(1)}</Badge>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-gray-600 flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        <span>{record.check_in_location_name || 'N/A'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 {/* Pagination Controls */}
-                <div className="p-6 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-4">
+                <div className="p-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setPage(1)} disabled={page === 1}>First</Button>
                     <Button variant="ghost" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</Button>
@@ -1249,7 +1314,7 @@ export function AttendanceReports() {
                   </Badge>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
@@ -1261,22 +1326,33 @@ export function AttendanceReports() {
                     <CardContent>
                       <div className="space-y-4">
                         {latenessPageItems.map((record) => (
-                            <div key={record.id} className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                            <div key={record.id} className="p-3 bg-orange-50 rounded-md border border-orange-200">
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
-                                  <p className="font-medium text-gray-900">
-                                    {record.user_profiles.first_name} {record.user_profiles.last_name}
-                                  </p>
+                                  <p className="font-medium text-gray-900">{formatUserName(record.user_profiles)}</p>
                                   <p className="text-sm text-gray-600">
                                     {new Date(record.check_in_time).toLocaleDateString()} at {new Date(record.check_in_time).toLocaleTimeString()}
                                   </p>
+
+                                  {/* Location line */}
+                                  <div className="mt-1 text-xs text-gray-500 flex items-center gap-2">
+                                    <MapPin className="h-4 w-4" />
+                                    <span>{record.check_in_location_name || record.geofence_locations?.name || 'N/A'}</span>
+                                  </div>
+
                                   <p className="text-sm text-orange-700 mt-2 font-medium">
                                     {record.lateness_reason}
                                   </p>
                                 </div>
-                                <Badge variant="secondary" className="ml-2">
-                                  {record.user_profiles.departments?.name}
-                                </Badge>
+
+                                <div className="flex flex-col gap-2 ml-2">
+                                  <Badge variant="secondary">
+                                    {record.user_profiles.departments?.name}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {record.check_in_location_name || record.geofence_locations?.name || 'Unknown'}
+                                  </Badge>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1311,22 +1387,33 @@ export function AttendanceReports() {
                     <CardContent>
                       <div className="space-y-4">
                         {earlyPageItems.map((record) => (
-                            <div key={record.id} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div key={record.id} className="p-3 bg-blue-50 rounded-md border border-blue-200">
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
-                                  <p className="font-medium text-gray-900">
-                                    {record.user_profiles.first_name} {record.user_profiles.last_name}
-                                  </p>
+                                  <p className="font-medium text-gray-900">{formatUserName(record.user_profiles)}</p>
                                   <p className="text-sm text-gray-600">
                                     {new Date(record.check_out_time!).toLocaleDateString()} at {new Date(record.check_out_time!).toLocaleTimeString()}
                                   </p>
+
+                                  {/* Location line */}
+                                  <div className="mt-1 text-xs text-gray-500 flex items-center gap-2">
+                                    <MapPin className="h-4 w-4" />
+                                    <span>{record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'N/A'}</span>
+                                  </div>
+
                                   <p className="text-sm text-blue-700 mt-2 font-medium">
                                     {record.early_checkout_reason}
                                   </p>
                                 </div>
-                                <Badge variant="secondary" className="ml-2">
-                                  {record.user_profiles.departments?.name}
-                                </Badge>
+
+                                <div className="flex flex-col gap-2 ml-2">
+                                  <Badge variant="secondary">
+                                    {record.user_profiles.departments?.name}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {record.check_out_location_name || record.check_in_location_name || record.geofence_locations?.name || 'Unknown'}
+                                  </Badge>
+                                </div>
                               </div>
                             </div>
                           ))}

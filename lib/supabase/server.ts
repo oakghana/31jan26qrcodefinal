@@ -49,3 +49,39 @@ export async function createClient() {
 }
 
 export const createServerClient = createClient
+
+// Helper: create client and attempt to resolve the current user.
+// If a refresh token is missing or invalid, clear Supabase-related cookies
+// to avoid repeated "Refresh Token Not Found" errors and force a login.
+export async function createClientAndGetUser() {
+  const supabase = await createClient()
+
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+
+    if (error) {
+      const msg = (error as any)?.message || ""
+      if (/refresh token not found|invalid refresh token/i.test(msg)) {
+        // Clear Supabase-related cookies (names containing 'sb' or 'supabase')
+        const cookieStore = await cookies()
+        const all = cookieStore.getAll()
+        for (const c of all) {
+          if (/\bsb\b|supabase/i.test(c.name)) {
+            try {
+              cookieStore.set(c.name, "", { path: "/", expires: new Date(0) })
+            } catch {
+              // swallowing errors setting cookies in server components
+            }
+          }
+        }
+      }
+    }
+
+    return { supabase, user: (user as any) || null, authError: error || null }
+  } catch (e) {
+    return { supabase, user: null, authError: e }
+  }
+}

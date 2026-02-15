@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { validateCheckoutLocation, type LocationData } from "@/lib/geolocation"
+import { requiresEarlyCheckoutReason } from "@/lib/attendance-utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -388,6 +389,8 @@ export async function POST(request: NextRequest) {
     const { data: userProfileData } = await supabase
       .from("user_profiles")
       .select(`
+        role,
+        departments(code, name),
         assigned_location_id,
         assigned_location:geofence_locations!user_profiles_assigned_location_id_fkey (
           id,
@@ -402,6 +405,7 @@ export async function POST(request: NextRequest) {
     // Get location-specific checkout end time (default to 17:00 if not set)
     const checkOutEndTime = userProfileData?.assigned_location?.check_out_end_time || "17:00"
     const requireEarlyCheckoutReason = userProfileData?.assigned_location?.require_early_checkout_reason ?? true
+    const effectiveRequireEarlyCheckoutReason = requiresEarlyCheckoutReason(checkOutTime, requireEarlyCheckoutReason, userProfileData?.role)
     
     // Parse checkout end time (HH:MM format)
     const [endHour, endMinute] = checkOutEndTime.split(":").map(Number)
@@ -419,13 +423,24 @@ export async function POST(request: NextRequest) {
       currentTime: `${checkOutTime.getHours()}:${checkOutTime.getMinutes().toString().padStart(2, '0')}`,
       isEarlyCheckout,
       requireEarlyCheckoutReason,
+      isWeekend,
     })
 
-    if (isEarlyCheckout && requireEarlyCheckoutReason) {
+    // Only mark earlyCheckoutWarning when the location requires a reason AND it's NOT a weekend
+    if (isEarlyCheckout && effectiveRequireEarlyCheckoutReason) {
       earlyCheckoutWarning = {
         message: `Early checkout detected at ${checkOutTime.toLocaleTimeString()}. Standard work hours end at ${checkOutEndTime}.`,
         checkoutTime: checkOutTime.toISOString(),
         standardEndTime: checkOutEndTime,
+      }
+      // Require early checkout reason
+      if (!early_checkout_reason || early_checkout_reason.trim().length === 0) {
+        return NextResponse.json({
+          error: "Early checkout reason is required when checking out before standard end time",
+          requiresEarlyCheckoutReason: true,
+          checkoutTime: checkOutTime.toLocaleTimeString(),
+          standardEndTime: checkOutEndTime,
+        }, { status: 400 })
       }
     }
 

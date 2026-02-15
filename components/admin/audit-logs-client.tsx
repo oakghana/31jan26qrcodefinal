@@ -54,9 +54,10 @@ interface Pagination {
 const initialFilters = {
   action: "all",
   user_id: "",
+  table: "all",
+  status: "all",
   start_date: "",
   end_date: "",
-  search: "",
 }
 
 export function AuditLogsClient() {
@@ -112,6 +113,8 @@ export function AuditLogsClient() {
         limit: pagination.limit.toString(),
         ...(filters.action !== "all" && { action: filters.action }),
         ...(filters.user_id && { user_id: filters.user_id }),
+        ...(filters.table && filters.table !== "all" && { table: filters.table }),
+        ...(filters.status && filters.status !== "all" && { status: filters.status }),
         ...(filters.start_date && { start_date: filters.start_date }),
         ...(filters.end_date && { end_date: filters.end_date }),
       })
@@ -150,17 +153,38 @@ export function AuditLogsClient() {
         export: "true",
       })
 
+      // Prefer XLSX export client-side using the CSV export endpoint as source
       const response = await fetch(`/api/admin/audit-logs/export?${params}`)
-      const blob = await response.blob()
+      if (!response.ok) throw new Error("Export failed")
 
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `audit-logs-${format(new Date(), "yyyy-MM-dd")}.csv`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      const csvText = await response.text()
+
+      try {
+        const XLSX = await import("xlsx")
+        const workbook = XLSX.read(csvText, { type: "string" })
+        // Convert CSV workbook to XLSX binary
+        const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
+        const blob = new Blob([wbout], { type: "application/octet-stream" })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `audit-logs-${format(new Date(), "yyyy-MM-dd")}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } catch (xlsxErr) {
+        // Fallback to CSV download if XLSX generation fails
+        const blob = new Blob([csvText], { type: "text/csv" })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `audit-logs-${format(new Date(), "yyyy-MM-dd")}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
     } catch (error) {
       setError("Failed to export audit logs")
     }
@@ -301,6 +325,38 @@ export function AuditLogsClient() {
                 onChange={(e) => handleFilterChange("end_date", e.target.value)}
                 className="border-0 bg-white shadow-sm"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="table">Entity / Module</Label>
+              <Select value={filters.table} onValueChange={(value) => handleFilterChange("table", value)}>
+                <SelectTrigger className="border-0 bg-white shadow-sm">
+                  <SelectValue placeholder="All modules" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All modules</SelectItem>
+                  <SelectItem value="user_profiles">User Profiles</SelectItem>
+                  <SelectItem value="attendance_records">Attendance Records</SelectItem>
+                  <SelectItem value="device_sessions">Device Sessions</SelectItem>
+                  <SelectItem value="geofence_locations">Geofence Locations</SelectItem>
+                  <SelectItem value="system_settings">System Settings</SelectItem>
+                  <SelectItem value="audit_logs">Audit Logs</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="status">Result / Status</Label>
+              <Select value={filters.status} onValueChange={(value) => handleFilterChange("status", value)}>
+                <SelectTrigger className="border-0 bg-white shadow-sm">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="success">Success</SelectItem>
+                  <SelectItem value="failure">Failure</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-end">

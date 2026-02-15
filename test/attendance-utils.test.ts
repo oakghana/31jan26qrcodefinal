@@ -1,0 +1,44 @@
+import { describe, it, expect } from "vitest"
+import {
+  isWeekend,
+  isSecurityDept,
+  requiresLatenessReason,
+  requiresEarlyCheckoutReason,
+} from "../lib/attendance-utils"
+
+describe("attendance-utils", () => {
+  it("correctly identifies weekends", () => {
+    // 2026-02-14 is Saturday? (use known dates)
+    const fri = new Date("2026-02-13T10:00:00Z") // Friday
+    const sat = new Date("2026-02-14T10:00:00Z") // Saturday
+    const sun = new Date("2026-02-15T10:00:00Z") // Sunday
+
+    expect(isWeekend(fri)).toBe(false)
+    expect(isWeekend(sat)).toBe(true)
+    expect(isWeekend(sun)).toBe(true)
+  })
+
+  it("detects Security department values", () => {
+    expect(isSecurityDept({ code: "SECURITY" })).toBe(true)
+    expect(isSecurityDept({ name: "Security Operations" })).toBe(true)
+    expect(isSecurityDept({ code: "HR" })).toBe(false)
+  })
+
+  it("enforces lateness reason only on weekdays and non-security", () => {
+    const weekday = new Date("2026-02-12T10:30:00Z") // Thursday
+    const saturday = new Date("2026-02-14T10:30:00Z")
+
+    expect(requiresLatenessReason(weekday, { code: "HR" })).toBe(true)
+    expect(requiresLatenessReason(saturday, { code: "HR" })).toBe(false)
+    expect(requiresLatenessReason(weekday, { code: "security" })).toBe(false)
+  })
+
+  it("enforces early-checkout reason only when location requires it and not on weekends", () => {
+    const weekday = new Date("2026-02-12T15:00:00Z")
+    const saturday = new Date("2026-02-14T15:00:00Z")
+
+    expect(requiresEarlyCheckoutReason(weekday, true)).toBe(true)
+    expect(requiresEarlyCheckoutReason(weekday, false)).toBe(false)
+    expect(requiresEarlyCheckoutReason(saturday, true)).toBe(false)
+  })
+})

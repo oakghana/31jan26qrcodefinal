@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
     // Check if user is admin
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single()
 
-    if (!profile || profile.role !== "admin") {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
+    if (!profile || (profile.role !== "admin" && profile.role !== "audit_staff")) {
+      return NextResponse.json({ error: "Admin or Audit Staff access required" }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -42,6 +42,18 @@ export async function GET(request: NextRequest) {
     }
     if (endDate) {
       auditQuery = auditQuery.lte("created_at", endDate)
+    }
+
+    // Additional filters
+    const table = searchParams.get("table")
+    const status = searchParams.get("status")
+
+    if (table && table !== "all") {
+      auditQuery = auditQuery.eq("table_name", table)
+    }
+
+    if (status && status !== "all") {
+      auditQuery = auditQuery.eq("status", status)
     }
 
     const { data: auditLogs, error: auditError } = await auditQuery
@@ -88,7 +100,7 @@ export async function GET(request: NextRequest) {
       user_id: user.id,
       action: "export_audit_logs",
       table_name: "audit_logs",
-      ip_address: request.ip || null,
+      ip_address: (request as any).ip || request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null,
       user_agent: request.headers.get("user-agent"),
     })
 

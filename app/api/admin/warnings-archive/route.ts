@@ -56,21 +56,80 @@ export async function GET(request: NextRequest) {
     const senderIds = [...new Set(warnings?.map((w) => w.sender_id) || [])]
     const allUserIds = [...new Set([...recipientIds, ...senderIds])]
 
-    const { data: userProfiles } = await supabase
-      .from("user_profiles")
-      .select(
-        `
-        id,
-        first_name,
-        last_name,
-        email,
-        department_id,
-        departments (
-          name
-        )
-      `,
-      )
-      .in("id", allUserIds)
+    // Attempt to use the service-role (admin) Supabase client to look up user profiles reliably
+    let userProfiles: any[] = []
+
+    if (allUserIds.length === 0) {
+      // No users to look up
+      userProfiles = []
+    } else {
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+        if (supabaseUrl && supabaseServiceKey) {
+          const { createClient: createPublicClient } = await import("@supabase/supabase-js")
+          const adminClient = createPublicClient(supabaseUrl, supabaseServiceKey, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          })
+
+          const { data: upData, error: upError } = await adminClient
+            .from("user_profiles")
+            .select(
+              `
+              id,
+              first_name,
+              last_name,
+              email,
+              department_id,
+              departments (
+                name
+              )
+            `,
+            )
+            .in("id", allUserIds)
+
+          if (upError) {
+            console.error("[v0] Failed to fetch user profiles via admin client:", upError)
+          } else {
+            userProfiles = upData || []
+          }
+        } else {
+          console.warn("[v0] Service role not available; falling back to RLS-aware client for user profile lookup")
+        }
+      } catch (err) {
+        console.error("[v0] Exception while fetching user profiles:", err)
+      }
+
+      // Fallback to RLS-aware client if admin lookup didn't return results
+      if (!userProfiles || userProfiles.length === 0) {
+        try {
+          const { data: upData, error: upError } = await supabase
+            .from("user_profiles")
+            .select(
+              `
+              id,
+              first_name,
+              last_name,
+              email,
+              department_id,
+              departments (
+                name
+              )
+            `,
+            )
+            .in("id", allUserIds)
+
+          if (upError) {
+            console.error("[v0] Failed to fetch user profiles via RLS client:", upError)
+          } else {
+            userProfiles = upData || []
+          }
+        } catch (err) {
+          console.error("[v0] Exception while fetching user profiles (RLS fallback):", err)
+        }
+      }
+    }
 
     const userMap = new Map(userProfiles?.map((user) => [user.id, user]) || [])
 

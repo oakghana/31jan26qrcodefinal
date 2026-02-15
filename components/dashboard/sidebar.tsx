@@ -199,7 +199,7 @@ const navigationItems = [
     title: "Audit Logs",
     href: "/dashboard/audit-logs",
     icon: Shield,
-    roles: ["admin"],
+    roles: ["admin", "audit_staff"],
     category: "admin",
   },
   {
@@ -301,7 +301,12 @@ export function Sidebar({ user, profile, isCollapsed, setIsCollapsed }: SidebarP
       ]
     : navigationItems
 
-  const filteredNavItems = allNavigationItems.filter((item) => item.roles.includes(profile?.role || "staff"))
+  // Support role hierarchy: map 'audit_staff' to behave like 'staff' for base permissions
+  const effectiveRole = profile?.role === "audit_staff" ? "staff" : profile?.role || "staff"
+
+  const filteredNavItems = allNavigationItems.filter((item) =>
+    item.roles.includes(effectiveRole) || item.roles.includes(profile?.role || "")
+  )
 
   const mainItems = filteredNavItems.filter((item) => item.category === "main")
   const adminItems = filteredNavItems.filter((item) => item.category === "admin")

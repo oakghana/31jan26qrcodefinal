@@ -126,6 +126,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ defaulters: filtered })
   } catch (error) {
     console.error("Error fetching attendance defaulters:", error)
-    return NextResponse.json({ error: String(error) || "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 })
   }
 }
