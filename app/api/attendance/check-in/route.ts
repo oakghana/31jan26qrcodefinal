@@ -505,6 +505,8 @@ export async function POST(request: NextRequest) {
       },
       ip_address: request.ip || null,
       user_agent: request.headers.get("user-agent"),
+    }).catch((err) => {
+      console.error("[v0] Error logging check-in audit:", err);
     })
 
     // Prepare response with late arrival warning if applicable
